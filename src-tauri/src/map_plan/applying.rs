@@ -42,7 +42,7 @@ pub(super) fn apply_row_kind<R: tauri::Runtime>(
             Ok(write) => write_issue_row(app, write),
             Err(applied) => applied,
         },
-        RowFields::ModifyIssue(fields) => match modify_write(fields) {
+        RowFields::ModifyIssue(fields) => match modify_write(proposal, fields) {
             Ok(write) => write_issue_row(app, write),
             Err(applied) => applied,
         },
@@ -70,6 +70,17 @@ fn write_issue_row<R: tauri::Runtime>(app: &tauri::AppHandle<R>, write: RowWrite
     }
 }
 
+/// MPR-FR-EQAX: the real number of the issue that the parent row created.
+fn parent_row_number(proposal: &MapPlanProposal, key: &str) -> Result<u64, Applied> {
+    proposal
+        .rows
+        .iter()
+        .find(|r| r.key == key)
+        .and_then(|r| r.result.as_ref())
+        .and_then(|r| r.issue_number)
+        .ok_or_else(|| Applied::Refused(error(ERR_ROW_NOT_FOUND, "The parent row made no issue.")))
+}
+
 /// MPR-FR-YCHW, MPR-FR-EQAX: the write of a new issue. A parent row gives the
 /// real number of the issue that it created.
 fn create_write(
@@ -79,23 +90,7 @@ fn create_write(
     let parent = match &fields.parent {
         None => None,
         Some(ParentRef::Issue(number)) => Some(*number),
-        Some(ParentRef::Row(key)) => {
-            let number = proposal
-                .rows
-                .iter()
-                .find(|r| &r.key == key)
-                .and_then(|r| r.result.as_ref())
-                .and_then(|r| r.issue_number);
-            match number {
-                Some(number) => Some(number),
-                None => {
-                    return Err(Applied::Refused(error(
-                        ERR_ROW_NOT_FOUND,
-                        "The parent row made no issue.",
-                    )));
-                }
-            }
-        }
+        Some(ParentRef::Row(key)) => Some(parent_row_number(proposal, key)?),
     };
     Ok(RowWrite::Create(NewIssueRow {
         title: fields.title.clone(),
@@ -121,7 +116,12 @@ fn number_or_null(value: &serde_json::Value) -> Option<Option<u64>> {
 }
 
 /// MPR-FR-FBSH, MPR-FR-RTGH, MPR-FR-WBKZ: the write of the changes of a row.
-fn modify_write(fields: &ModifyIssueFields) -> Result<RowWrite, Applied> {
+/// A parent change that names a row of the proposal writes the real number of
+/// the issue of that row (MPR-FR-EQAX).
+fn modify_write(
+    proposal: &MapPlanProposal,
+    fields: &ModifyIssueFields,
+) -> Result<RowWrite, Applied> {
     let invalid = || failed(ERR_ROW_INVALID, "The row holds a change that cannot be applied.");
     let mut row = IssueChangeRow {
         number: fields.number,
@@ -135,7 +135,12 @@ fn modify_write(fields: &ModifyIssueFields) -> Result<RowWrite, Applied> {
             "body" => row.body = Some(text().ok_or_else(invalid)?),
             "type" => row.issue_type = Some(text().ok_or_else(invalid)?),
             "milestone" => row.milestone = Some(number_or_null(&change.after).ok_or_else(invalid)?),
-            "parent" => row.parent = Some(number_or_null(&change.after).ok_or_else(invalid)?),
+            "parent" => {
+                row.parent = Some(match change.after.get("row").and_then(|k| k.as_str()) {
+                    Some(key) => Some(parent_row_number(proposal, key)?),
+                    None => number_or_null(&change.after).ok_or_else(invalid)?,
+                })
+            }
             "labels" => {
                 row.labels_add = change.added.clone().unwrap_or_default();
                 row.labels_remove = change.removed.clone().unwrap_or_default();

@@ -59,6 +59,24 @@ pub enum ParentRef {
     Row(String),
 }
 
+/// MPR-FR-YLKL: the key of the row of the same proposal that a row names as
+/// the parent: the parent of a new issue, or the new parent of a changed issue.
+pub fn parent_row_of(fields: &RowFields) -> Option<&str> {
+    match fields {
+        RowFields::CreateIssue(fields) => match &fields.parent {
+            Some(ParentRef::Row(key)) => Some(key.as_str()),
+            _ => None,
+        },
+        RowFields::ModifyIssue(fields) => fields
+            .changes
+            .iter()
+            .find(|c| c.field == "parent")
+            .and_then(|c| c.after.get("row"))
+            .and_then(serde_json::Value::as_str),
+        RowFields::NewDraft(_) => None,
+    }
+}
+
 /// MPR-FR-YCHW: the fields of a new issue.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -149,6 +167,10 @@ pub struct MapPlanProposal {
     /// again (RFC 3339). `None` where it did not ask.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reprepare_requested_at: Option<String>,
+    /// MPR-FR-LDJH: when the module gave the agent its follow-up turn
+    /// (RFC 3339). `None` where it did not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follow_up_requested_at: Option<String>,
     pub rows: Vec<MapPlanRow>,
 }
 

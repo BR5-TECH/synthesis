@@ -3,7 +3,7 @@
 **Spec code:** `DMS`
 
 ## Intent
-The per-machine home for how the author arranges a delivery canvas, and for the plan data that a GitHub plan has no field for. The **layout** of a plan — where each item sits, how large each container is, and which containers are collapsed — is a preference of one person on one screen, so it is kept on that machine and never committed. The **overlay** of a GitHub plan holds what GitHub cannot: each item's references, footprint, and draft link, the `relates` edges, and the plan's references. Both are kept in the repository store (`RMS-repository-machine-storage.md`), outside every worktree, so every worktree of the repository reads the same records and Git never sees them. Each machine has its own overlay, so two people, and the agents on their two machines, can read different footprints and links for the same issue. Out of scope: the plan itself, which its source holds (`DSR-delivery-source.md`); the read cache of a GitHub plan, which `GDP-github-delivery-plan.md` owns; and the auto-layout, which the canvas computes (per `../ui/FLO-flow.md` FLO-FR-PLUZ).
+The per-machine home for how the author arranges a delivery canvas, and for the plan data that a GitHub plan has no field for. The **layout** of a plan — where each item sits, how large each container is, and which containers are collapsed — and its **view** — which statuses the board shows — are preferences of one person on one screen, so they are kept on that machine and never committed. The **overlay** of a GitHub plan holds what GitHub cannot: each item's references, footprint, and draft link, the `relates` edges, and the plan's references. Both are kept in the repository store (`RMS-repository-machine-storage.md`), outside every worktree, so every worktree of the repository reads the same records and Git never sees them. Each machine has its own overlay, so two people, and the agents on their two machines, can read different footprints and links for the same issue. Out of scope: the plan itself, which its source holds (`DSR-delivery-source.md`); the read cache of a GitHub plan, which `GDP-github-delivery-plan.md` owns; and the auto-layout, which the canvas computes (per `../ui/FLO-flow.md` FLO-FR-PLUZ).
 
 ## Functional requirements
 1. **DMS-FR-KITP** The machine state is kept under `delivery/` in the repository store of the open project (per `RMS-repository-machine-storage.md` RMS-FR-ZXHM). No path of it is inside a worktree.
@@ -15,15 +15,22 @@ The per-machine home for how the author arranges a delivery canvas, and for the 
 7. **DMS-FR-QFEA** An overlay entry obeys the rules that `FGV-flow-graph-validation.md` sets for the same field: FGV-FR-RQEM for a footprint, FGV-FR-JDGO for references, FGV-FR-CTFX for draft links, and FGV-FR-11 for `relates` edges. A write that breaks one is refused with `invalid_overlay` and the violations, and writes nothing.
 8. **DMS-FR-VEHN** The overlay is read and written in-process only, by `GDP-github-delivery-plan.md` (GDP-FR-CRRO, GDP-FR-YBHD) and `DSR-delivery-source.md` (DSR-FR-PTIT, DSR-FR-RZUH). No command writes it directly.
 9. **DMS-FR-RVJQ** A **publish journal** is kept for each Flow artifact id. It maps each item id and each edge id of the Flow to the tracker reference that a publish created for it (per `DSR-delivery-source.md` DSR-FR-ULON). It is removed when the publish completes.
+9. **DMS-FR-TXMH** A **view** is kept for each layout scope (DMS-FR-DMWD). It holds `hidden`, a set of board statuses from `backlog`, `ready`, `in progress`, `in review`, and `done` (per `../ui/DBR-delivery-board.md` DBR-FR-QZPA), and `blockedOnly`, a flag. A scope with no stored view has the empty view: nothing hidden and `blockedOnly` false.
+9. **DMS-FR-JBKN** `load_delivery_view(scope)` returns the view of the scope, and the empty view where the scope has none.
+9. **DMS-FR-TICX** `save_delivery_view(scope, view)` replaces the view of the scope with one atomic whole-file write (per `RMS-repository-machine-storage.md` RMS-FR-PFOB). The empty view removes the scope's view record. A scope that is not of the form of DMS-FR-DMWD, or a status that is not a board status, is refused with `invalid_view`, and nothing is written.
+9. **DMS-FR-XUYV** The layout and the view of a scope are separate records. A save of a layout, an empty one included (DMS-FR-XAZV), never changes the view, and a save of a view never changes the layout.
 10. **DMS-FR-EKKY** A layout entry or an overlay entry that names an item the plan does not hold is kept. A reader ignores it.
 11. **DMS-FR-ETLQ** A record that cannot be parsed reads as empty, and the read logs one record through `LGC-logging.md` with the record kind and no content.
 12. **DMS-FR-IHML** Each operation refuses with `no_project_open` when no project is open, and with `store_unavailable` where the repository store is unavailable (per `RMS-repository-machine-storage.md` RMS-FR-HAJC).
-13. **DMS-FR-ROMF** No log record of this module carries a path of a footprint, an artifact id, a draft id, or an item name.
+13. **DMS-FR-ROMF** No log record of this module carries a path of a footprint, an artifact id, a draft id, an item name, or a scope.
 
 ## Contract surface
 ### Tauri commands
 - `"load delivery layout (scope)"` → `load_delivery_layout(scope)` → `DeliveryLayout`. Invoked by `../ui/FLO-flow.md` (FLO-FR-PLUZ) and `../ui/DBR-delivery-board.md` (DBR-FR-HTCE).
 - `"save delivery layout (scope, layout)"` → `save_delivery_layout(scope, layout)` → nothing. Invoked by `../ui/FLO-flow.md` (FLO-FR-21), `../ui/MDL-map-delivery-lens.md` (MDL-FR-QAJN), and `../ui/DBR-delivery-board.md` (DBR-FR-KTJS).
+
+- `"load delivery view (scope)"` → `load_delivery_view(scope)` → `DeliveryView`. Invoked by `../ui/MDL-map-delivery-lens.md` (MDL-FR-ZAGM).
+- `"save delivery view (scope, view)"` → `save_delivery_view(scope, view)` → nothing, or `invalid_view`. Invoked by `../ui/MDL-map-delivery-lens.md` (MDL-FR-ZAGM).
 
 ### In-process
 - `read_delivery_overlay(project_node_id)` → `DeliveryOverlay` (no UI consumer).
@@ -41,6 +48,11 @@ DeliveryLayout {
   }
 }
 
+DeliveryView {
+  hidden: ("backlog" | "ready" | "in progress" | "in review" | "done")[],
+  blockedOnly: boolean
+}
+
 DeliveryOverlay {
   items: { [item_id]: { artifactIds?, footprint?, draftId? } },
   relates: { from, to }[],
@@ -49,7 +61,7 @@ DeliveryOverlay {
 }
 ```
 
-The records are `delivery/layout/<scope-digest>.json`, `delivery/overlay/<project-node-id>.json`, and `delivery/publish/<flow-digest>.json`, where a digest is the first 32 lowercase hexadecimal characters of the SHA-256 of the scope or the artifact id.
+The records are `delivery/layout/<scope-digest>.json`, `delivery/view/<scope-digest>.json`, `delivery/overlay/<project-node-id>.json`, and `delivery/publish/<flow-digest>.json`, where a digest is the first 32 lowercase hexadecimal characters of the SHA-256 of the scope or the artifact id.
 
 ## Non-functional requirements
 - A drag on the canvas writes the layout at most once after the drag ends, so a layout write never follows the pointer.

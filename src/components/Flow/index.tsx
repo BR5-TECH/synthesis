@@ -97,6 +97,13 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
   useEffect(() => {
     statesOut.current?.(delivery.states);
   }, [delivery.states]);
+  // MDL-FR-BWEF: the host reads how many cards and groups its filter hides.
+  const hiddenOut = useRef(props.onHiddenCount);
+  hiddenOut.current = props.onHiddenCount;
+  const hiddenCount = c.omitted.size;
+  useEffect(() => {
+    hiddenOut.current?.(hiddenCount);
+  }, [hiddenCount]);
   const flowId = source.flowId;
   const planMode = source.mode === "plan";
   /** The measured height of the selected item's panel content. */
@@ -250,7 +257,8 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
       return boardDot({ tracker: facts.tracker?.facts, state: facts.state?.state }, statusNames) === "done";
     }).length;
   const today = todayIso();
-  const shown = doc ? doc.items.filter((i) => !frames.hiddenBy(i.id)) : [];
+  // FLO-FR-OHZB: an item the host hides does not render.
+  const shown = doc ? doc.items.filter((i) => !frames.hiddenBy(i.id) && !c.omitted.has(i.id)) : [];
   const containers = doc
     ? shown
         .filter((i) => isContainerKind(i.kind))

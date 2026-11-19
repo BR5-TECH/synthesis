@@ -2,8 +2,6 @@
 //! CVL-FR-15, CVL-FR-HNGB; `MPR-map-plan-proposals.md` MPR-FR-PMLX,
 //! MPR-FR-NXDX, MPR-FR-ZCAM).
 
-use std::sync::atomic::AtomicBool;
-
 use super::*;
 use crate::agent_conversations::map_context::{focus_of, map_context_section, Focus};
 use crate::comments::{
@@ -263,13 +261,71 @@ fn the_input_holds_each_row_with_its_state() {
     assert!(body.contains("Focus: the whole Map."), "{body}");
     for line in [
         "- proposal 1 row \"a\": new issue \"Relay auth\": rejected",
-        "- proposal 1 row \"b\": new draft \"Finish relay\": accepted",
+        "- proposal 1 row \"b\": new draft \"Finish relay\": accepted (draft created)",
         "- proposal 1 row \"c\": change to issue 2 \"Issue 2\": failed (error changed_on_tracker)",
         "- proposal 1 row \"d\": new issue \"Relay tests\": waiting (blocked: row \"a\" is rejected)",
     ] {
         assert!(body.contains(line), "{line} missing from {body}");
     }
     assert!(f.h.fake.calls().is_empty(), "the builder makes no request: {:?}", f.h.fake.calls());
+}
+
+// PPT-FR-FFML, CVL-FR-KYBE: the Map prompt asks for one complete step of 5 to
+// 10 rows, says the turn goes on after a proposal, and says what the follow-up
+// comment of Synthesis asks.
+#[test]
+fn the_map_prompt_asks_for_complete_steps_and_explains_chaining() {
+    let prompt = crate::agent_conversations::DISCUSS_MAP_PROMPT_TEMPLATE;
+    for phrase in [
+        "Put the whole step in one proposal, up to 20 rows. A step of 5 to 10 rows is normal.",
+        "Your turn goes on after you record a proposal.",
+        "Only your first call of a turn posts its rationale.",
+        "you get a comment of Synthesis with the results",
+        "An accepted issue row names its issue number",
+    ] {
+        assert!(prompt.contains(phrase), "the Map prompt lacks {phrase:?}");
+    }
+    for stale in ["Offer a few rows", "Recording a proposal ends your turn", "small steps"] {
+        assert!(!prompt.contains(stale), "the Map prompt still says {stale:?}");
+    }
+}
+
+// MPR-FR-CPGZ: an accepted issue row names its issue number in the input, so a
+// later turn can name the new issue as a parent.
+#[test]
+fn an_accepted_issue_row_names_its_number() {
+    let f = PlanFixture::new();
+    let roots = Roots { worktree: &f.h.root(), store: &f.store() };
+    let comment = ProposalComment {
+        body: "Rows. <spoken>Rows.</spoken>".into(),
+        author: agent("a1", "arch"),
+        spoken_original: None,
+    };
+    let row = MapPlanRow {
+        key: "n".into(),
+        fields: RowFields::CreateIssue(CreateIssueFields {
+            title: "Relay auth".into(),
+            body: None,
+            issue_type: Some("Task".into()),
+            milestone: None,
+            parent: None,
+            labels: Vec::new(),
+        }),
+        state: RowState::Waiting,
+        blocked_by: None,
+        error: None,
+        result: None,
+    };
+    let proposal =
+        crate::map_plan::record_map_plan_proposal(&f.app(), &f.discussion_id, vec![row], comment)
+            .unwrap();
+    let decided =
+        crate::map_plan::accept_row(&f.app(), &f.discussion_id, &proposal.id, "n").unwrap();
+    let number = decided.rows[0].result.as_ref().unwrap().issue_number.unwrap();
+    let section = map_context_section(roots, &thread_of(roots.store, &f.discussion_id), "");
+    let line =
+        format!("- proposal 1 row \"n\": new issue \"Relay auth\": accepted (issue #{number})");
+    assert!(section.body.contains(&line), "{line} missing from {}", section.body);
 }
 
 // MPR-FR-NXDX, AGC-FR-UOPJ, GDP-FR-LKXA: the short summary of the plan, the
@@ -315,14 +371,14 @@ fn the_plan_summary_comes_from_the_read_cache_and_makes_no_request() {
 
 fn plan_tool_names(f: &PlanFixture, origin: &ConversationOrigin) -> Vec<String> {
     let roots = Roots { worktree: &f.h.root(), store: &f.store() };
-    let proposed = Arc::new(AtomicBool::new(false));
+    let card = Arc::new(crate::tools::propose_plan_changes::PlanTurnCard::default());
     let author = agent("a1", "arch");
     let mut names: Vec<String> = crate::agent_conversations::tool_wiring::plan_tools_for_turn(
         &f.app(),
         roots,
         origin,
         &author,
-        &proposed,
+        &card,
     )
     .iter()
     .map(|t| t.name().to_string())
@@ -381,14 +437,17 @@ fn another_source_attaches_no_plan_tool() {
     assert!(plan_tool_names(&g, &g.origin()).is_empty());
 }
 
-// CVL-FR-15, PPT-FR-PRPX, CVL-FR-HNGB: `propose_plan_changes` ends the turn on a
-// proposal, the three read tools end nothing, and an advisor carries none of the
-// plan tools that end a turn.
+// CVL-FR-FCWM, PPT-FR-PRPX, CVL-FR-HNGB, CVL-FR-YNJS: `propose_plan_changes`
+// does not end the turn, the three read tools end nothing, an advisor carries
+// none of the plan tools that post a contribution, and a turn that can propose
+// plan changes has the larger bound.
 #[test]
-fn the_plan_proposal_ends_the_turn_and_advisors_lack_it() {
-    assert!(crate::agent_conversations::turn_body::ends_turn(
+fn the_plan_proposal_does_not_end_the_turn_and_advisors_lack_it() {
+    assert!(!crate::agent_conversations::turn_body::ends_turn(
         crate::tools::propose_plan_changes::NAME
     ));
+    assert_eq!(crate::agent_conversations::tool_wiring::max_model_calls(true), 12);
+    assert_eq!(crate::agent_conversations::tool_wiring::max_model_calls(false), 8);
     for read in [
         crate::tools::plan_issue_read::LIST_NAME,
         crate::tools::plan_issue_read::SEARCH_NAME,

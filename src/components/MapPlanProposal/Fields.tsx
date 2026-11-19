@@ -50,14 +50,30 @@ function present(value: unknown): boolean {
   return value !== null && value !== undefined && value !== "";
 }
 
+/** MPV-FR-CGOG: the title of the row of the same proposal that a parent value
+ * names, or `null` where the value names a plan issue. */
+function parentRowTitle(proposal: MapPlanProposal, value: unknown): string | null {
+  if (typeof value !== "object" || value === null || !("row" in value)) return null;
+  const key = (value as { row: unknown }).row;
+  const named = proposal.rows.find((r) => r.key === key);
+  return named ? rowTitle(named) : "a new issue";
+}
+
 /** One side of a field change, or nothing where the side is empty. */
-function side(change: RowChange, tone: Tone): ReactNode {
+function side(proposal: MapPlanProposal, change: RowChange, tone: Tone): ReactNode {
   const value = tone === "old" ? change.before : change.after;
   switch (change.field) {
     case "status":
       return present(value) ? <StatusValue tone={tone} name={plainValue(value)} /> : null;
+    case "parent": {
+      const title = parentRowTitle(proposal, value);
+      return (
+        <Value tone={tone} mono={title === null}>
+          {title ?? plainValue(value)}
+        </Value>
+      );
+    }
     case "milestone":
-    case "parent":
       return (
         <Value tone={tone} mono>
           {plainValue(value)}
@@ -69,7 +85,7 @@ function side(change: RowChange, tone: Tone): ReactNode {
 }
 
 /** MPV-FR-CCDM / MPV-FR-JBNC / MPV-FR-LYKS: the value cell of one change. */
-function ChangeValue({ change }: { change: RowChange }) {
+function ChangeValue({ proposal, change }: { proposal: MapPlanProposal; change: RowChange }) {
   if (change.field === "title") {
     return (
       <div className="pp-fields__v pp-fields__v--stack">
@@ -106,9 +122,9 @@ function ChangeValue({ change }: { change: RowChange }) {
   }
   return (
     <div className="pp-fields__v">
-      {side(change, "old")}
+      {side(proposal, change, "old")}
       {present(change.before) && <Arrow />}
-      {side(change, "new")}
+      {side(proposal, change, "new")}
     </div>
   );
 }
@@ -150,7 +166,7 @@ export function Fields({ proposal, row }: { proposal: MapPlanProposal; row: MapP
   if (row.kind === "modify_issue") {
     entries = FIELD_ORDER.flatMap(({ field, label }) => {
       const change = row.fields.changes.find((c) => c.field === field);
-      return change ? [{ label, value: <ChangeValue change={change} /> }] : [];
+      return change ? [{ label, value: <ChangeValue proposal={proposal} change={change} /> }] : [];
     });
   } else if (row.kind === "create_issue") {
     entries = createdFields(proposal, row);

@@ -28,6 +28,7 @@ import type { SpecificationIndex } from "../state/specMap/types";
 import type {
   DeliverySettings,
   DeliverySource,
+  DeliveryView,
   GithubDeliveryPlan,
   GithubPlanIssueRead,
   TrackerFacts,
@@ -140,6 +141,10 @@ export interface DeliveryBackend extends FlowBackend {
   /** The answer of each `read_github_plan_issue` (MIV-FR-EDKQ). */
   issue: (number: number) => GithubPlanIssueRead | Promise<GithubPlanIssueRead>;
   settings: DeliverySettings;
+  /** DMS-FR-JBKN: the view `load_delivery_view` serves, the empty view by default. */
+  view: DeliveryView;
+  /** DMS-FR-TICX: every view `save_delivery_view` was given, with its scope. */
+  viewWrites: Array<{ scope: string; view: DeliveryView }>;
 }
 
 /** GDP-FR-WQEN: the detail of issue `number`, read from GitHub now. */
@@ -191,6 +196,15 @@ export function deliveryBackend(doc: FlowDocument | string = "", answer?: Github
   };
   b.on.open_tracker_link = () => undefined;
   b.on.find_flow_items_for_draft = () => [];
+  b.view = { hidden: [], blockedOnly: false };
+  b.viewWrites = [];
+  b.on.load_delivery_view = () => structuredClone(b.view);
+  b.on.save_delivery_view = (args) => {
+    const view = structuredClone(args.view as DeliveryView);
+    b.viewWrites.push({ scope: String(args.scope), view });
+    b.view = view;
+    return undefined;
+  };
   return b;
 }
 

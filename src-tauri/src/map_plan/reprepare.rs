@@ -74,7 +74,7 @@ pub fn manual_refusal(
 }
 
 /// `a`, `a and b`, `a, b, and c`.
-fn join(items: &[String]) -> String {
+pub(super) fn join(items: &[String]) -> String {
     match items {
         [] => String::new(),
         [one] => one.clone(),
@@ -125,7 +125,7 @@ pub fn request_body(proposal: &MapPlanProposal, handle: &str) -> String {
 
 /// MPR-FR-QIJF: the handle of the agent that proposed: the author of the
 /// comment of the proposal.
-fn proposer(store: &RootFs, proposal: &MapPlanProposal) -> Result<String, MapPlanError> {
+pub(super) fn proposer(store: &RootFs, proposal: &MapPlanProposal) -> Result<String, MapPlanError> {
     let missing = || error(ERR_DISCUSSION_NOT_FOUND, "The comment of the proposal has no agent.");
     let thread = crate::comments::fold_map_discussions(store)
         .into_iter()
@@ -204,7 +204,7 @@ pub fn request_automatic<R: tauri::Runtime>(
 /// MPR-FR-NWEZ: start the turn of the agent in the Map discussion, as a
 /// comment that addressed the agent does.
 #[cfg(not(test))]
-fn dispatch_turn<R: tauri::Runtime>(
+pub(super) fn dispatch_turn<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     turn: &TurnRequest,
 ) -> Result<(), String> {
@@ -213,7 +213,7 @@ fn dispatch_turn<R: tauri::Runtime>(
 
 /// [`dispatch_turn`] through the seam of the test, where the test set one.
 #[cfg(test)]
-fn dispatch_turn<R: tauri::Runtime>(
+pub(super) fn dispatch_turn<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     turn: &TurnRequest,
 ) -> Result<(), String> {

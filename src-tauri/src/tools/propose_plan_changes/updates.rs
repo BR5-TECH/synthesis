@@ -11,7 +11,7 @@ use std::collections::HashSet;
 
 use serde::Deserialize;
 
-use super::rows::{self, bad_rows, invalid, Needs, OP_CREATE, OP_DRAFT, OP_MODIFY};
+use super::rows::{self, bad_rows, invalid, Needs, Refused, OP_CREATE, OP_DRAFT, OP_MODIFY};
 use super::{PlanRowArg, MAX_ROWS};
 use crate::delivery::github::plan_reads::PlanFacts;
 use crate::map_plan::{MapPlanError, MapPlanProposal, MapPlanUpdate, RowFields, RowState};
@@ -131,57 +131,92 @@ pub struct CheckedUpdate {
     pub row: Option<PlanRowArg>,
 }
 
+/// PPT-FR-KOCG: the line of one refused update. Its message names its place.
+pub fn update_line(_at: usize, refusal: &PlanRefusal) -> String {
+    refusal.message.clone()
+}
+
+/// PPT-FR-STLY to PPT-FR-KOCG: the checks of one update that the update and
+/// the open proposal decide.
+fn check_update(
+    update: &PlanUpdateArg,
+    at: usize,
+    of: usize,
+    open: &MapPlanProposal,
+    named: &mut HashSet<String>,
+) -> Result<CheckedUpdate, PlanRefusal> {
+    let key = update.key.trim().to_string();
+    let action = match update.action.trim() {
+        ACTION_CHANGE => ACTION_CHANGE,
+        ACTION_ADD => ACTION_ADD,
+        ACTION_WITHDRAW => ACTION_WITHDRAW,
+        _ => return Err(malformed(at, of)),
+    };
+    if key.is_empty() || (action == ACTION_WITHDRAW) == update.row.is_some() {
+        return Err(malformed(at, of));
+    }
+    if !named.insert(key.clone()) {
+        return Err(row_named_twice(&key));
+    }
+    let existing = open.rows.iter().find(|r| r.key == key);
+    match (action, existing) {
+        (ACTION_ADD, Some(_)) => return Err(at_place(bad_rows(), at, of)),
+        (ACTION_ADD, None) => {}
+        (_, None) => return Err(no_such_row(at, of, &key)),
+        (_, Some(row)) => {
+            if !matches!(row.state, RowState::Waiting | RowState::Rejected) {
+                return Err(row_settled(at, of, &key));
+            }
+        }
+    }
+    let row = update.row.clone().map(|mut row| {
+        row.key = key.clone();
+        row
+    });
+    if let (ACTION_CHANGE, Some(existing), Some(row)) = (action, existing, &row) {
+        if row.op != op_of(&existing.fields) {
+            return Err(op_changed(at, of, &key));
+        }
+    }
+    Ok(CheckedUpdate { at, action, key, row })
+}
+
 /// PPT-FR-STLY to PPT-FR-KOCG: the checks that the updates and the open
-/// proposal decide, in the order the model sent them.
+/// proposal decide, in the order the model sent them. Every update is checked
+/// before the call refuses. The rows of the updates that pass are then checked
+/// as rows of `rows`, and the ones that break a rule come back with their
+/// refusals.
 pub fn check_updates(
     updates: &[PlanUpdateArg],
     open: &MapPlanProposal,
-) -> Result<(Vec<CheckedUpdate>, Needs), PlanRefusal> {
+) -> Result<(Vec<CheckedUpdate>, Needs, Refused), PlanRefusal> {
     let of = updates.len();
     if of == 0 || of > MAX_ROWS {
         return Err(bad_rows());
     }
     let mut checked = Vec::with_capacity(of);
+    let mut refused = Refused::new();
     let mut named: HashSet<String> = HashSet::new();
     for (index, update) in updates.iter().enumerate() {
         let at = index + 1;
-        let key = update.key.trim().to_string();
-        let action = match update.action.trim() {
-            ACTION_CHANGE => ACTION_CHANGE,
-            ACTION_ADD => ACTION_ADD,
-            ACTION_WITHDRAW => ACTION_WITHDRAW,
-            _ => return Err(malformed(at, of)),
-        };
-        if key.is_empty() || (action == ACTION_WITHDRAW) == update.row.is_some() {
-            return Err(malformed(at, of));
+        match check_update(update, at, of, open, &mut named) {
+            Ok(update) => checked.push(update),
+            Err(refusal) => refused.push((at, refusal)),
         }
-        if !named.insert(key.clone()) {
-            return Err(row_named_twice(&key));
-        }
-        let existing = open.rows.iter().find(|r| r.key == key);
-        match (action, existing) {
-            (ACTION_ADD, Some(_)) => return Err(at_place(bad_rows(), at, of)),
-            (ACTION_ADD, None) => {}
-            (_, None) => return Err(no_such_row(at, of, &key)),
-            (_, Some(row)) => {
-                if !matches!(row.state, RowState::Waiting | RowState::Rejected) {
-                    return Err(row_settled(at, of, &key));
-                }
-            }
-        }
-        let row = update.row.clone().map(|mut row| {
-            row.key = key.clone();
-            row
-        });
-        if let (ACTION_CHANGE, Some(existing), Some(row)) = (action, existing, &row) {
-            if row.op != op_of(&existing.fields) {
-                return Err(op_changed(at, of, &key));
-            }
-        }
-        checked.push(CheckedUpdate { at, action, key, row });
     }
-    let needs = check_rows_left(&checked, open, of)?;
-    Ok((checked, needs))
+    // PPT-FR-KOCG: the rows of the updates that passed are checked too, so one
+    // refusal names every refused update. A rule of the rows left as a whole
+    // decides only where no update was refused, because the rows left are not
+    // known then.
+    let left = check_rows_left(&checked, open, of);
+    if !refused.is_empty() {
+        if let Ok((_, more)) = left {
+            refused.extend(more);
+        }
+        return Err(rows::refusal_of(refused, update_line).err().unwrap_or_else(bad_rows));
+    }
+    let (needs, more) = left?;
+    Ok((checked, needs, more))
 }
 
 /// PPT-FR-KOTV, PPT-FR-JDUV: the rows that the proposal holds after the
@@ -191,7 +226,7 @@ fn check_rows_left(
     checked: &[CheckedUpdate],
     open: &MapPlanProposal,
     of: usize,
-) -> Result<Needs, PlanRefusal> {
+) -> Result<(Needs, Refused), PlanRefusal> {
     let by_key = |key: &str| checked.iter().find(|u| u.key == key);
     let mut left: Vec<(String, Option<&CheckedUpdate>, &'static str)> = Vec::new();
     for row in &open.rows {
@@ -213,18 +248,22 @@ fn check_rows_left(
         return Err(bad_rows());
     }
     let mut needs = Needs::default();
+    let mut refused = Refused::new();
     let mut creates: HashSet<&str> = HashSet::new();
     for (key, update, op) in &left {
         match update.and_then(|u| u.row.as_ref().map(|row| (u.at, row))) {
-            Some((at, row)) => rows::check_row(row, at, &creates, &mut needs)
-                .map_err(|refusal| at_place(refusal, at, of))?,
+            Some((at, row)) => {
+                if let Err(refusal) = rows::check_row(row, at, &creates, &mut needs) {
+                    refused.push((at, at_place(refusal, at, of)));
+                }
+            }
             None => check_kept_parent(open, key, &creates)?,
         }
         if *op == OP_CREATE {
             creates.insert(key.as_str());
         }
     }
-    Ok(needs)
+    Ok((needs, refused))
 }
 
 /// MPR-FR-HQXX: a row that the update keeps must still find its parent row.
@@ -234,42 +273,46 @@ fn check_kept_parent(
     creates: &HashSet<&str>,
 ) -> Result<(), PlanRefusal> {
     let Some(row) = open.rows.iter().find(|r| r.key == key) else { return Ok(()) };
-    let RowFields::CreateIssue(fields) = &row.fields else { return Ok(()) };
-    match &fields.parent {
-        Some(crate::map_plan::ParentRef::Row(parent)) if !creates.contains(parent.as_str()) => {
-            Err(invalid(
-                "bad_parent_row",
-                format!(
-                    "The row {} keeps the row {} as its parent, so that row can not be withdrawn.",
-                    rows::echo(key),
-                    rows::echo(parent)
-                ),
-            ))
-        }
+    match crate::map_plan::parent_row_of(&row.fields) {
+        Some(parent) if !creates.contains(parent) => Err(invalid(
+            "bad_parent_row",
+            format!(
+                "The row {} keeps the row {} as its parent, so that row can not be withdrawn.",
+                rows::echo(key),
+                rows::echo(parent)
+            ),
+        )),
         _ => Ok(()),
     }
 }
 
 /// PPT-FR-KOTV: the updates of `crate::map_plan`, each row checked against the
-/// facts of the plan and read again from GitHub.
+/// facts of the plan and read again from GitHub. `of` is the count of updates
+/// that the model sent. The updates at the places of `refused` are not built
+/// again, and each row that the facts refuse is added to `refused`.
 pub fn build_updates(
     checked: &[CheckedUpdate],
+    of: usize,
     facts: &PlanFacts,
-) -> Result<Vec<MapPlanUpdate>, PlanRefusal> {
-    let of = checked.len();
-    checked
-        .iter()
-        .map(|update| {
-            let built = |row: &PlanRowArg| {
-                rows::build_row(row, update.at, facts).map_err(|r| at_place(r, update.at, of))
-            };
-            Ok(match (update.action, &update.row) {
-                (ACTION_CHANGE, Some(row)) => MapPlanUpdate::Change(built(row)?),
-                (ACTION_ADD, Some(row)) => MapPlanUpdate::Add(built(row)?),
-                _ => MapPlanUpdate::Withdraw(update.key.clone()),
-            })
-        })
-        .collect()
+    refused: &mut Refused,
+) -> Vec<MapPlanUpdate> {
+    let skipped: HashSet<usize> = refused.iter().map(|(at, _)| *at).collect();
+    let mut built = Vec::with_capacity(checked.len());
+    for update in checked.iter().filter(|u| !skipped.contains(&u.at)) {
+        let row = |row: &PlanRowArg| {
+            rows::build_row(row, update.at, facts).map_err(|r| at_place(r, update.at, of))
+        };
+        let result = match (update.action, &update.row) {
+            (ACTION_CHANGE, Some(r)) => row(r).map(MapPlanUpdate::Change),
+            (ACTION_ADD, Some(r)) => row(r).map(MapPlanUpdate::Add),
+            _ => Ok(MapPlanUpdate::Withdraw(update.key.clone())),
+        };
+        match result {
+            Ok(update) => built.push(update),
+            Err(refusal) => refused.push((update.at, refusal)),
+        }
+    }
+    built
 }
 
 /// The counts of the updates by action, for the output and the log record.

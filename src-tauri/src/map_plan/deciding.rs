@@ -11,7 +11,7 @@ use super::errors::{
 };
 use super::model::{MapPlanError, MapPlanProposal, RowState};
 use super::recording::open_store;
-use super::{reprepare, rules, store};
+use super::{follow_up, reprepare, rules, store};
 use crate::fs::RootFs;
 use crate::project::OpenProject;
 
@@ -79,6 +79,8 @@ fn decide<R: tauri::Runtime>(
         // MPR-FR-LJRO: the decision is made. A request that fails is logged and
         // leaves the decision as it is.
         reprepare::request_automatic(app, &store, &mut proposal);
+        // MPR-FR-IANE: the follow-up turn, after the re-prepare had its say.
+        follow_up::request_after_decision(app, &store, &mut proposal);
         Ok(proposal)
     });
     match &result {

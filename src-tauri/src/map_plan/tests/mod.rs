@@ -13,7 +13,9 @@ use crate::delivery::github::tests::fake::{Harness, PROJECT};
 
 mod decisions;
 mod drafts;
+mod follow_up;
 mod issue_rows;
+mod modify_parents;
 mod recording;
 mod refusals;
 mod reopening;

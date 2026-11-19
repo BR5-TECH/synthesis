@@ -58,6 +58,7 @@ import { useFlowLayout, type ContainerMeasure } from "./useFlowLayout";
 import type { FlowCanvasProps } from "./canvasProps";
 import { useFlowSource } from "./useFlowSource";
 import { useBoardDrag } from "./useBoardDrag";
+import { useBoardFilter } from "./useBoardFilter";
 import { resizedRect, resizeFrom } from "./resize";
 
 /** DBR-FR-MYVI: how far a press moves, in screen pixels, before a drag of the board starts. */
@@ -82,6 +83,8 @@ export function useFlowCanvas({
   initialView,
   onViewChange,
   board = false,
+  statusFilter,
+  statusNames,
 }: FlowCanvasProps) {
   const source = useFlowSource(binding);
   const { flowId, session, doc, delivery } = source;
@@ -100,6 +103,9 @@ export function useFlowCanvas({
     () => ({ cards: heights, containers: containerSizes }),
     [heights, containerSizes],
   );
+  const [selection, setSelection] = useState<string[]>(() => initialView?.selection ?? []);
+  // FLO-FR-OHZB / MDL-FR-WDMP: the items the host's status filter hides.
+  const omitted = useBoardFilter({ board, doc, source, filter: statusFilter, statusNames, selection });
   const {
     layout: resolved,
     collapsed,
@@ -108,7 +114,7 @@ export function useFlowCanvas({
     stored,
     commitStored,
     boardNone,
-  } = useFlowLayout(doc, source.scope, source.layouts, measuredSizes, board);
+  } = useFlowLayout(doc, source.scope, source.layouts, measuredSizes, board, omitted);
   /** DBR-FR-ERHW: the board shows once the stored layout is read. */
   const boardMode = board && doc !== null && stored !== null;
   const storedRef = useRef<StoredLayout | null>(stored);
@@ -131,7 +137,6 @@ export function useFlowCanvas({
   const control = useDiscussionControl(discussionTarget);
 
   const canvasId = useId().replace(/:/g, "");
-  const [selection, setSelection] = useState<string[]>(() => initialView?.selection ?? []);
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
   const [view, setView] = useState<View>(() => initialView?.view ?? DEFAULT_VIEW);
   // SMP-FR-RNLH: the host keeps the view state of a canvas that unmounts.
@@ -237,6 +242,7 @@ export function useFlowCanvas({
       ? resolveBoardLayout(doc, stored, {
           heights,
           lifted: lifting.subtree,
+          omitted,
           gap:
             lifting.drop && !lifting.drop.collapsed
               ? {
@@ -266,7 +272,7 @@ export function useFlowCanvas({
     return shown[id]?.size;
   };
 
-  const frames = createFrames({ doc, heights, collapsed, absOf, sizeOf, board: boardMode });
+  const frames = createFrames({ doc, heights, collapsed, absOf, sizeOf, board: boardMode, omitted });
   /** FLO-FR-SQUS / FLO-FR-IAOQ: the milestone columns and the No milestone column. */
   const columnsBase = doc
     ? columnsOf(doc, layout, frames.rectOf, boardMode ? BOARD_ROW_MID : undefined)
@@ -347,7 +353,10 @@ export function useFlowCanvas({
     return () => window.removeEventListener("pointerdown", onDown);
   }, [addMenuOpen]);
 
-  /** FLO-FR-22: Fit frames the plan. A view change, never an edit. */
+  /**
+   * FLO-FR-22: Fit frames the plan. A view change, never an edit. MDL-FR-XHNZ:
+   * a hidden item has no rectangle, so Fit frames only the items that show.
+   */
   const onFit = () => {
     if (!doc || doc.items.length === 0) {
       setView(DEFAULT_VIEW);
@@ -683,6 +692,7 @@ export function useFlowCanvas({
       none: columns.none,
       rectOf: frames.rectOf,
       hidden: (id) => frames.hiddenBy(id) !== undefined,
+      omitted,
     });
     return { ...next, drop: target.drop, hint: target.hint };
   };
@@ -725,6 +735,7 @@ export function useFlowCanvas({
         commitStored,
         latestStored: () => storedRef.current,
         refuse: (r) => setRefusal(r ? refusalMessage(doc, "move", r, item.kind) : null),
+        omitted,
       });
       return;
     }
@@ -931,6 +942,8 @@ export function useFlowCanvas({
     /** DBR-FR-EEKD: no stack under the pointer takes the drop. */
     dragRefused: lifting !== null && !lifting.drop,
     lifted: lifting?.subtree ?? null,
+    /** FLO-FR-OHZB: the items the host hides, which do not render. */
+    omitted,
   };
 }
 

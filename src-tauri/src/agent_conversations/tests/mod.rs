@@ -713,6 +713,7 @@ mod openrouter;
 mod openspec_tools;
 mod origin_contract;
 mod overflow_recovery;
+mod plan_chaining;
 mod plan_reference_turns;
 mod plan_reference_units;
 mod progress_update;

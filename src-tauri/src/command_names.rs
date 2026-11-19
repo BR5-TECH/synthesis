@@ -250,6 +250,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // Delivery machine state (DMS-delivery-machine-state.md).
     "load_delivery_layout",
     "save_delivery_layout",
+    "load_delivery_view",
+    "save_delivery_view",
     // Delivery source (DSR-delivery-source.md).
     "get_delivery_settings",
     "set_delivery_settings",

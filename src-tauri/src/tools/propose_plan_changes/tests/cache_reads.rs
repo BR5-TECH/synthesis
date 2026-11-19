@@ -115,7 +115,7 @@ fn a_failed_cache_read_still_records_the_proposal_and_warns() {
         ]))
         .unwrap();
     assert_eq!(out, json!({ "proposed": true, "rows": 2 }));
-    assert!(f.proposed.load(Ordering::SeqCst));
+    assert!(f.carded());
     assert_eq!(f.plan.comments(), comments + 1);
     let rows = &f.proposals()[0].rows;
     assert_eq!(modify_fields(&rows[0]).base_updated_at, "2026-02-03T00:00:00Z");

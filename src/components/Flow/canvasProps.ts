@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import type { FlowItem } from "../../state/flowDocument";
 import type { ItemDeliveryState, OpenableArtifact } from "../../types";
 import type { FlowBinding } from "./binding";
+import type { BoardStatusFilter } from "./boardFilter";
 import type { BoardStatusNames } from "./boardStatus";
 import type { View } from "./geometry";
 import type { IssueViewHost } from "./issueView/host";
@@ -68,6 +69,13 @@ export interface FlowCanvasProps {
   onDiscuss?: (item: FlowItem) => void;
   /** DBR-FR-ERHW: lay the plan out as the board of the Delivery lens. */
   board?: boolean;
+  /**
+   * FLO-FR-OHZB / MDL-FR-MIMF: the status filter of the board. Only the
+   * Delivery lens gives one (MDL-FR-XHNZ). Without it, every item shows.
+   */
+  statusFilter?: BoardStatusFilter;
+  /** MDL-FR-BWEF: the count of the cards and groups the filter hides, on each change. */
+  onHiddenCount?: (count: number) => void;
 }
 
 /** SMP-FR-RNLH: the view state of a canvas that a host keeps for it. */

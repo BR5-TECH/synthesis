@@ -1,7 +1,8 @@
 //! MPR-FR-TMTI to MPR-FR-AESZ: the update of the open proposal of a Map
 //! discussion, the in-process half that the tool `propose_plan_changes` calls
 //! with `updates`. An update changes, adds, and withdraws rows of the proposal
-//! that holds a `waiting` row, and appends one comment, as one step.
+//! that holds a `waiting` row, and appends one comment, as one step. A later
+//! call of a turn updates with no comment (PPT-FR-IRFE).
 
 use std::collections::HashSet;
 
@@ -11,7 +12,7 @@ use super::errors::{
     ERR_ROW_NOT_FOUND,
 };
 use super::model::{
-    MapPlanError, MapPlanProposal, MapPlanRow, ParentRef, ProposalComment, RowFields, RowState,
+    MapPlanError, MapPlanProposal, MapPlanRow, ProposalComment, RowFields, RowState,
 };
 use super::recording::open_store;
 use super::{rules, store};
@@ -55,12 +56,13 @@ pub fn read_open_proposal<R: tauri::Runtime>(
 }
 
 /// MPR-FR-TMTI, MPR-FR-EAAJ, MPR-FR-AESZ: apply `updates` to the open proposal
-/// of the discussion and append the comment of the update, as one step.
+/// of the discussion and append the comment of the update, where it carries
+/// one, as one step.
 pub fn update_map_plan_proposal<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     discussion_id: &str,
     updates: Vec<MapPlanUpdate>,
-    comment: ProposalComment,
+    comment: Option<ProposalComment>,
 ) -> Result<MapPlanProposal, MapPlanError> {
     let result = open_store(app).and_then(|store| {
         // MPR-FR-AESZ: an update and a decision never run at the same time.
@@ -69,7 +71,9 @@ pub fn update_map_plan_proposal<R: tauri::Runtime>(
     });
     match &result {
         Ok((proposal, discussion)) => {
-            crate::comments::emit_discussion_changed(app, discussion);
+            if let Some(discussion) = discussion {
+                crate::comments::emit_discussion_changed(app, discussion);
+            }
             announce(app, discussion_id);
             log_operation(app, false, "update", "updated", "proposal", "");
             Ok(rules::with_blocks(proposal.clone()))
@@ -86,8 +90,8 @@ fn update_in<R: tauri::Runtime>(
     store: &RootFs,
     discussion_id: &str,
     updates: Vec<MapPlanUpdate>,
-    comment: ProposalComment,
-) -> Result<(MapPlanProposal, crate::comments::Discussion), MapPlanError> {
+    comment: Option<ProposalComment>,
+) -> Result<(MapPlanProposal, Option<crate::comments::Discussion>), MapPlanError> {
     let thread = crate::comments::fold_map_discussions(store)
         .into_iter()
         .find(|d| d.id == discussion_id)
@@ -96,7 +100,13 @@ fn update_in<R: tauri::Runtime>(
     let before = open_proposal_of(store::read_for(store, &thread.id))
         .ok_or_else(|| error(ERR_NO_OPEN_PROPOSAL, "The discussion has no open proposal."))?;
     let (after, counts) = apply_updates(&before, updates)?;
+    // MPR-FR-NSEP: a resolved discussion takes no update, also one with no
+    // comment.
+    if thread.resolved {
+        return Err(error(ERR_DISCUSSION_RESOLVED, "The discussion is resolved."));
+    }
     store::write(store, &after)?;
+    let Some(comment) = comment else { return Ok((after, None)) };
     let now = crate::notes::now_rfc3339();
     let appended = crate::comments::append_map_proposal_comment(
         store,
@@ -109,7 +119,7 @@ fn update_in<R: tauri::Runtime>(
         Stamp { by: &comment.author, at: &now },
     );
     match appended {
-        Ok(discussion) => Ok((after, discussion)),
+        Ok(discussion) => Ok((after, Some(discussion))),
         Err(reason) => {
             // MPR-FR-EAAJ: a comment that cannot be appended takes the update back.
             if let Err(e) = store::write(store, &before) {
@@ -194,11 +204,8 @@ pub fn apply_updates(
     if after.rows.is_empty() {
         return Err(error(ERR_NO_ROW_LEFT, "The update leaves no row."));
     }
-    let names_withdrawn = |row: &MapPlanRow| match &row.fields {
-        RowFields::CreateIssue(fields) => {
-            matches!(&fields.parent, Some(ParentRef::Row(key)) if withdrawn.contains(key))
-        }
-        _ => false,
+    let names_withdrawn = |row: &MapPlanRow| {
+        super::model::parent_row_of(&row.fields).is_some_and(|key| withdrawn.contains(key))
     };
     if after.rows.iter().any(names_withdrawn) {
         return Err(error(ERR_PARENT_WITHDRAWN, "A row names a withdrawn row as its parent."));

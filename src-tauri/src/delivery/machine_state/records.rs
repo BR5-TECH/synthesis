@@ -13,8 +13,9 @@ use crate::logging::{log_warn, Domain, LogBuffer, LogSink};
 
 use super::super::{DeliveryError, DELIVERY_DIRNAME};
 
-/// The three folders of `delivery/` this module writes.
+/// The four folders of `delivery/` this module writes.
 pub(super) const LAYOUT_DIRNAME: &str = "layout";
+pub(super) const VIEW_DIRNAME: &str = "view";
 pub(super) const OVERLAY_DIRNAME: &str = "overlay";
 pub(super) const PUBLISH_DIRNAME: &str = "publish";
 

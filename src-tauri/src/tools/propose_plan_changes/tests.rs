@@ -11,25 +11,54 @@ use crate::logging::{Domain, LogFilter, LogLevel};
 use crate::map_plan::{MapPlanProposal, RowFields};
 use crate::tools::tests::plan_fixture::{agent, human, PlanFixture};
 
+mod batch;
 mod cache_reads;
+mod chaining;
 mod updates;
 
 type Tool = ProposePlanChangesTool<Mock>;
 
 const RATIONALE: &str = "I offer one step. <spoken>One step first.</spoken>";
 
+/// Each call is a turn of its own, with a new plan card, unless the fixture is
+/// in one turn (`in_one_turn`).
 struct Fixture {
     plan: PlanFixture,
-    proposed: Arc<AtomicBool>,
+    card: std::cell::RefCell<Arc<PlanTurnCard>>,
+    one_turn: std::cell::Cell<bool>,
 }
 
 impl Fixture {
     fn new() -> Fixture {
-        Fixture { plan: PlanFixture::new(), proposed: Arc::new(AtomicBool::new(false)) }
+        Fixture {
+            plan: PlanFixture::new(),
+            card: Default::default(),
+            one_turn: std::cell::Cell::new(false),
+        }
+    }
+
+    /// The calls from now on are calls of one turn, with one plan card.
+    fn in_one_turn(&self) {
+        *self.card.borrow_mut() = Arc::default();
+        self.one_turn.set(true);
+    }
+
+    /// The plan card of the latest turn.
+    fn card(&self) -> CardState {
+        self.card.borrow().snapshot()
+    }
+
+    /// Whether the latest turn has a plan card.
+    fn carded(&self) -> bool {
+        self.card.borrow().has_card()
     }
 
     fn tool_for(&self, origin: crate::agent_conversations::ConversationOrigin) -> Tool {
-        Tool::new(self.plan.app(), self.plan.roots(), origin, agent(), Arc::clone(&self.proposed))
+        if !self.one_turn.get() {
+            *self.card.borrow_mut() = Arc::default();
+        }
+        let card = Arc::clone(&self.card.borrow());
+        Tool::new(self.plan.app(), self.plan.roots(), origin, agent(), card)
     }
 
     fn tool(&self) -> Tool {
@@ -144,10 +173,14 @@ fn the_description_and_the_schema_are_fixed() {
     assert_eq!(other.tool().description(), DESCRIPTION);
     assert_eq!(f.tool().parameters(), other.tool().parameters());
     assert!(DESCRIPTION.starts_with("Propose work on the delivery plan"));
-    assert!(DESCRIPTION.ends_with("Your turn ends when the proposal is recorded or updated."));
+    assert!(DESCRIPTION
+        .ends_with("It is posted only where you changed the proposal after its rationale."));
+    assert!(DESCRIPTION.contains("Propose one complete step in one call"));
+    assert!(DESCRIPTION.contains("A step of 5 to 10 related rows is normal."));
+    assert!(!DESCRIPTION.contains("propose one step"));
     assert!(DESCRIPTION.contains("send `updates` in place of `rows`"));
     let schema = f.tool().parameters();
-    assert_eq!(schema["required"], json!(["rationale"]));
+    assert_eq!(schema.get("required"), None, "rationale is optional after the card");
     let update = &schema["properties"]["updates"]["items"];
     assert_eq!(update["required"], json!(["action", "key"]));
     assert_eq!(update["properties"]["action"]["enum"], json!(["change", "add", "withdraw"]));
@@ -230,7 +263,7 @@ fn only_a_map_turn_with_a_plan_can_call_the_tool() {
     f.plan.close();
     let refusal = refused(run(&tool, json!({ "rationale": RATIONALE, "rows": [draft("a")] })));
     assert_eq!(refusal, PlanRefusal::from(ToolRefusal::NoProjectOpen));
-    assert!(!f.proposed.load(Ordering::SeqCst));
+    assert!(!f.carded());
 }
 
 // PPT-FR-PMQL: 1 to 20 rows, each with its own key and an op. One call records
@@ -257,7 +290,7 @@ fn a_call_carries_one_to_twenty_rows_with_their_own_keys() {
         assert_eq!(refusal.message, rows::BAD_ROWS);
     }
     assert!(f.proposals().is_empty());
-    assert!(!f.proposed.load(Ordering::SeqCst));
+    assert!(!f.carded());
     let out = f.rows(json!(twenty)).unwrap();
     assert_eq!(out, json!({ "proposed": true, "rows": 20 }));
     assert_eq!(f.proposals().len(), 1);
@@ -411,16 +444,6 @@ fn a_parent_is_a_plan_issue_or_an_earlier_new_issue() {
         assert!(refusal.message.contains("`parent_row` of row"), "{rows}: {}", refusal.message);
         assert!(refusal.message.contains("must name the `key` of an earlier `create_issue` row."));
     }
-    // PPT-FR-DPQP: `parent_row` is for `create_issue` rows only.
-    let on_modify = refused(
-        f.rows(json!([create("a", "Parent"), modify("b", 2, json!({ "parent_row": "a" }))])),
-    );
-    assert_eq!(on_modify.kind, ToolErrorKind::InvalidArgs);
-    assert!(on_modify.retryable);
-    assert_eq!(
-        on_modify.message,
-        "`parent_row` of row 2 is for a `create_issue` row only. A `modify_issue` row sets `parent_issue`."
-    );
     let both = child(json!({ "parent_row": "a", "parent_issue": 1 }));
     assert_eq!(refused(f.rows(json!([create("a", "Parent"), both]))).message, rows::BAD_ROWS);
     let outside = refused(f.rows(json!([child(json!({ "parent_issue": 77 }))])));
@@ -629,7 +652,7 @@ fn a_failure_to_record_leaves_neither_a_proposal_nor_a_comment() {
     assert_eq!(refusal.message, NOT_RECORDED);
     assert!(f.proposals().is_empty());
     assert_eq!(f.plan.comments(), comments);
-    assert!(!f.proposed.load(Ordering::SeqCst));
+    assert!(!f.carded());
     let unknown =
         record_refusal(&MapPlanError { code: "store_unavailable".into(), message: String::new() });
     assert_eq!(unknown.message, NOT_RECORDED);
@@ -665,23 +688,23 @@ fn the_comment_is_the_rationale_with_one_proposal_attachment() {
     );
 }
 
-// PPT-FR-PRPX, CVL-FR-15: a valid call returns the data object and sets the
-// flag that ends the turn. A refused call ends nothing. A second proposal of
-// one reply is told why it was not recorded.
+// PPT-FR-PRPX, PPT-FR-ZMBA: a valid call returns the data object and makes its
+// proposal the card of the turn. A refused call sets no card.
 #[test]
-fn a_proposal_ends_the_turn_and_a_refusal_does_not() {
+fn a_proposal_sets_the_card_of_the_turn_and_a_refusal_does_not() {
     let f = Fixture::new();
+    f.in_one_turn();
     refused(f.call(json!({ "rationale": RATIONALE, "rows": [] })));
-    assert!(!f.proposed.load(Ordering::SeqCst), "a refused call ends nothing");
+    assert!(!f.carded(), "a refused call sets no card");
     let out = f.rows(json!([draft("a"), create("b", "T")])).unwrap();
     assert_eq!(out, json!({ "proposed": true, "rows": 2 }));
-    assert!(f.proposed.load(Ordering::SeqCst));
-    assert!(ONE_AT_A_TIME.contains("Only one plan proposal can be recorded in a turn"));
+    assert_eq!(f.card().proposal_id, Some(f.proposals()[0].id.clone()));
+    assert!(!f.card().changed_after_comment());
 }
 
 // PPT-FR-WBYJ, TLC-FR-15: the tool writes nothing to GitHub, creates no draft
-// and no label, changes no cache, and holds no state between calls: one tool
-// serves two calls.
+// and no label, changes no cache, and holds no state between calls apart from
+// the card of its turn: a tool of a later turn serves the next call.
 #[test]
 fn the_tool_changes_nothing_outside_the_proposal_and_holds_no_state() {
     let f = Fixture::new();
@@ -694,7 +717,7 @@ fn the_tool_changes_nothing_outside_the_proposal_and_holds_no_state() {
     .unwrap();
     f.decide_all();
     run(
-        &tool,
+        &f.tool(),
         json!({ "rationale": RATIONALE, "rows": [modify("a", 2, json!({ "title": "Two" }))] }),
     )
     .unwrap();

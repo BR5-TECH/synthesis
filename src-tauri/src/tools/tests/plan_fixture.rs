@@ -37,6 +37,9 @@ impl PlanFixture {
         // TLC-FR-13: a tool answers `no open project` from the mount of the
         // search index, so the fixture mounts the project there too.
         h.app.manage(crate::bm25_index::Bm25Indexer::default());
+        // MPR-FR-IANE: an accept can ask for a follow-up turn, and no fixture
+        // test runs a model.
+        h.app.manage(crate::map_plan::DispatchSeam(std::sync::Arc::new(|_| Ok(()))));
         h.app.state::<crate::bm25_index::Bm25Indexer>().mount(&h.root());
         // GPP-FR-NLPG: the configuration is `valid` once a read of the Project
         // found it so. The load stores the read cache of the plan too.

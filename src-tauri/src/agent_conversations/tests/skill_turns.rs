@@ -3,12 +3,24 @@
 
 use super::*;
 
-const TEMPLATES: [(&str, &str); 4] = [
+const TEMPLATES: [(&str, &str); 5] = [
     ("comment.md", COMMENT_PROMPT_TEMPLATE),
     ("discuss-artifact.md", DISCUSS_ARTIFACT_PROMPT_TEMPLATE),
     ("discuss-draft.md", DISCUSS_DRAFT_PROMPT_TEMPLATE),
     ("discuss-note.md", DISCUSS_NOTE_PROMPT_TEMPLATE),
+    // CVL-FR-PDXW: the Map prompt holds the same skill text.
+    ("discuss-map.md", DISCUSS_MAP_PROMPT_TEMPLATE),
 ];
+
+// CVL-FR-PDXW: the Map prompt names the built-in `roadmap` skill for planning
+// work, tells the agent to read it at the start of that work, and names no
+// skill tool.
+#[test]
+fn the_map_prompt_names_the_roadmap_skill() {
+    let section = skills_section(DISCUSS_MAP_PROMPT_TEMPLATE);
+    assert!(section.contains("built-in skill, `roadmap`"), "{section}");
+    assert!(section.contains("Read it at the start of planning work"), "{section}");
+}
 
 /// The `## Skills` section of a template, up to the next section.
 fn skills_section(template: &str) -> &str {

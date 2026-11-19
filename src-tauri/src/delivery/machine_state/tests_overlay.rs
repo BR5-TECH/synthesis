@@ -136,12 +136,16 @@ fn a_node_id_must_be_one_path_segment() {
 }
 
 /// DMS-FR-VEHN: the overlay and the journal have no Tauri command; the two
-/// layout commands are the only commands of the module.
+/// layout commands and the two view commands (DMS-FR-JBKN, DMS-FR-TICX) are
+/// the only commands of the module.
 #[test]
-fn only_the_layout_has_commands() {
+fn only_the_layout_and_the_view_have_commands() {
     let names = crate::command_names::COMMAND_NAMES;
-    assert!(names.contains(&"load_delivery_layout"));
-    assert!(names.contains(&"save_delivery_layout"));
+    for present in
+        ["load_delivery_layout", "save_delivery_layout", "load_delivery_view", "save_delivery_view"]
+    {
+        assert!(names.contains(&present), "{present}");
+    }
     for absent in [
         "read_delivery_overlay",
         "write_delivery_overlay",

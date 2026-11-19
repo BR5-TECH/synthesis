@@ -19,6 +19,21 @@ use super::*;
 /// searching become an open-ended expense.
 pub(super) const MAX_MODEL_CALLS: usize = 8;
 
+/// CVL-FR-YNJS: the logical bound of a Map turn that can propose plan changes.
+/// Such a turn reads issues, posts its card, and updates it, so it takes more
+/// rounds than a turn that answers.
+pub(super) const MAX_PLAN_MODEL_CALLS: usize = 12;
+
+/// CVL-FR-YNJS: the logical bound of a turn, from whether it is attached
+/// `propose_plan_changes`.
+pub(super) fn max_model_calls(plans: bool) -> usize {
+    if plans {
+        MAX_PLAN_MODEL_CALLS
+    } else {
+        MAX_MODEL_CALLS
+    }
+}
+
 /// CVL-FR-FSAY: the line the loop appends before the last invocation under the
 /// logical bound, so the model answers rather than asks for tools that will not
 /// run.
@@ -65,14 +80,14 @@ pub(crate) fn plan_tools_wanted(origin: &ConversationOrigin, enabled: bool) -> b
 /// The gate decides first: a turn that is not a Map turn, and a Map turn whose
 /// delivery source does not allow the tools, get nothing. After the gate, the
 /// four tools are bound to `origin`, and `propose_plan_changes` to `author`,
-/// `roots`, and `proposed`. It ends the turn on the call that succeeded
-/// (CVL-FR-15). The three read tools end nothing.
+/// `roots`, and the plan card of the turn. None of the four ends the turn
+/// (CVL-FR-FCWM).
 pub(super) fn plan_tools_for_turn<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     roots: Roots<'_>,
     origin: &ConversationOrigin,
     author: &Participant,
-    proposed: &Arc<AtomicBool>,
+    plan_card: &Arc<crate::tools::propose_plan_changes::PlanTurnCard>,
 ) -> Vec<rig::tool::DynamicTool> {
     if !plan_tools_wanted(origin, origin.is_map() && map_plan_tools_enabled(app)) {
         return Vec::new();
@@ -95,7 +110,7 @@ pub(super) fn plan_tools_for_turn<R: tauri::Runtime>(
             roots.owned(),
             origin.clone(),
             author.clone(),
-            Arc::clone(proposed),
+            Arc::clone(plan_card),
         )),
     ]
 }

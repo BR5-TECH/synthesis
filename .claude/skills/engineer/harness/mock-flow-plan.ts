@@ -282,6 +282,15 @@ export function flowPlanInvoke(cmd: string, a: Record<string, unknown>): unknown
       else layouts.set(String(a.scope), layout);
       return undefined;
     }
+    // DMS-FR-JBKN / DMS-FR-TICX: the status filter view of each scope, kept in
+    // sessionStorage so a page reload reads back what the last save wrote.
+    case "load_delivery_view": {
+      const raw = sessionStorage.getItem(`uiaudit:deliveryView:${String(a.scope)}`);
+      return raw ? JSON.parse(raw) : { hidden: [], blockedOnly: false };
+    }
+    case "save_delivery_view":
+      sessionStorage.setItem(`uiaudit:deliveryView:${String(a.scope)}`, JSON.stringify(a.view));
+      return undefined;
     case "open_tracker_link":
       return undefined;
     case "find_flow_items_for_draft":

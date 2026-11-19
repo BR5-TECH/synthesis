@@ -78,8 +78,9 @@ fn row_subject(fields: &crate::map_plan::RowFields) -> String {
 /// with the state of the row, so the agent knows what the author decided.
 ///
 /// The lines come from the Map folder of `roots.store`, oldest proposal first.
-/// Each line holds the row key, what the row is, its state, the typed error of a
-/// failed row, and the reason that a waiting row is blocked.
+/// Each line holds the row key, what the row is, its state, the issue number
+/// or the draft of an accepted row, the typed error of a failed row, and the
+/// reason that a waiting row is blocked.
 pub(crate) fn proposal_rows_summary(roots: Roots<'_>, discussion_id: &str) -> Vec<String> {
     use crate::map_plan::RowState;
     let state_word = |state: RowState| match state {
@@ -100,6 +101,18 @@ pub(crate) fn proposal_rows_summary(roots: Roots<'_>, discussion_id: &str) -> Ve
                 row_subject(&row.fields),
                 state_word(row.state)
             );
+            // MPR-FR-CPGZ: an accepted row names what it made, so a later
+            // turn can name the new issue as a parent.
+            if row.state == RowState::Accepted {
+                let result = row.result.as_ref();
+                match (&row.fields, result.and_then(|r| r.issue_number)) {
+                    (crate::map_plan::RowFields::NewDraft(_), _) => {
+                        line.push_str(" (draft created)")
+                    }
+                    (_, Some(number)) => line.push_str(&format!(" (issue #{number})")),
+                    _ => {}
+                }
+            }
             if let Some(error) = &row.error {
                 line.push_str(&format!(" (error {})", error.code));
             }

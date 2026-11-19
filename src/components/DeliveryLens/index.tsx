@@ -30,7 +30,12 @@ import type { SpecMapSessionStore } from "../../state/specMap/session";
 import type { FlowItem } from "../../state/flowDocument";
 import type { ItemDeliveryState, OpenableArtifact } from "../../types";
 import { describeSource } from "../DeliverySettingsSection";
-import { FlowExcerptsContext, type FlowCanvasHandle, type FlowViewState, type IssueViewHost } from "../Flow";
+import {
+  FlowExcerptsContext,
+  type FlowCanvasHandle,
+  type FlowViewState,
+  type IssueViewHost,
+} from "../Flow";
 import { DEFAULT_VIEW, type View } from "../Flow/geometry";
 import { FileLens } from "./FileLens";
 import { GithubLens } from "./GithubLens";
@@ -41,8 +46,14 @@ import { githubSourceOf, useDeliveryPlan } from "./useDeliveryPlan";
 import { useLensEvents } from "./useLensEvents";
 import { useSourceChangeFocus } from "./useSourceChangeFocus";
 import { MapPlanReviewLayer, useMapPlan } from "../MapPlanProposal";
+import { StatusFilter } from "./StatusFilter";
+import { useStatusFilter } from "./useStatusFilter";
 
 export type { DeliveryHost } from "./host";
+
+/** MDL layout notes: the tab width below which the progress legend and the
+ * Status button show their numbers alone, so the toolbar keeps one row. */
+const COMPACT_TOOLBAR_WIDTH = 900;
 
 /** SDL-FR-BVNS: what the Delivery lens asks of the Specifications lens. */
 export interface SpecificationsRequest {
@@ -112,7 +123,10 @@ function ActiveLens({
   host,
   plan,
   discussion,
-}: DeliveryLensProps & { host: DeliveryHost; plan: ReturnType<typeof useDeliveryPlan> }) {
+}: DeliveryLensProps & {
+  host: DeliveryHost;
+  plan: ReturnType<typeof useDeliveryPlan>;
+}) {
   useSyncExternalStore(store.subscribe, store.getVersion);
   const state = store.snapshot();
   const source = plan.source;
@@ -123,7 +137,10 @@ function ActiveLens({
     canvas.current = handle;
     setCanvasMounted(handle !== null);
   }, []);
-  const [fileStates, setFileStates] = useState<ReadonlyMap<string, ItemDeliveryState> | null>(null);
+  const [fileStates, setFileStates] = useState<ReadonlyMap<
+    string,
+    ItemDeliveryState
+  > | null>(null);
 
   // SDL-FR-VYIF: the lens loads the index on the terms of SMP-FR-PMCX.
   const hasPlan = plan.doc !== null;
@@ -131,7 +148,10 @@ function ActiveLens({
     if (hasPlan) void store.load();
   }, [hasPlan, store]);
   const tree = state.status === "ready" ? store.tree() : null;
-  const links = useMemo(() => deriveSpecLinks(plan.doc, tree), [plan.doc, tree]);
+  const links = useMemo(
+    () => deriveSpecLinks(plan.doc, tree),
+    [plan.doc, tree],
+  );
 
   // MDL-FR-JIKK / SDL-FR-MCGI: show the item the session asks for.
   const reveal = state.deliveryReveal;
@@ -147,14 +167,20 @@ function ActiveLens({
   useEffect(() => {
     if (!planWork || !canvasMounted || !canvas.current || !hasPlan) return;
     store.consumePlanWork(planWork.nonce);
-    void canvas.current.addTask({ name: planWork.name, references: planWork.references }).then((id) => {
-      if (id === null) {
-        logWarn(["frontend"], "planned work was not added to the delivery", {});
-        return;
-      }
-      // SDL-FR-CFHH: the new task shows selected and centred, as MDL-FR-JIKK does.
-      canvas.current?.reveal(id);
-    });
+    void canvas.current
+      .addTask({ name: planWork.name, references: planWork.references })
+      .then((id) => {
+        if (id === null) {
+          logWarn(
+            ["frontend"],
+            "planned work was not added to the delivery",
+            {},
+          );
+          return;
+        }
+        // SDL-FR-CFHH: the new task shows selected and centred, as MDL-FR-JIKK does.
+        canvas.current?.reveal(id);
+      });
   }, [planWork, canvasMounted, hasPlan, store]);
 
   // SMP-FR-RNLH: the view and the selection outlive each mount of the canvas.
@@ -172,7 +198,10 @@ function ActiveLens({
       store.keepDeliveryView(next.view);
       data.selection = next.selection;
       const only = next.selection.length === 1 ? next.selection[0] : null;
-      const item = only === null ? undefined : docRef.current?.items.find((i) => i.id === only);
+      const item =
+        only === null
+          ? undefined
+          : docRef.current?.items.find((i) => i.id === only);
       store.setDeliveryNode(item ? deliveryNodeOf(item) : null);
     },
     [store, data],
@@ -228,6 +257,12 @@ function ActiveLens({
     setRootEl(el);
   }, []);
   const onSourceChanged = useSourceChangeFocus(store, lensRoot, sourceKey);
+  // MDL-FR-ZAGM: the status filter of the layout scope of the plan that shows.
+  const filter = useStatusFilter(
+    data.views,
+    github ? github.project.nodeId : null,
+    source,
+  );
   const githubPlan = plan.github?.snapshot();
   const states: ReadonlyMap<string, ItemDeliveryState> | null = github
     ? githubPlan?.answer
@@ -246,8 +281,12 @@ function ActiveLens({
     // MDL-FR-XMQU: the empty state, its reason, and Configure delivery.
     body = (
       <div className="smap-state dlens-empty" data-testid="delivery-empty">
-        <p className="smap-state__line dlens-empty__title">This project has no delivery.</p>
-        <p className="smap-state__line dlens-empty__reason">{describeSource(source)}</p>
+        <p className="smap-state__line dlens-empty__title">
+          This project has no delivery.
+        </p>
+        <p className="smap-state__line dlens-empty__reason">
+          {describeSource(source)}
+        </p>
         <div className="smap-state__actions">
           <button
             type="button"
@@ -262,7 +301,11 @@ function ActiveLens({
   } else if (source.kind === "github" && !github) {
     // MDL-FR-WAOZ: the configuration error, and a route to its settings.
     body = (
-      <div className="smap-state" role="alert" data-testid="delivery-config-error">
+      <div
+        className="smap-state"
+        role="alert"
+        data-testid="delivery-config-error"
+      >
         <p className="smap-state__line">
           {source.configuration.error ??
             "The GitHub Project configuration is not valid. Open the GitHub Project settings to fix it."}
@@ -296,6 +339,8 @@ function ActiveLens({
         onOverlayOpening={onOverlayOpening}
         onSourceChanged={onSourceChanged}
         onDiscuss={onDiscuss}
+        statusFilter={filter.canvasFilter}
+        onHiddenCount={filter.onHiddenCount}
       />
     );
   } else if (source.kind === "file") {
@@ -315,19 +360,28 @@ function ActiveLens({
         onOverlayOpening={onOverlayOpening}
         onSourceChanged={onSourceChanged}
         onDiscuss={onDiscuss}
+        statusFilter={filter.canvasFilter}
+        onHiddenCount={filter.onHiddenCount}
       />
     );
   }
 
   return (
-    <div
-      ref={bindRoot}
-      className="smap"
-      data-testid="delivery-lens"
-    >
+    <div ref={bindRoot} className="smap" data-testid="delivery-lens">
       <div className="smap-toolbar" role="toolbar" aria-label="Map controls">
         {lensSwitch}
-        <Rollup rollup={leafRollup(plan.doc, states)} />
+        <Rollup
+          rollup={leafRollup(plan.doc, states)}
+          compact={tabWidth > 0 && tabWidth < COMPACT_TOOLBAR_WIDTH}
+        />
+        {filter.view && (
+          <StatusFilter
+            view={filter.view}
+            hiddenCount={filter.hiddenCount}
+            compact={tabWidth > 0 && tabWidth < COMPACT_TOOLBAR_WIDTH}
+            onChange={filter.change}
+          />
+        )}
         {discussion !== undefined && (
           <>
             <span className="smap-toolbar__spacer" />
@@ -343,7 +397,9 @@ function ActiveLens({
       <div className="smap-body">
         <div className="smap-main dlens-main">
           {/* MDL-FR-RILW: an item of the plan reads as its name, with no excerpt. */}
-          <FlowExcerptsContext.Provider value={false}>{body}</FlowExcerptsContext.Provider>
+          <FlowExcerptsContext.Provider value={false}>
+            {body}
+          </FlowExcerptsContext.Provider>
           {/* MPV-FR-CTTA: the review sheet covers the canvas area only. */}
           <MapPlanReviewLayer />
         </div>

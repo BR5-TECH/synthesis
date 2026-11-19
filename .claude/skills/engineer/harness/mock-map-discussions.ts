@@ -12,7 +12,8 @@
  * holds two plan proposals (MPV-map-proposal-review.md): an older one whose row
  * failed with `changed_on_tracker`, and a pending one with a changed, an added,
  * and a withdrawn issue. With `?mapProposalFail` every accept fails with
- * `changed_on_tracker`. Accept, reject, undo, and the re-prepare request change
+ * `changed_on_tracker`. With `?mapProposalParent` #49 also moves under the
+ * new issue `rnew`, and waits for it. Accept, reject, undo, and the re-prepare request change
  * the proposals in memory and emit `map-plan-proposals-changed`.
  */
 
@@ -131,8 +132,10 @@ if (flag("mapProposal")) {
             { field: "milestone", before: { number: 3, title: "Beta" }, after: { number: 4, title: "GA" } },
             { field: "status", before: "Todo", after: "In Progress" },
             { field: "labels", before: ["legacy"], after: ["payments"], added: ["payments"], removed: ["legacy"] },
+            // With `?mapProposalParent`, #49 moves under the new issue of this proposal (MPV-FR-CGOG).
+            ...(flag("mapProposalParent") ? [{ field: "parent", before: { issue: 12 }, after: { row: "rnew" } }] : []),
           ],
-        }),
+        }, flag("mapProposalParent") ? { blockedBy: { rowKey: "rnew", reason: "waiting" } } : {}),
         row("rnew", "create_issue", {
           title: "Payout retry limits",
           type: "Task",

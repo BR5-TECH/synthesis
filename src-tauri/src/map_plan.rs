@@ -12,6 +12,7 @@ mod commands;
 mod deciding;
 mod errors;
 mod fingerprints;
+pub mod follow_up;
 mod model;
 mod recording;
 mod reprepare;
@@ -30,4 +31,6 @@ pub use fingerprints::{
 };
 pub use model::*;
 pub use recording::*;
+#[cfg(test)]
+pub use reprepare::{DispatchSeam, TurnRequest};
 pub use updating::{apply_updates, read_open_proposal, update_map_plan_proposal, MapPlanUpdate};

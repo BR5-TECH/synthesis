@@ -25,6 +25,7 @@ import {
   type IssueViewHost,
 } from "../Flow";
 import { GithubIssueDetails, SubIssues, useGithubIssueDetail, type PlanIssue } from "./IssueDetailFields";
+import type { BoardStatusFilter } from "../Flow/boardFilter";
 import { BandMenu, GithubBandFacts } from "./BandMenu";
 import {
   ExportDialog,
@@ -85,6 +86,10 @@ export interface GithubLensProps {
   onDiscuss?: (item: FlowItem) => void;
   /** MDL-FR-QIXG / MDL-FR-XUJY: the source changed; read it again. */
   onSourceChanged: () => void;
+  /** MDL-FR-WDMP: the status filter of the board. */
+  statusFilter?: BoardStatusFilter;
+  /** MDL-FR-BWEF: the count of the cards and groups the filter hides. */
+  onHiddenCount?: (count: number) => void;
 }
 
 export function GithubLens(props: GithubLensProps) {
@@ -320,6 +325,9 @@ export function GithubLens(props: GithubLensProps) {
         binding={binding}
         // MDL-FR-VLQJ / MDL-FR-XJBV / DBR-FR-ERHW: the lens lays the plan out as a board.
         board
+        // MDL-FR-WDMP: the status filter of the lens hides items of the board.
+        statusFilter={props.statusFilter}
+        onHiddenCount={props.onHiddenCount}
         initialView={props.initialView}
         onViewChange={props.onViewChange}
         onDiscuss={props.onDiscuss}

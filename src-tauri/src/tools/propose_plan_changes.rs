@@ -4,13 +4,14 @@
 //! One call carries a batch of rows: a new issue, a change to a plan issue, or
 //! a new draft. The tool records the batch as one plan proposal and appends one
 //! comment of the agent, through `crate::map_plan`. While a row of its
-//! proposal waits, a call with `updates` changes that proposal in place. It writes nothing to
+//! proposal waits, a call with `updates` changes that proposal in place. The
+//! first successful call of a turn posts the card of the turn, and later calls
+//! of the turn update it with no comment (PPT-FR-ZMBA). It writes nothing to
 //! GitHub, creates no draft and no label, and does not change the read cache
 //! of the plan (PPT-FR-WBYJ). The rows are applied only when the author accepts
 //! them.
 
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use rig::tool::ToolErrorKind;
@@ -29,7 +30,10 @@ use crate::map_plan::{self, MapPlanError, MapPlanProposal, ProposalComment, RowF
 use updates::PlanUpdateArg;
 
 pub mod rows;
+pub mod turn_card;
 pub mod updates;
+
+pub use turn_card::{CardState, PlanTurnCard};
 
 #[cfg(test)]
 mod tests;
@@ -41,9 +45,9 @@ pub const NAME: &str = "propose_plan_changes";
 pub const MAX_ROWS: usize = 20;
 
 /// PPT-FR-FFML: the fixed description of the contract surface.
-pub const DESCRIPTION: &str = "Propose work on the delivery plan: new issues, changes to plan issues, and new drafts. One call carries a batch of rows. Each row is `create_issue`, `modify_issue`, or `new_draft`. The author accepts or rejects each row on its own, and nothing is written to GitHub and no draft is created until they accept. A new issue can set title, body, Type, milestone, parent, and labels. A change can set title, body, Type, milestone, parent, labels to add and to remove, a close reason, and the Status. Use only labels, Types, milestones, and Status options that exist: read them with `list_plan_issues`. A parent can be a plan issue (`parent_issue`). A new issue can also have an earlier new issue of the same call as parent (`parent_row`). Where a feature exists but is not fully built, propose a `new_draft` that finishes it, in place of an issue. Do not propose all work at once. Keep the discussion on one topic, propose one step, and propose a new batch after the author decided every row. While a row of your proposal still waits and the discussion asks for a different change, send `updates` in place of `rows`. Each update gives `action`: `change` with the `key` of a row and the full new row, `add` with a new row and a new `key`, or `withdraw` with the `key` of a row you no longer offer. A rejected row can be changed, and the author decides it again. An accepted or failed row can not be updated. Say what you propose and why, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. A rationale with no tag is refused. Your turn ends when the proposal is recorded or updated.";
+pub const DESCRIPTION: &str = "Propose work on the delivery plan: new issues, changes to plan issues, and new drafts. One call carries a batch of rows. Each row is `create_issue`, `modify_issue`, or `new_draft`. The author accepts or rejects each row on its own, and nothing is written to GitHub and no draft is created until they accept. A new issue can set title, body, Type, milestone, parent, and labels. A change can set title, body, Type, milestone, parent, labels to add and to remove, a close reason, and the Status. Use only labels, Types, milestones, and Status options that exist: read them with `list_plan_issues`. A parent can be a plan issue (`parent_issue`), or the new issue of an earlier `create_issue` row of the same call (`parent_row`), for a new issue and for a change. Where a feature exists but is not fully built, propose a `new_draft` that finishes it, in place of an issue. Keep the discussion on one topic. Propose one complete step in one call: every row that the step needs, up to 20. A step of 5 to 10 related rows is normal. Do not split one step into several calls of a few rows, and do not propose the work of later steps before the author decided this one. While a row of your proposal still waits and the discussion asks for a different change, send `updates` in place of `rows`. Each update gives `action`: `change` with the `key` of a row and the full new row, `add` with a new row and a new `key`, or `withdraw` with the `key` of a row you no longer offer. A rejected row can be changed, and the author decides it again. An accepted or failed row can not be updated. Say what you propose and why, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. A rationale with no tag is refused. Your turn continues after a successful call: you can read issues and send `updates` to the same proposal. Only the first successful call of a turn posts its rationale. End the turn with a short reply. It is posted only where you changed the proposal after its rationale.";
 
-const RATIONALE_DESCRIPTION: &str = "What you propose and why, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud.";
+const RATIONALE_DESCRIPTION: &str = "What you propose and why, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud. Required on the first successful call of a turn; a later call of the turn does not post it.";
 const ROWS_DESCRIPTION: &str = "The rows of a new proposal, 1 to 20. The author decides each row on its own. Leave it out when you pass `updates`.";
 const UPDATES_DESCRIPTION: &str = "Changes to your proposal that still has a waiting row, in place of `rows`, in the order they apply. A `change` gives the `key` of a row and the full new `row`, with the same `op`; the author decides it again. An `add` gives a new `key` and its `row`. A `withdraw` gives the `key` of a row you no longer offer, and no `row`. An accepted or failed row can not be updated.";
 const ACTION_DESCRIPTION: &str =
@@ -60,7 +64,7 @@ const TYPE_DESCRIPTION: &str =
     "The Type of the issue. It must be a Type that the repository offers.";
 const MILESTONE_DESCRIPTION: &str = "The exact title of a milestone of the plan. `null` removes the milestone of an existing issue.";
 const PARENT_ISSUE_DESCRIPTION: &str = "The number of a plan issue to set as the parent. `null` removes the parent of an existing issue. Do not give it with `parent_row`.";
-const PARENT_ROW_DESCRIPTION: &str = "The `key` of an earlier `create_issue` row of this call to set as the parent of a new issue. Do not give it with `parent_issue`. A `modify_issue` row does not take it.";
+const PARENT_ROW_DESCRIPTION: &str = "The `key` of an earlier `create_issue` row of this call: the parent of a new issue, or the new parent of a changed issue. Do not give it with `parent_issue`.";
 const LABELS_DESCRIPTION: &str =
     "Labels of the new issue. Each must already exist in the repository. `create_issue` only.";
 const NUMBER_DESCRIPTION: &str = "The number of the plan issue to change. `modify_issue` only.";
@@ -78,6 +82,7 @@ pub const PLAN_UNAVAILABLE: &str = "The project has no valid GitHub Project for 
 pub const CONVERSATION_RESOLVED: &str =
     "This conversation is resolved and takes no further comments, so nothing was proposed.";
 pub const CARD_OPEN: &str = "A proposal of yours still waits for the decisions of the author. To change it, send `updates` in place of `rows`. Otherwise wait for the decisions, then propose again. Nothing was proposed.";
+pub const ONE_CARD_A_TURN: &str = "This turn already posted a plan proposal. Change it with `updates`, or end your turn with a short reply. Nothing was proposed.";
 pub const BLANK_RATIONALE: &str =
     "Say what you propose and why. The author reads this beside the card.";
 pub const NOT_RECORDED: &str = "The proposal could not be recorded.";
@@ -133,6 +138,7 @@ pub struct PlanRowArg {
 /// a conversation, or a path (PPT-FR-VFOX).
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct ProposePlanChangesArgs {
+    /// PPT-FR-NXPZ: required before the turn has a card.
     #[serde(default)]
     pub rationale: String,
     #[serde(default)]
@@ -184,7 +190,6 @@ pub fn parameters() -> serde_json::Value {
                 },
             },
         },
-        "required": ["rationale"],
     })
 }
 
@@ -247,6 +252,10 @@ fn card_open() -> PlanRefusal {
     PlanRefusal::new(ToolErrorKind::PermissionDenied, "card_open", true, CARD_OPEN)
 }
 
+fn one_card_a_turn() -> PlanRefusal {
+    PlanRefusal::invalid("one_card_a_turn", ONE_CARD_A_TURN)
+}
+
 fn resolved() -> PlanRefusal {
     PlanRefusal::new(
         ToolErrorKind::PermissionDenied,
@@ -266,14 +275,15 @@ fn record_refusal(error: &MapPlanError) -> PlanRefusal {
     }
 }
 
-/// PPT-FR-STDD: `propose_plan_changes` as a `rig` portable tool. `proposed` is
-/// how the loop learns that a proposal went out and the turn ends (CVL-FR-15).
+/// PPT-FR-STDD: `propose_plan_changes` as a `rig` portable tool. `card` is the
+/// plan card of the turn, which the loop reads when the turn ends
+/// (CVL-FR-KYBE).
 pub struct ProposePlanChangesTool<R: tauri::Runtime> {
     app: tauri::AppHandle<R>,
     roots: OwnedRoots,
     origin: ConversationOrigin,
     author: Participant,
-    proposed: Arc<AtomicBool>,
+    card: Arc<PlanTurnCard>,
     buffer: &'static LogBuffer,
 }
 
@@ -287,9 +297,9 @@ where
         roots: OwnedRoots,
         origin: ConversationOrigin,
         author: Participant,
-        proposed: Arc<AtomicBool>,
+        card: Arc<PlanTurnCard>,
     ) -> Self {
-        ProposePlanChangesTool { app, roots, origin, author, proposed, buffer: &BUFFER }
+        ProposePlanChangesTool { app, roots, origin, author, card, buffer: &BUFFER }
     }
 
     /// The same tool, reporting into `buffer`.
@@ -318,7 +328,13 @@ where
                 }
                 log_recorded(&self.app, self.buffer, NAME, fields)
             }
-            Err(refusal) => log_refused(&self.app, self.buffer, NAME, refusal, fields),
+            Err(refusal) => {
+                // PPT-FR-DGAA: the count of refused rows, for **rows refused**.
+                if refusal.code == rows::ROWS_REFUSED {
+                    fields.insert("rowsRefused".to_string(), rows::refused_count(refusal).into());
+                }
+                log_refused(&self.app, self.buffer, NAME, refusal, fields)
+            }
         }
         outcome.map(|(output, _)| output)
     }
@@ -401,7 +417,16 @@ where
         if folded.is_some_and(|d| d.resolved) {
             return Err(resolved());
         }
+        let card = self.card.snapshot();
+        // PPT-FR-ZMBA: a turn posts one card.
+        if form.is_ok() && card.proposal_id.is_some() {
+            return Err(one_card_a_turn());
+        }
         let open = self.open_proposal().await?;
+        // PPT-FR-NXPZ: the rationale of the first successful call of a turn.
+        if card.proposal_id.is_none() {
+            Self::check_rationale(&args.rationale)?;
+        }
         match form {
             Ok(rows) => {
                 // PPT-FR-AYQT.
@@ -410,10 +435,14 @@ where
                 }
                 self.record(&args.rationale, &rows).await
             }
-            // PPT-FR-STLY.
+            // PPT-FR-STLY, PPT-FR-ZMBA: a later call changes the card of the
+            // turn only.
             Err(updates) => {
-                let open = open.ok_or_else(updates::no_open_proposal)?;
-                self.update(&args.rationale, &updates, &open).await
+                let open = open
+                    .filter(|o| card.proposal_id.as_ref().is_none_or(|id| *id == o.id))
+                    .ok_or_else(updates::no_open_proposal)?;
+                let comment = card.proposal_id.is_none().then(|| self.comment_of(&args.rationale));
+                self.update(comment, &updates, &open).await
             }
         }
     }
@@ -424,36 +453,44 @@ where
         rationale: &str,
         rows: &[PlanRowArg],
     ) -> Result<(ProposePlanChangesOutput, BTreeMap<&'static str, usize>), PlanRefusal> {
-        Self::check_rationale(rationale)?;
-        let needs = rows::check_shape(rows)?;
-        let facts = self.facts(needs).await?;
-        let built = rows::build_rows(rows, &facts)?;
+        let (needs, mut refused) = rows::check_shape(rows)?;
+        // PPT-FR-ELJI: the facts are read only for the rows that the shape
+        // checks let through.
+        let built = if refused.len() < rows.len() {
+            let facts = self.facts(needs).await?;
+            rows::build_rows(rows, &facts, &mut refused)
+        } else {
+            Vec::new()
+        };
+        rows::refusal_of(refused, rows::row_line)?;
         let kinds = Self::kinds(&built);
         let count = built.len();
         let comment = self.comment_of(rationale);
         let (app, id) = (self.app.clone(), self.origin.discussion_id().to_string());
-        crate::project_scope::context::spawn_blocking(move || {
+        let proposal = crate::project_scope::context::spawn_blocking(move || {
             map_plan::record_map_plan_proposal(&app, &id, built, comment)
         })
         .await
         .map_err(|_| not_recorded())?
         .map_err(|e| record_refusal(&e))?;
-        // CVL-FR-15: set only after the record and its comment both landed.
-        self.proposed.store(true, Ordering::SeqCst);
+        // PPT-FR-ZMBA: set only after the record and its comment both landed.
+        self.card.set(&proposal.id);
         Ok((ProposePlanChangesOutput::Proposed { proposed: true, rows: count }, kinds))
     }
 
-    /// PPT-FR-STLY to PPT-FR-ISZR: update the open proposal in place.
+    /// PPT-FR-STLY to PPT-FR-ISZR, PPT-FR-IRFE: update the open proposal in
+    /// place. `comment` is the comment of the first successful call of a turn,
+    /// and a later call of the turn has none.
     async fn update(
         &self,
-        rationale: &str,
+        comment: Option<ProposalComment>,
         updates: &[PlanUpdateArg],
         open: &MapPlanProposal,
     ) -> Result<(ProposePlanChangesOutput, BTreeMap<&'static str, usize>), PlanRefusal> {
-        Self::check_rationale(rationale)?;
-        let (checked, needs) = updates::check_updates(updates, open)?;
+        let (checked, needs, mut refused) = updates::check_updates(updates, open)?;
         let facts = self.facts(needs).await?;
-        let built = updates::build_updates(&checked, &facts)?;
+        let built = updates::build_updates(&checked, updates.len(), &facts, &mut refused);
+        rows::refusal_of(refused, updates::update_line)?;
         let new_rows: Vec<map_plan::MapPlanRow> = built
             .iter()
             .filter_map(|u| match u {
@@ -468,16 +505,23 @@ where
         counts.insert("changeUpdates", changed);
         counts.insert("addUpdates", added);
         counts.insert("withdrawUpdates", withdrawn);
-        let comment = self.comment_of(rationale);
+        let silent = comment.is_none();
+        counts.insert("silentUpdates", usize::from(silent));
         let (app, id) = (self.app.clone(), self.origin.discussion_id().to_string());
-        crate::project_scope::context::spawn_blocking(move || {
+        let proposal = crate::project_scope::context::spawn_blocking(move || {
             map_plan::update_map_plan_proposal(&app, &id, built, comment)
         })
         .await
         .map_err(|_| not_recorded())?
         .map_err(|e| updates::update_refusal(&e).unwrap_or_else(|| record_refusal(&e)))?;
-        // CVL-FR-15: set only after the update and its comment both landed.
-        self.proposed.store(true, Ordering::SeqCst);
+        // PPT-FR-ZMBA, PPT-FR-IRFE: set only after the update landed. The
+        // first call of a turn makes its proposal the card, and a later call
+        // adds its counts.
+        if silent {
+            self.card.add(changed, added, withdrawn);
+        } else {
+            self.card.set(&proposal.id);
+        }
         let output = ProposePlanChangesOutput::Updated { updated: true, changed, added, withdrawn };
         Ok((output, counts))
     }
@@ -512,6 +556,3 @@ where
         self.run(arguments)
     }
 }
-
-/// PPT-FR-PRPX: what a second proposal in one reply is told.
-pub const ONE_AT_A_TIME: &str = "Only one plan proposal can be recorded in a turn, so this one was not recorded. Propose again after the author decided the rows.";

@@ -248,3 +248,46 @@ describe("a drag of the board (DBR-FR-QCAJ, DBR-FR-CZEU)", () => {
     expect(b.orders.get("m1")).toEqual(["e1", "t3"]);
   });
 });
+
+describe("hidden items of the board (DBR-FR-SKSO, FLO-FR-OHZB)", () => {
+  it("DBR-FR-SKSO: a hidden item takes no slot, its stack closes up, and the stack order does not change", () => {
+    const doc = board();
+    const b = resolveBoardLayout(doc, EMPTY, { omitted: new Set(["t1"]) });
+    expect(b.layout.t2.position.y).toBe(STACK);
+    expect(b.orders.get("f1")).toEqual(["t1", "t2"]);
+    // The hidden item has no slot of its own.
+    expect(b.layout.t1.size).toBeUndefined();
+  });
+
+  it("DBR-FR-SKSO: a group whose members are all hidden shows its face alone", () => {
+    const doc = board();
+    const b = resolveBoardLayout(doc, EMPTY, { omitted: new Set(["t1", "t2"]) });
+    expect(b.layout.f1.size!.height).toBe(BOARD_FACE_H + 1);
+    const full = resolveBoardLayout(doc, EMPTY);
+    expect(b.layout.e1.size!.height).toBeLessThan(full.layout.e1.size!.height);
+  });
+
+  it("DBR-FR-SKSO: a stack whose members are all hidden keeps the room of an empty stack", () => {
+    const doc = board();
+    const b = resolveBoardLayout(doc, EMPTY, { omitted: new Set(["t4"]) });
+    expect(b.layout.m2.size!.height).toBe(BOARD_HEAD_H + BOARD_EMPTY_H + BOARD_INSET);
+  });
+
+  it("DBR-FR-SKSO: the members after a hidden member in a stored order keep their order", () => {
+    const doc = board();
+    const full = resolveBoardLayout(doc, EMPTY);
+    const stored = toBoardStoredLayout(doc, full.layout);
+    // Store the order t3 before e1 in m1, then hide e1.
+    stored.items.t3 = { position: { x: 0, y: -10 } };
+    const b = resolveBoardLayout(doc, stored, { omitted: new Set(["e1", "f1", "t1", "t2"]) });
+    expect(b.orders.get("m1")).toEqual(["t3", "e1"]);
+    expect(b.layout.t3.position.y).toBe(BOARD_HEAD_H);
+  });
+
+  it("DBR-FR-CZEU: a placeholder index counts the visible members of the stack", () => {
+    const doc = board();
+    const gap = { holder: "f1", index: 1, height: 30 };
+    const b = resolveBoardLayout(doc, EMPTY, { omitted: new Set(["t1"]), gap });
+    expect(b.gapRect?.y).toBe(rectOf(doc, b.layout, "t2").y + BOARD_CARD_H + BOARD_GAP);
+  });
+});

@@ -65,14 +65,15 @@ pub(super) enum TurnEnd {
 /// CVL-FR-15: whether a tool ends the turn on its call — a posted question, a
 /// recorded question set, a proposal, a new draft, a prompt change, an export
 /// request, or a change action request. The artifact origins' proposal tool is
-/// never attached with the two draft tools (CVL-FR-08).
+/// never attached with the two draft tools (CVL-FR-08). `propose_plan_changes`
+/// is not among them: it posts the plan card of the turn, and the turn goes on
+/// (CVL-FR-FCWM, CVL-FR-KYBE).
 pub(super) fn ends_turn(name: &str) -> bool {
     [
         crate::tools::ask_user_comment::NAME,
         crate::tools::ask_discussion_questions::NAME,
         crate::tools::propose_draft_changes::NAME,
         crate::tools::propose_new_draft::NAME,
-        crate::tools::propose_plan_changes::NAME,
         crate::tools::propose_prompt_changes::NAME,
         crate::tools::propose_diagram_changes::NAME,
         crate::tools::propose_change_edits::NAME,
@@ -270,7 +271,13 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         // CVL-FR-EZKC / CVL-FR-YNOE: the steering messages the turn took go into
         // the exchange before the next call. Before the last call under the
         // logical bound, the turn first stops taking more.
-        append_steering(app, turns, plan, &mut conversation, model_calls + 1 >= MAX_MODEL_CALLS);
+        append_steering(
+            app,
+            turns,
+            plan,
+            &mut conversation,
+            model_calls + 1 >= plan.max_model_calls,
+        );
         let deadline = deadline_now();
         if deadline.saturating_duration_since(std::time::Instant::now()).is_zero() {
             log_turn_out_of_time(app, turns, plan, model_calls);
@@ -300,7 +307,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         // CVL-FR-FSAY: the last invocation under the bound is told so, after the
         // steering messages and after any compaction, so the line stays in the
         // exchange that call carries.
-        if model_calls + 1 == MAX_MODEL_CALLS {
+        if model_calls + 1 == plan.max_model_calls {
             conversation.exchange.push(rig::completion::Message::user(LAST_CALL_LINE));
         }
 
@@ -310,7 +317,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         // which is what decides whether a reply asking for tools carries usable
         // content. At the bound those calls are never dispatched, so prose is
         // the whole of what such a reply could still contribute.
-        let at_bound = model_calls >= MAX_MODEL_CALLS;
+        let at_bound = model_calls >= plan.max_model_calls;
         // CVL-FR-KPOY, CVL-FR-WHEY: a call below the bound, made while the turn
         // is bound to an open speech, can return a placeholder.
         let speech_open = !at_bound && turns.bound_to_open_speech(&plan.turn_id);
@@ -378,7 +385,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             // CVL-FR-SZKK: a turn bound to an open speech holds the reply until
             // it takes a steering message or the speech ends. CVL-FR-WHEY: the
             // reply of the last call under the bound is not held.
-            let held = model_calls < MAX_MODEL_CALLS
+            let held = model_calls < plan.max_model_calls
                 && !turns.has_steering(&plan.turn_id)
                 && turns.wait_for_speech(app, &plan.turn_id, HoldUntil::AnyMessage);
             // AGC-FR-NFYK: a speech with no comment cancels the turn it
@@ -391,7 +398,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             // in the exchange and calls again with the message.
             // CVL-FR-AEJO: a held reply whose wait ended with no steering
             // message to append is delivered as it stands.
-            if model_calls < MAX_MODEL_CALLS && turns.has_steering(&plan.turn_id) {
+            if model_calls < plan.max_model_calls && turns.has_steering(&plan.turn_id) {
                 logging::log_debug(
                     app,
                     turns.buffer(),
@@ -417,7 +424,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         // CVL-FR-13: at the bound the turn delivers whatever prose this reply
         // carried and dispatches no tool it asked for, so an agent that spent
         // its budget searching still contributes what it had concluded.
-        if model_calls >= MAX_MODEL_CALLS {
+        if model_calls >= plan.max_model_calls {
             logging::log_warn(
                 app,
                 turns.buffer(),
@@ -460,7 +467,10 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         // well-formed, every tool call in it answered by a result before the
         // next model call carries it.
         let synthesis_needs_text = needs_synthesis_text(plan, &reply.text);
-        let ending_first = if synthesis_needs_text {
+        // CVL-FR-WJKS: after the turn posted its plan card, a call that would
+        // end the turn is refused, and the loop goes on.
+        let card_posted = plan.plan_card.has_card();
+        let ending_first = if synthesis_needs_text || card_posted {
             None
         } else {
             reply.tool_calls.iter().position(|call| ends_turn(&call.function.name))
@@ -551,7 +561,9 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             // two contributions (AGC-FR-01). The model is told so rather than
             // left with an unanswered call. This is also what a reply asking for
             // one of each reaches, the first having been dispatched above.
-            let one_at_a_time = if synthesis_needs_text && ends_turn(&call.function.name) {
+            let one_at_a_time = if card_posted && ends_turn(&call.function.name) {
+                Some(CARD_POSTED_ASK_IN_REPLY)
+            } else if synthesis_needs_text && ends_turn(&call.function.name) {
                 // AGC-FR-WZUL: the call waits for the text of the Synthesis.
                 Some(SYNTHESIS_NEEDS_TEXT)
             } else if call.function.name == crate::tools::ask_user_comment::NAME {
@@ -565,9 +577,6 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
             } else if call.function.name == crate::tools::propose_diagram_changes::NAME {
                 // CVL-FR-15, PDM-FR-JLYU: one proposal per turn.
                 Some(crate::tools::propose_diagram_changes::ONE_AT_A_TIME)
-            } else if call.function.name == crate::tools::propose_plan_changes::NAME {
-                // CVL-FR-15, PPT-FR-PRPX: one plan proposal per turn.
-                Some(crate::tools::propose_plan_changes::ONE_AT_A_TIME)
             } else if call.function.name == crate::tools::propose_prompt_changes::NAME
                 || call.function.name == crate::tools::propose_change_edits::NAME
                 || call.function.name == crate::tools::propose_new_change::NAME
@@ -620,6 +629,12 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         // the backstop that keeps that true whatever is added above.
         activity.finish_all(app, turns, &plan.turn_id);
     };
+
+    // CVL-FR-KYBE: a turn that posted its plan card ends on it. Its answer is
+    // a closing comment or is discarded, and an empty answer is no failure.
+    if plan.plan_card.has_card() {
+        return end_with_card(app, turns, plan, answer, model_calls);
+    }
 
     // AGC-FR-15 / CVL-FR-13: a model that answered with nothing at all — whether
     // it simply had nothing to say or spent its last call asking for tools it

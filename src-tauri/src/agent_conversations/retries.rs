@@ -178,8 +178,16 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
         let placeholder = outcome.as_ref().is_ok_and(|reply| {
             speech_open && !at_bound && !compaction && is_placeholder(reply, &request.tools)
         });
+        // CVL-FR-KYBE, CVL-FR-NUOY: the answer of a turn whose plan card takes
+        // no closing comment is discarded, so it may be empty and needs no
+        // spoken part.
+        let discarded = !compaction
+            && outcome
+                .as_ref()
+                .is_ok_and(|reply| reply.tool_calls.is_empty() && answer_is_discarded(plan));
         // CVL-FR-NOHO: an answer the provider wrote and billed, with no spoken part.
         let no_spoken_part = !placeholder
+            && !discarded
             && outcome.as_ref().is_ok_and(|reply| {
                 reply_is_usable(reply, at_bound, &request.tools)
                     && reply_is_final(
@@ -193,6 +201,7 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
         let failure = match outcome {
             Ok(reply)
                 if placeholder
+                    || discarded
                     || (!no_spoken_part && reply_is_usable(&reply, at_bound, &request.tools)) =>
             {
                 count_answered_call(

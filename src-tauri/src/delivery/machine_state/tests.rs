@@ -8,6 +8,8 @@ use serde_json::json;
 use tauri::Manager;
 use tempfile::TempDir;
 
+mod view;
+
 use super::commands::{load_delivery_layout_with, save_delivery_layout_with};
 use super::*;
 use crate::delivery::ERR_INVALID_LAYOUT;
@@ -35,7 +37,7 @@ pub(super) fn buffer_text(buffer: &LogBuffer) -> String {
     page.records.iter().map(|record| format!("{record:?}")).collect::<Vec<_>>().join("\n")
 }
 
-fn record_count(buffer: &LogBuffer) -> usize {
+pub(super) fn record_count(buffer: &LogBuffer) -> usize {
     buffer.state().buffer_total
 }
 
@@ -76,7 +78,7 @@ impl Fixture {
     }
 
     /// A mock app with the worktree open and the store named.
-    fn app(&self) -> tauri::App<tauri::test::MockRuntime> {
+    pub(super) fn app(&self) -> tauri::App<tauri::test::MockRuntime> {
         let app = tauri::test::mock_app();
         app.manage(crate::project::ProjectState::default());
         let root = canonical(self.worktree.path());

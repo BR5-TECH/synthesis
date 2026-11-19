@@ -30,6 +30,8 @@ export interface BoardCommitContext {
   /** The stored layout now, for a restore after an answer. */
   latestStored: () => StoredLayout | null;
   refuse: (refusal: FlowRefusal | null) => void;
+  /** DBR-FR-NIGZ: the items the host hides, which the slot of `drop` does not count. */
+  omitted?: ReadonlySet<string>;
 }
 
 export function commitBoardDrop(ctx: BoardCommitContext): void {
@@ -45,7 +47,15 @@ export function commitBoardDrop(ctx: BoardCommitContext): void {
     }
     after = first.doc;
   }
-  const result = boardDropResult(doc, after, stored, boardOrders(doc, stored), item.id, drop);
+  const result = boardDropResult(
+    doc,
+    after,
+    stored,
+    boardOrders(doc, stored),
+    item.id,
+    drop,
+    ctx.omitted,
+  );
   ctx.refuse(null);
   logDebug(["frontend"], "board drop", {
     kind: item.kind,

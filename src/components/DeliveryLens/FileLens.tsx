@@ -14,6 +14,7 @@ import type { DeliverySource } from "../../types/delivery";
 import type { ItemDeliveryState, OpenableArtifact } from "../../types";
 import type { FlowItem } from "../../state/flowDocument";
 import { FlowCanvas, fileBinding, type FlowCanvasHandle, type FlowViewState, type IssueViewHost } from "../Flow";
+import type { BoardStatusFilter } from "../Flow/boardFilter";
 import { BandMenu, FlowPathLink, type BandMenuEntry } from "./BandMenu";
 import { PublishDialog, type PublishState } from "./dialogs";
 import type { DeliveryHost } from "./host";
@@ -48,6 +49,10 @@ export interface FileLensProps {
   onDiscuss?: (item: FlowItem) => void;
   /** MDL-FR-JRGK: a publish made GitHub the source; read it again. */
   onSourceChanged: () => void;
+  /** MDL-FR-WDMP: the status filter of the board. */
+  statusFilter?: BoardStatusFilter;
+  /** MDL-FR-BWEF: the count of the cards and groups the filter hides. */
+  onHiddenCount?: (count: number) => void;
 }
 
 export function FileLens(props: FileLensProps) {
@@ -129,6 +134,9 @@ export function FileLens(props: FileLensProps) {
           binding={fileBinding(host.flows, source.flowId)}
           // MDL-FR-VLQJ / MDL-FR-XJBV / DBR-FR-ERHW: the lens lays the plan out as a board.
           board
+          // MDL-FR-WDMP: the status filter of the lens hides items of the board.
+          statusFilter={props.statusFilter}
+          onHiddenCount={props.onHiddenCount}
           // MDL-FR-WMGU: while a publish runs, no edit affordance acts.
           inert={publish?.phase === "running"}
           initialView={props.initialView}

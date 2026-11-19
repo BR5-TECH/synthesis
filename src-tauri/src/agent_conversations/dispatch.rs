@@ -37,6 +37,11 @@ pub(super) struct TurnPlan {
     /// CVL-FR-15: whether `propose_draft_changes` recorded a proposal during this
     /// turn. The twin of `asked`, read on exactly the same terms.
     pub(super) proposed: Arc<AtomicBool>,
+    /// PPT-FR-ZMBA, CVL-FR-KYBE: the plan card of this turn, shared with
+    /// `propose_plan_changes`. The loop reads it when the turn ends.
+    pub(super) plan_card: Arc<crate::tools::propose_plan_changes::PlanTurnCard>,
+    /// CVL-FR-YNJS: the logical bound of this turn (CVL-FR-13).
+    pub(super) max_model_calls: usize,
     pub(super) agent: Agent,
     /// AGC-FR-14: the AI API provider the open project resolved to when the turn
     /// was dispatched. An agent stores none, so this is what the turn's endpoint
@@ -487,6 +492,7 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
     let asked = Arc::new(AtomicBool::new(false));
     let asked_questions = Arc::new(AtomicBool::new(false));
     let proposed = Arc::new(AtomicBool::new(false));
+    let plan_card = Arc::new(crate::tools::propose_plan_changes::PlanTurnCard::default());
     // CVL-FR-08: named here, and decided by the origin kind. The definitions the
     // request carries are taken from the very tools the loop will dispatch, so
     // what the model is offered and what it can actually reach cannot drift
@@ -516,7 +522,12 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
         roots,
         &origin,
         &author,
-        ContributionFlags { asked: &asked, asked_questions: &asked_questions, proposed: &proposed },
+        ContributionFlags {
+            asked: &asked,
+            asked_questions: &asked_questions,
+            proposed: &proposed,
+            plan_card: &plan_card,
+        },
         document_budget,
         // CVL-FR-VZZR / AGR-FR-LAQP: the selection as it stands at dispatch.
         &skill_filter,
@@ -581,6 +592,10 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
         Some(GroupRole::Synthesis) => vec![comments::Attachment::Synthesis],
         _ => Vec::new(),
     };
+    // CVL-FR-YNJS: a Map turn that can propose plan changes takes more rounds.
+    let max_model_calls = max_model_calls(
+        tools.iter().any(|t| t.definition().name == crate::tools::propose_plan_changes::NAME),
+    );
     let plan = TurnPlan {
         turn_id: turn.id.clone(),
         project_key: project_key.to_string(),
@@ -590,6 +605,8 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
         asked,
         asked_questions,
         proposed,
+        plan_card,
+        max_model_calls,
         request: AgentRequest {
             // CVL-FR-04 / CVL-FR-03: the prompt the origin kind selects, with the
             // persona composed into it. What differs between two turns of one kind
@@ -795,6 +812,8 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
         }
     };
     clear_marks(&plan);
+    // CVL-FR-SUIZ.
+    log_card_left_changed(app, &turns, &plan, state);
     // AGC-FR-EFCL, MPR-FR-VGCX: a Map turn that delivered or asked replaces the
     // fingerprint record of its discussion, where its contribution reaches the
     // discussion. A failed or cancelled turn, an advisor turn, and a participant
@@ -823,5 +842,10 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
             }),
         },
     );
+    // MPR-FR-BCKW: a follow-up that this turn deferred is checked again now
+    // that the turn does not run.
+    if plan.origin.is_map() {
+        crate::map_plan::follow_up::request_deferred(app, plan.origin.discussion_id());
+    }
     redispatch_unread_steering(app, &plan, state, unread);
 }

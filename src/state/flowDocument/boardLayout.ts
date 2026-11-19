@@ -73,6 +73,11 @@ export interface BoardOptions {
   orders?: ReadonlyMap<BoardHolder, readonly string[]>;
   /** DBR-FR-QCAJ: the items that take no slot: the dragged item and what it holds. */
   lifted?: ReadonlySet<string>;
+  /**
+   * DBR-FR-SKSO / FLO-FR-OHZB: the items the host hides. A hidden item takes
+   * no slot, and its stack closes up. The stack order keeps it in its place.
+   */
+  omitted?: ReadonlySet<string>;
   /** DBR-FR-CZEU: the placeholder of the drag. */
   gap?: BoardGap | null;
   /** DBR-FR-LNZI: the heights the canvas measured. */
@@ -169,6 +174,9 @@ export function resolveBoardLayout(
     orders.set(holder, [...pinned, ...rest]);
   }
   const lifted = options.lifted ?? new Set<string>();
+  const omitted = options.omitted ?? new Set<string>();
+  /** Whether an item takes a slot of its stack. */
+  const slots = (id: string) => !lifted.has(id) && !omitted.has(id);
   const gap = options.gap ?? null;
   const collapsed = (id: string) => stored.items[id]?.collapsed === true;
   const heights = options.heights ?? {};
@@ -185,7 +193,7 @@ export function resolveBoardLayout(
    * the inner width `width`. Returns the bottom of the stack.
    */
   const stack = (holder: BoardHolder, x: number, y: number, width: number): number => {
-    const order = (orders.get(holder) ?? []).filter((id) => !lifted.has(id));
+    const order = (orders.get(holder) ?? []).filter(slots);
     let at = y;
     let any = false;
     const putGap = () => {
@@ -219,7 +227,7 @@ export function resolveBoardLayout(
    */
   const group = (item: FlowItem, width: number): number => {
     const face = measured(item.id, BOARD_FACE_H);
-    const members = (orders.get(item.id) ?? []).filter((id) => !lifted.has(id));
+    const members = (orders.get(item.id) ?? []).filter(slots);
     const target = gap !== null && gap.holder === item.id;
     const inner = width - 2 * BOARD_INSET;
     if (collapsed(item.id)) {
@@ -247,7 +255,8 @@ export function resolveBoardLayout(
   const noneBottom = stack(null, noneX + BOARD_INSET, BOARD_HEAD_H, columnInner) + BOARD_INSET;
   const none = doc.items.length > 0 ? { x: noneX, y: 0, width: columnWidth, height: noneBottom } : null;
 
-  // An item no walk reaches (a containment cycle, or a lifted item) keeps a place.
+  // An item no walk reaches (a containment cycle, a lifted item, or a hidden
+  // item) keeps a place.
   for (const item of doc.items) {
     if (!out[item.id]) out[item.id] = { position: { x: 0, y: 0 } };
   }

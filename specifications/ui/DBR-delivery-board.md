@@ -42,6 +42,9 @@ The delivery board is the layout of the canvas in the Delivery lens of the Map t
 34. **DBR-FR-CVJY** A drop of a GitHub plan that the backend refuses (per MDL-FR-PUCM) puts the item back in the stack and the slot that the last answer gives it, with the animation of DBR-FR-DQRX, and the item shows the error of DBR-FR-CJSG.
 35. **DBR-FR-BKWE** On the board, an item has no free position and a group has no stored size. An item moves only by a drop into a slot, and the board offers no resize of a group: FLO-FR-21, FLO-FR-HBBF, and FLO-FR-44 do not apply, and the stored positions are read as the stack order alone (DBR-FR-HTCE). **Reset layout** (per `MDL-map-delivery-lens.md` MDL-FR-QAJN) gives every stack its automatic order and expands every group.
 36. **DBR-FR-CCAS** The edges of the plan render between the cards and the groups of the board on the terms of `FLO-flow.md` FLO-FR-39 and FLO-FR-48, and a connection is drawn on the terms of FLO-FR-32 and FLO-FR-33. While a drag runs, the edges of the dragged item follow it.
+36. **DBR-FR-SKSO** Where the host hides items (per `MDL-map-delivery-lens.md` MDL-FR-MIMF), a hidden item takes no slot, and its stack closes up. A group whose members are all hidden shows its face alone. The count `done/total` (DBR-FR-VNSJ) still counts every leaf.
+36. **DBR-FR-NIGZ** A drop into a stack that holds hidden members lands before the visible member at the slot, or after the last member of the stack where no visible member follows. Each hidden item keeps its place in the order of its stack.
+36. **DBR-FR-POOT** An edge with a hidden end is not drawn. A hidden blocker still appears in the tooltip of the **Blocked** marker of the item that it blocks.
 
 ## User stories
 - As an architect, I want every card on the board to line up in its stack, so that I read the plan as a board and not as a pile of boxes.

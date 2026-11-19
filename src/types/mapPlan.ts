@@ -97,6 +97,8 @@ export interface MapPlanProposal {
   createdAt: string;
   /** MPR-FR-QIJF: when Synthesis asked the agent to prepare the failed rows again. */
   reprepareRequestedAt?: string;
+  /** MPR-FR-LDJH: when Synthesis gave the agent its follow-up turn. */
+  followUpRequestedAt?: string;
   rows: MapPlanRow[];
 }
 

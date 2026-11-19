@@ -11,6 +11,8 @@ import {
 } from "../../state/flowDocument";
 import { COLLAPSED_H, type Face } from "./geometry";
 
+const NOTHING: ReadonlySet<string> = new Set<string>();
+
 /** The two ends of an edge on the canvas, each on the border of its item. */
 export interface EdgeRoute {
   ax: number;
@@ -45,8 +47,11 @@ export function createFrames(ctx: {
   sizeOf: (id: string) => FlowSize | undefined;
   /** DBR-FR-ERHW: the canvas lays the plan out as the board. */
   board?: boolean;
+  /** FLO-FR-OHZB: the items the host hides. They paint nowhere. */
+  omitted?: ReadonlySet<string>;
 }) {
   const { doc, heights, collapsed, absOf, sizeOf, board = false } = ctx;
+  const omitted = ctx.omitted ?? NOTHING;
 
   /**
    * FLO-FR-ZASL: the outermost collapsed container that holds `id`, or
@@ -60,10 +65,10 @@ export function createFrames(ctx: {
     return out;
   };
 
-  /** The rectangle an item paints at, in canvas coordinates. */
+  /** The rectangle an item paints at, in canvas coordinates. A hidden item has none. */
   const rectOf = (id: string): FlowRect | null => {
     const item = doc ? findItem(doc, id) : undefined;
-    if (!item) return null;
+    if (!item || omitted.has(id)) return null;
     const at = absOf(id);
     if (isContainerKind(item.kind)) {
       const size = sizeOf(id) ?? { width: CARD_W, height: CARD_H };
@@ -115,9 +120,11 @@ export function createFrames(ctx: {
 
   /**
    * The route of an edge between two items, or null when it is not drawn:
-   * an end is gone, or both ends are hidden in one collapsed container.
+   * an end is gone, an end is hidden by the host (DBR-FR-POOT), or both ends
+   * are hidden in one collapsed container.
    */
   const route = (fromId: string, toId: string): EdgeRoute | null => {
+    if (omitted.has(fromId) || omitted.has(toId)) return null;
     const from = endpointOf(fromId);
     const to = endpointOf(toId);
     if (from === to) return null;

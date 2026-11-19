@@ -1,7 +1,7 @@
 /**
  * The delivery operations: the delivery source and its settings
  * (`DSR-delivery-source.md`), the plan held on GitHub
- * (`GDP-github-delivery-plan.md`), and the per-machine layout
+ * (`GDP-github-delivery-plan.md`), and the per-machine layout and view
  * (`DMS-delivery-machine-state.md`).
  *
  * One part of the typed wrappers over the backend's `#[tauri::command]` set;
@@ -10,6 +10,7 @@
 import { invoke } from "./invoke";
 import type {
   DeliveryLayout,
+  DeliveryView,
   DeliveryMilestones,
   DeliverySettings,
   DeliverySource,
@@ -64,3 +65,10 @@ export const loadDeliveryLayout = (scope: string) =>
 /** DMS-FR-XAZV: `"save delivery layout (scope, layout)"`. */
 export const saveDeliveryLayout = (scope: string, layout: DeliveryLayout) =>
   invoke<void>("save_delivery_layout", { scope, layout });
+
+/** DMS-FR-JBKN: `"load delivery view (scope)"`. */
+export const loadDeliveryView = (scope: string) => invoke<DeliveryView>("load_delivery_view", { scope });
+
+/** DMS-FR-TICX: `"save delivery view (scope, view)"`. */
+export const saveDeliveryView = (scope: string, view: DeliveryView) =>
+  invoke<void>("save_delivery_view", { scope, view });

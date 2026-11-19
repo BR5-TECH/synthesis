@@ -59,6 +59,34 @@ fn a_builtin_descriptor_has_the_builtin_ecosystem_and_a_virtual_path() {
     assert_eq!(serde_json::to_value(Ecosystem::Builtin).unwrap(), "builtin");
 }
 
+// DSL-FR-HNSD, DSL-FR-UOFO: the `roadmap` skill says that a change request is
+// a proposal, every reference file that it names is embedded, and its
+// description names no chart and no diagram.
+#[test]
+fn the_roadmap_skill_names_its_references_and_each_exists() {
+    let skill = builtin_skill_file("roadmap", "SKILL.md").expect("SKILL.md");
+    assert!(skill.contains("name: roadmap"));
+    assert!(skill.contains("the deliverable of the discussion is a **change to the plan**"));
+    assert!(skill.contains("Record it with `propose_plan_changes`"));
+    let named: Vec<&str> = skill
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .filter(|token| token.starts_with("references/") && token.ends_with(".md"))
+        .collect();
+    assert_eq!(named.len(), 8, "each reference is named in the procedure and the table");
+    for file in &named {
+        assert!(builtin_skill_file("roadmap", file).is_some(), "{file} is not embedded");
+    }
+    let description = skill.lines().find(|l| l.starts_with("description:")).unwrap().to_lowercase();
+    for word in ["roadmap", "backlog", "delivery planning"] {
+        assert!(description.contains(word), "{word}");
+    }
+    for word in ["chart", "diagram", "gantt", "timeline", "kanban"] {
+        assert!(!description.contains(word), "{word}");
+    }
+}
+
 // DSL-FR-VTMI: the `mermaid` skill names one reference file per diagram type,
 // and every file it names is embedded and holds at least one diagram.
 #[test]
@@ -277,6 +305,14 @@ fn a_calm_query_ranks_calm_first_and_a_mermaid_query_ranks_mermaid_first() {
         ("model a payment system as a FINOS CALM architecture", "calm"),
         ("draw a sequence diagram of the login flow", "mermaid"),
         ("sequence diagram flowchart", "mermaid"),
+        // DSL-FR-UOFO: roadmap planning ranks `roadmap` first, and a Mermaid
+        // chart type still ranks `mermaid` first.
+        ("plan the roadmap for the next milestone", "roadmap"),
+        ("break the payments epic into issues with acceptance criteria", "roadmap"),
+        ("add new tickets to the backlog for audit logging", "roadmap"),
+        ("draw a gantt chart of the release", "mermaid"),
+        ("a timeline diagram of the project history", "mermaid"),
+        ("a kanban board diagram", "mermaid"),
     ] {
         let ranked = search_skills(&indexer, query, 5, &SkillFilter::empty());
         let names: Vec<&str> = ranked.iter().map(|r| r.skill.name.as_str()).collect();

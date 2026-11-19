@@ -1,19 +1,19 @@
 //! The rules that read a proposal: which rows are blocked (MPR-FR-YLKL) and
 //! whether a discussion has an open row (MPR-FR-SBYA). Pure.
 
-use super::model::{MapPlanProposal, MapPlanRow, ParentRef, RowBlock, RowFields, RowState};
+use super::model::{parent_row_of, MapPlanProposal, MapPlanRow, RowBlock, RowFields, RowState};
 
 /// MPR-FR-YLKL: why the row at `at` cannot be accepted yet. A `create_issue`
-/// row that names a parent row is blocked while that row is `waiting`,
-/// `rejected`, or `failed`. A row that is decided is not blocked.
+/// row, or a `modify_issue` row whose parent change, names a parent row is
+/// blocked while that row is `waiting`, `rejected`, or `failed`. A row that is
+/// decided is not blocked.
 pub fn block_of(rows: &[MapPlanRow], at: usize) -> Option<RowBlock> {
     let row = rows.get(at)?;
     if row.state != RowState::Waiting {
         return None;
     }
-    let RowFields::CreateIssue(fields) = &row.fields else { return None };
-    let Some(ParentRef::Row(parent_key)) = &fields.parent else { return None };
-    let parent = rows.iter().find(|r| &r.key == parent_key)?;
+    let parent_key = parent_row_of(&row.fields)?;
+    let parent = rows.iter().find(|r| r.key == parent_key)?;
     (parent.state != RowState::Accepted)
         .then(|| RowBlock { row_key: parent.key.clone(), reason: parent.state })
 }

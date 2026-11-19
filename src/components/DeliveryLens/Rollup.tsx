@@ -33,7 +33,9 @@ export function leafRollup(
   let leaves = 0;
   let blocked = 0;
   const segments = { done: 0, active: 0, blocked: 0 };
-  const holders = new Set(doc.items.map((i) => i.parentId).filter((p) => p !== undefined));
+  const holders = new Set(
+    doc.items.map((i) => i.parentId).filter((p) => p !== undefined),
+  );
   for (const item of doc.items) {
     if (isContainerKind(item.kind) && holders.has(item.id)) continue;
     const state = states.get(item.id);
@@ -54,7 +56,15 @@ const SEGMENTS = [
   { key: "blocked", dot: "blocked" },
 ] as const;
 
-export function Rollup({ rollup }: { rollup: LeafRollup | null }) {
+/** MDL layout notes: below a tab width of 900px the legend shows its numbers
+ * and dots alone (`compact`). The words stay for a screen reader. */
+export function Rollup({
+  rollup,
+  compact = false,
+}: {
+  rollup: LeafRollup | null;
+  compact?: boolean;
+}) {
   if (!rollup) return null;
   const { counts, leaves, blocked, segments } = rollup;
   const label = `${counts.done} done, ${counts.in_progress} in progress, ${blocked} blocked`;
@@ -62,21 +72,34 @@ export function Rollup({ rollup }: { rollup: LeafRollup | null }) {
   const words = { done: "done", active: "in progress", blocked: "blocked" };
   return (
     <span className="dm-progress">
-      <span className="dm-progress__track" role="img" aria-label={label} data-testid="delivery-rollup-bar">
+      <span
+        className="dm-progress__track"
+        role="img"
+        aria-label={label}
+        data-testid="delivery-rollup-bar"
+      >
         {SEGMENTS.map(({ key }) => (
           <span
             key={key}
             className="dm-progress__seg"
             data-k={key}
-            style={{ width: `${leaves > 0 ? (segments[key] / leaves) * 100 : 0}%` }}
+            style={{
+              width: `${leaves > 0 ? (segments[key] / leaves) * 100 : 0}%`,
+            }}
           />
         ))}
       </span>
-      <span className="dm-progress__legend" data-testid="delivery-rollup-counts">
+      <span
+        className="dm-progress__legend"
+        data-testid="delivery-rollup-counts"
+      >
         {SEGMENTS.map(({ key, dot }) => (
           <span key={key}>
             <i className="dm-dot" data-s={dot} aria-hidden="true" />
-            <b>{legend[key]}</b> {words[key]}
+            <b>{legend[key]}</b>{" "}
+            <span className={compact ? "sr-only" : undefined}>
+              {words[key]}
+            </span>
           </span>
         ))}
       </span>

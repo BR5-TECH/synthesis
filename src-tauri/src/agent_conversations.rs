@@ -141,6 +141,7 @@ mod material;
 mod native_calls;
 mod openrouter_carrier;
 mod overflow;
+mod plan_card;
 mod plan_references;
 mod progress_update;
 mod prose_tool_calls;
@@ -180,6 +181,8 @@ pub use groups::*;
 use key_input::*;
 use native_calls::*;
 use openrouter_carrier::*;
+pub(crate) use plan_card::agent_turn_runs;
+use plan_card::*;
 pub use progress_update::*;
 use prose_tool_calls::*;
 use slots::*;
@@ -550,7 +553,7 @@ fn conversation_tools<R: tauri::Runtime>(
     budget: DocumentBudget,
     skills: &crate::skills::SkillFilter,
 ) -> Vec<rig::tool::DynamicTool> {
-    let ContributionFlags { asked, asked_questions, proposed } = flags;
+    let ContributionFlags { asked, asked_questions, proposed, plan_card } = flags;
     let mut tools = vec![
         erase_tool(crate::tools::spec_search::SpecSearchTool::new(app.clone())),
         erase_tool(crate::tools::file_read::FileReadTool::new(app.clone(), session)),
@@ -746,7 +749,7 @@ fn conversation_tools<R: tauri::Runtime>(
     }
     // CVL-FR-LCSN: the plan tools of a Map turn, while the delivery source allows
     // them. Decided at the start of this turn, and never for another turn.
-    tools.extend(plan_tools_for_turn(app, roots, origin, author, proposed));
+    tools.extend(plan_tools_for_turn(app, roots, origin, author, plan_card));
     // CVL-FR-TJZI: the tools of the ready MCP servers of the project, last.
     tools.extend(crate::mcp::conversation_tools(app));
     tools
@@ -760,6 +763,8 @@ struct ContributionFlags<'a> {
     asked: &'a Arc<AtomicBool>,
     asked_questions: &'a Arc<AtomicBool>,
     proposed: &'a Arc<AtomicBool>,
+    /// PPT-FR-ZMBA: the plan card of the turn, for `propose_plan_changes`.
+    plan_card: &'a Arc<crate::tools::propose_plan_changes::PlanTurnCard>,
 }
 
 // ---------------------------------------------------------------------------

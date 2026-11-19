@@ -34,6 +34,8 @@ pub const ERR_NO_PROJECT_OPEN: &str = "no_project_open";
 pub const ERR_STORE_UNAVAILABLE: &str = crate::repository_store::ERR_STORE_UNAVAILABLE;
 /// DMS-FR-TJSJ: a scope, a position, or a size that is not valid.
 pub const ERR_INVALID_LAYOUT: &str = "invalid_layout";
+/// DMS-FR-TICX: a scope or a status of a view that is not valid.
+pub const ERR_INVALID_VIEW: &str = "invalid_view";
 /// DMS-FR-QFEA: an overlay that breaks a field rule of FGV.
 pub const ERR_INVALID_OVERLAY: &str = "invalid_overlay";
 

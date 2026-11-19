@@ -144,7 +144,12 @@ pub fn estimate_impl<R: tauri::Runtime>(
         roots,
         &origin,
         &author,
-        ContributionFlags { asked: &unset, asked_questions: &unset, proposed: &unset },
+        ContributionFlags {
+            asked: &unset,
+            asked_questions: &unset,
+            proposed: &unset,
+            plan_card: &Arc::default(),
+        },
         budget,
         // CVL-FR-VZZR: the filter changes no definition, so the estimate holds
         // for every selection.

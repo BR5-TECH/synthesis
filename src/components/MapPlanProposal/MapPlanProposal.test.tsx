@@ -230,6 +230,25 @@ describe("field changes (MPV-FR-CCDM .. MPV-FR-OCYF)", () => {
     expect(within(fields).getByText("In progress").querySelector(".dm-dot")).not.toBeNull();
   });
 
+  it("MPV-FR-CGOG, MPV-FR-FUQG: a changed row under a new issue of the proposal shows that row's title as its new parent", async () => {
+    const epic = createRow("epic", "Payments epic", {}, { type: "Epic" });
+    const moved = modifyRow(
+      "move",
+      12,
+      "Card capture",
+      [{ field: "parent", before: { issue: 4 }, after: { row: "epic" } }],
+      { blockedBy: { rowKey: "epic", reason: "waiting" } },
+    );
+    await renderReview(backend(invokeMock, proposal([epic, moved])));
+    const { user, sheet } = await openSheet();
+    await user.click(within(sheet).getAllByTestId("pp-nav")[1]);
+    const fields = within(detail()).getByTestId("pp-fields");
+    expect(within(fields).getByText("Parent")).toBeInTheDocument();
+    expect(within(fields).getByText("Payments epic")).toHaveClass("pp-v--new");
+    expect(within(fields).getByText("Payments epic")).not.toHaveClass("pp-v--mono");
+    expect(within(detail()).getByText("Waiting for its parent: Payments epic")).toBeInTheDocument();
+  });
+
   it("MPV-FR-LYKS, MPV-FR-UXHR: a withdrawn row shows open to closed as not planned, and Accept names it", async () => {
     await renderReview(backend(invokeMock, FOUR()));
     await screen.findByText("2 changed, 1 added, 1 withdrawn");

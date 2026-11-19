@@ -157,3 +157,28 @@
 @media (prefers-reduced-motion: reduce) {
   .dlens-spinner { animation: none; border-top-color: var(--accent); }
 }
+
+/* MDL-FR-MIMF, MDL-FR-BWEF: the Status button of the toolbar and its menu. The
+   toolbar clips what overflows its height, so the menu is fixed in the
+   viewport below the button. */
+.dlens-status { flex: none; display: inline-flex; }
+.dlens-status__toggle { gap: 6px; white-space: nowrap; }
+.dlens-status__count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+}
+.dlens-status__menu { position: fixed; z-index: 40; width: 190px; box-sizing: border-box; }
+.dlens-status__item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--fs-ui-sm);
+  text-align: left;
+  text-transform: none;
+  cursor: pointer;
+}
+.dlens-status__item:hover,
+.dlens-status__item:focus-visible { background: var(--bg-active); outline: none; }
+.dlens-status__check { display: inline-flex; width: 12px; color: var(--accent); }

@@ -484,6 +484,8 @@ pub fn run() {
             flow_overlap::analyze_flow_overlap,
             delivery::machine_state::commands::load_delivery_layout,
             delivery::machine_state::commands::save_delivery_layout,
+            delivery::machine_state::commands::load_delivery_view,
+            delivery::machine_state::commands::save_delivery_view,
             delivery::source::get_delivery_settings,
             delivery::source::set_delivery_settings,
             delivery::source::get_delivery_source,

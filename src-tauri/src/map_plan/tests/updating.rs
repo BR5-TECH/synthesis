@@ -4,7 +4,7 @@ use super::*;
 use crate::comments::{Attachment, ProposalUpdateCounts, ERR_DISCUSSION_RESOLVED};
 
 fn update(plan: &Plan, updates: Vec<MapPlanUpdate>) -> Result<MapPlanProposal, MapPlanError> {
-    update_map_plan_proposal(&plan.app(), &plan.discussion, updates, comment())
+    update_map_plan_proposal(&plan.app(), &plan.discussion, updates, Some(comment()))
 }
 
 fn comments_count(plan: &Plan) -> usize {
@@ -285,6 +285,7 @@ fn changed_and_added_rows_come_in_waiting() {
         comment_id: "c".into(),
         created_at: AT.into(),
         reprepare_requested_at: None,
+        follow_up_requested_at: None,
         rows: vec![rejected, draft_row("b", "B", "y")],
     };
     let (after, counts) = apply_updates(

@@ -20,10 +20,15 @@ import {
 } from "../../state/flowDocument";
 import { permittedText } from "./refusals";
 
+const NOTHING: ReadonlySet<string> = new Set<string>();
+
 /** DBR-FR-CZEU: the slot a drag would land in. */
 export interface BoardDrop {
   holder: BoardHolder;
-  /** The place in the stack, counted without the dragged item. */
+  /**
+   * The place in the stack, counted without the dragged item and without the
+   * items the host hides (DBR-FR-NIGZ).
+   */
   index: number;
   /** A collapsed group takes the item at the end of its stack. */
   collapsed: boolean;
@@ -56,8 +61,11 @@ export function boardTargetAt(ctx: {
   none: FlowRect | null;
   rectOf: (id: string) => FlowRect | null;
   hidden: (id: string) => boolean;
+  /** DBR-FR-SKSO: the items the host hides. They take no slot. */
+  omitted?: ReadonlySet<string>;
 }): BoardTarget {
   const { doc, item, lifted, point, orders, collapsed, none, rectOf, hidden } = ctx;
+  const omitted = ctx.omitted ?? NOTHING;
   let innermost: string | null = null;
   let depth = -1;
   for (const c of doc.items) {
@@ -82,7 +90,8 @@ export function boardTargetAt(ctx: {
       ? permittedText(item.kind, PERMITTED_PARENTS[item.kind])
       : null;
   if (holder === undefined) return { drop: null, hint };
-  const members = (orders.get(holder) ?? []).filter((id) => !lifted.has(id));
+  // DBR-FR-NIGZ: the index counts the members that show.
+  const members = (orders.get(holder) ?? []).filter((id) => !lifted.has(id) && !omitted.has(id));
   if (holder !== null && collapsed.has(holder)) {
     return { drop: { holder, index: members.length, collapsed: true }, hint };
   }
@@ -110,9 +119,27 @@ export interface BoardDropResult {
 }
 
 /**
+ * DBR-FR-NIGZ: the place in the full stack `members` of a slot at `index` of
+ * the members that show: before the visible member at the slot, or after the
+ * last member where no visible member follows.
+ */
+export function fullStackIndex(
+  members: readonly string[],
+  index: number,
+  omitted: ReadonlySet<string>,
+): number {
+  if (omitted.size === 0) return Math.min(index, members.length);
+  const visible = members.filter((id) => !omitted.has(id));
+  const at = visible[index];
+  return at === undefined ? members.length : members.indexOf(at);
+}
+
+/**
  * DBR-FR-KTJS: the result of a drop of `itemId` into `drop`. `after` is the
  * plan as it is once the item is in its new container. The stored layout
  * takes the slot position of each member of the stacks the drop changed.
+ * DBR-FR-NIGZ: the slot of `drop` counts the members that show, and each
+ * hidden member keeps its place in the stack order.
  */
 export function boardDropResult(
   doc: FlowDocument,
@@ -121,13 +148,14 @@ export function boardDropResult(
   orders: ReadonlyMap<BoardHolder, readonly string[]>,
   itemId: string,
   drop: BoardDrop,
+  omitted: ReadonlySet<string> = NOTHING,
 ): BoardDropResult {
   const item = findItem(doc, itemId)!;
   const from = boardHolderOf(doc, item);
   const moves = from !== drop.holder;
   const source = (orders.get(from) ?? []).filter((id) => id !== itemId);
   const target = moves ? (orders.get(drop.holder) ?? []).filter((id) => id !== itemId) : [...source];
-  target.splice(Math.min(drop.index, target.length), 0, itemId);
+  target.splice(fullStackIndex(target, drop.index, omitted), 0, itemId);
   const before = orders.get(drop.holder) ?? [];
   if (!moves && before.length === target.length && before.every((id, k) => id === target[k])) {
     return { parentId: item.parentId, moves, stored: null, touched: [] };

@@ -12,7 +12,7 @@ import {
   type StoredLayout,
 } from "../../state/flowDocument";
 import { item, plan } from "../../test/flowPlanFixtures";
-import { boardDropResult, boardTargetAt } from "./boardDrop";
+import { boardDropResult, boardTargetAt, fullStackIndex } from "./boardDrop";
 import { AUTO_PAN_EDGE, AUTO_PAN_MARGIN, AUTO_PAN_MAX, autoPanStep, limitPan } from "./useBoardDrag";
 
 const EMPTY: StoredLayout = { items: {} };
@@ -177,6 +177,89 @@ describe("the result of a drop (DBR-FR-KTJS)", () => {
     const r = boardDropResult(doc, doc, EMPTY, boardOrders(doc, EMPTY), "t4", { holder: null, index: 1, collapsed: false });
     expect(r.moves).toBe(true);
     expect(r.parentId).toBeUndefined();
+  });
+});
+
+/** m1 holds the cards a, h1, b, h2 in this order; m2 holds x; m3 holds the cards h3 and h4. */
+function hiddenBoard(): FlowDocument {
+  return plan([
+    item("m1", "milestone"),
+    item("m2", "milestone"),
+    item("m3", "milestone"),
+    item("a", "task", { parentId: "m1" }),
+    item("h1", "task", { parentId: "m1" }),
+    item("b", "task", { parentId: "m1" }),
+    item("h2", "task", { parentId: "m1" }),
+    item("x", "task", { parentId: "m2" }),
+    item("h3", "task", { parentId: "m3" }),
+    item("h4", "task", { parentId: "m3" }),
+  ]);
+}
+const HIDDEN = new Set(["h1", "h2", "h3", "h4"]);
+const moved = (doc: FlowDocument, id: string, parentId: string) =>
+  plan(doc.items.map((i) => (i.id === id ? { ...i, parentId } : i)));
+
+describe("a drop into a stack with hidden members (DBR-FR-NIGZ)", () => {
+  it("DBR-FR-NIGZ: a visible slot maps to the place before the visible member at the slot, or after the last member", () => {
+    const members = ["a", "h1", "b", "h2"];
+    expect(fullStackIndex(members, 0, HIDDEN)).toBe(0);
+    expect(fullStackIndex(members, 1, HIDDEN)).toBe(2);
+    expect(fullStackIndex(members, 2, HIDDEN)).toBe(4);
+    expect(fullStackIndex(["h1", "h2"], 0, HIDDEN)).toBe(2);
+    expect(fullStackIndex([], 0, HIDDEN)).toBe(0);
+    // With nothing hidden, the slot is the place.
+    expect(fullStackIndex(members, 3, new Set())).toBe(3);
+    expect(fullStackIndex(members, 9, new Set())).toBe(4);
+  });
+
+  it("DBR-FR-NIGZ: the slot under the pointer counts the members that show", () => {
+    const doc = hiddenBoard();
+    const lifted = subtreeOf(doc, "x");
+    const b = resolveBoardLayout(doc, EMPTY, { lifted, omitted: HIDDEN });
+    // A hidden member has a place of {0, 0} and no slot: it must not count.
+    const rectOf = (id: string): FlowRect | null =>
+      HIDDEN.has(id)
+        ? { x: 0, y: 0, width: 10, height: 10 }
+        : b.layout[id]?.size
+          ? { ...absolutePosition(doc, b.layout, id), ...b.layout[id].size! }
+          : null;
+    const bRect = rectOf("b")!;
+    const target = boardTargetAt({
+      doc,
+      item: findItem(doc, "x")!,
+      lifted,
+      point: { x: bRect.x + bRect.width / 2, y: bRect.y + bRect.height / 2 - 1 },
+      orders: boardOrders(doc, EMPTY),
+      collapsed: new Set(),
+      none: b.none,
+      rectOf,
+      hidden: () => false,
+      omitted: HIDDEN,
+    });
+    expect(target.drop).toEqual({ holder: "m1", index: 1, collapsed: false });
+  });
+
+  it("DBR-FR-NIGZ: a drop lands before the visible member at the slot, and each hidden member keeps its place", () => {
+    const doc = hiddenBoard();
+    const after = moved(doc, "x", "m1");
+    const orders = boardOrders(doc, EMPTY);
+    const r = boardDropResult(doc, after, EMPTY, orders, "x", { holder: "m1", index: 1, collapsed: false }, HIDDEN);
+    expect(boardOrders(after, r.stored!).get("m1")).toEqual(["a", "h1", "x", "b", "h2"]);
+    const end = boardDropResult(doc, after, EMPTY, orders, "x", { holder: "m1", index: 2, collapsed: false }, HIDDEN);
+    expect(boardOrders(after, end.stored!).get("m1")).toEqual(["a", "h1", "b", "h2", "x"]);
+  });
+
+  it("DBR-FR-NIGZ: a reorder inside a stack moves the dragged item alone", () => {
+    const doc = hiddenBoard();
+    const r = boardDropResult(doc, doc, EMPTY, boardOrders(doc, EMPTY), "b", { holder: "m1", index: 0, collapsed: false }, HIDDEN);
+    expect(boardOrders(doc, r.stored!).get("m1")).toEqual(["b", "a", "h1", "h2"]);
+  });
+
+  it("DBR-FR-NIGZ: a drop into a stack whose members are all hidden lands after the last member", () => {
+    const doc = hiddenBoard();
+    const after = moved(doc, "x", "m3");
+    const r = boardDropResult(doc, after, EMPTY, boardOrders(doc, EMPTY), "x", { holder: "m3", index: 0, collapsed: false }, HIDDEN);
+    expect(boardOrders(after, r.stored!).get("m3")).toEqual(["h3", "h4", "x"]);
   });
 });
 

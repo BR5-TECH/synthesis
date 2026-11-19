@@ -502,16 +502,22 @@ fn a_colliding_name_is_kept_by_whichever_copy_matched_better() {
         "SST-FR-12: the survivor follows the score, not the path",
     );
 
-    // And once more for the copy that sorts last, so no single position can
-    // account for all three outcomes.
-    // The query restates that copy's own description, so its margin holds
-    // whatever else the index holds: the built-in skills' descriptors join the
-    // index too (DSL-FR-ZUFC) and move the statistics the scores rest on.
-    let third =
-        call(&fixture, "review a database migration for destructive operations", None).unwrap();
+    // And once more with the words of the copy that sorts last. The scores
+    // rest on the statistics of the index shard that holds each copy, and the
+    // built-in skills join the index too (DSL-FR-ZUFC), so which copy ranks
+    // first is not fixed here. What is checked is the rule itself: of the
+    // copies that match, the one the delegated call ranks first is kept.
+    let query = "review a database migration for destructive operations";
+    assert!(candidates(&fixture, query) >= 2, "the dedup rule has a choice to make");
+    let third = call(&fixture, query, None).unwrap();
     let reviews: Vec<&SkillMatch> = third.skills.iter().filter(|s| s.name == "review").collect();
     assert_eq!(reviews.len(), 1);
-    assert_eq!(reviews[0].ecosystem, Ecosystem::Opencode);
+    let indexer = fixture.app.state::<crate::bm25_index::Bm25Indexer>();
+    let best = crate::skills::test_support::searched_project(&indexer, query, 25)
+        .into_iter()
+        .find(|r| r.skill.name == "review")
+        .expect("a review copy matches");
+    assert_eq!(reviews[0].path, best.skill.path, "SST-FR-12: the higher-scoring copy is kept");
 }
 
 #[test]

@@ -232,6 +232,15 @@ export interface DeliveryLayout {
   items: Record<string, DeliveryLayoutEntry>;
 }
 
+/** DMS-FR-TXMH: a board status (per DBR-FR-QZPA). */
+export type DeliveryBoardStatus = "backlog" | "ready" | "in progress" | "in review" | "done";
+
+/** DMS contract surface: the statuses a scope's board hides, and Blocked only. */
+export interface DeliveryView {
+  hidden: DeliveryBoardStatus[];
+  blockedOnly: boolean;
+}
+
 /** DMS-FR-DMWD: the layout scope of a Flow file or of a GitHub plan. */
 export const flowLayoutScope = (flowId: string) => `flow:${flowId}`;
 export const githubLayoutScope = (projectNodeId: string) => `github:${projectNodeId}`;

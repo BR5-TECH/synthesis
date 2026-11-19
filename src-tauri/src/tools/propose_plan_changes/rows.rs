@@ -68,13 +68,51 @@ fn bad_parent_row(at: usize) -> PlanRefusal {
     )
 }
 
-fn parent_row_on_modify(at: usize) -> PlanRefusal {
-    invalid(
-        "bad_parent_row",
-        format!(
-            "`parent_row` of row {at} is for a `create_issue` row only. A `modify_issue` row sets `parent_issue`."
-        ),
-    )
+/// The code of the refusal of PPT-FR-ELJI, which PPT-FR-DGAA logs with a count.
+pub const ROWS_REFUSED: &str = "rows_refused";
+
+/// The rows that one call refused: the place of each, counted from 1, and its
+/// refusal.
+pub type Refused = Vec<(usize, PlanRefusal)>;
+
+/// PPT-FR-ELJI, PPT-FR-KOCG: the refusal of a call whose rows break rules.
+/// One refused row keeps its own refusal. Several refused rows make one
+/// **rows refused** refusal, with one line for each, in the order of their
+/// places. `line` writes the line of one refused row.
+pub fn refusal_of(
+    mut refused: Refused,
+    line: impl Fn(usize, &PlanRefusal) -> String,
+) -> Result<(), PlanRefusal> {
+    refused.sort_by_key(|(at, _)| *at);
+    match refused.len() {
+        0 => Ok(()),
+        1 => Err(refused.remove(0).1),
+        count => {
+            let mut message = format!(
+                "{count} rows were refused. Correct each one and send the call again. Nothing was proposed."
+            );
+            for (at, refusal) in &refused {
+                message.push('\n');
+                message.push_str(&line(*at, refusal));
+            }
+            Err(invalid(ROWS_REFUSED, message))
+        }
+    }
+}
+
+/// PPT-FR-ELJI: the line of one refused row of `rows`.
+pub fn row_line(at: usize, refusal: &PlanRefusal) -> String {
+    format!("Row {at}: {}", refusal.message)
+}
+
+/// PPT-FR-DGAA: the count of refused rows that a refusal carries, for the log
+/// record. It is 1 for the refusal of one row.
+pub fn refused_count(refusal: &PlanRefusal) -> usize {
+    if refusal.code == ROWS_REFUSED {
+        refusal.message.lines().count().saturating_sub(1)
+    } else {
+        1
+    }
 }
 
 /// What the plan must be asked, from the rows (PPT-NFR: at most the labels, the
@@ -112,26 +150,33 @@ fn has_stray_field(op: &str, row: &PlanRowArg) -> bool {
 }
 
 /// PPT-FR-PMQL, PPT-FR-OVKT to PPT-FR-QCTM: the checks that the arguments
-/// alone decide, row by row in order.
-pub fn check_shape(rows: &[PlanRowArg]) -> Result<Needs, PlanRefusal> {
+/// alone decide. A rule of the call as a whole refuses at once (PPT-FR-MSQT).
+/// The rules of one row are checked for every row, and the rows that break
+/// one come back with their refusals (PPT-FR-ELJI).
+pub fn check_shape(rows: &[PlanRowArg]) -> Result<(Needs, Refused), PlanRefusal> {
     if rows.is_empty() || rows.len() > MAX_ROWS {
         return Err(bad_rows());
     }
-    let mut needs = Needs::default();
     let mut keys = HashSet::new();
-    let mut creates: HashSet<&str> = HashSet::new();
-    for (index, row) in rows.iter().enumerate() {
-        let at = index + 1;
+    for row in rows {
         let key = row.key.trim();
         if key.is_empty() || !keys.insert(key) {
             return Err(bad_rows());
         }
-        check_row(row, at, &creates, &mut needs)?;
+    }
+    let mut needs = Needs::default();
+    let mut refused = Refused::new();
+    let mut creates: HashSet<&str> = HashSet::new();
+    for (index, row) in rows.iter().enumerate() {
+        let at = index + 1;
+        if let Err(refusal) = check_row(row, at, &creates, &mut needs) {
+            refused.push((at, refusal));
+        }
         if row.op == OP_CREATE {
-            creates.insert(key);
+            creates.insert(row.key.trim());
         }
     }
-    Ok(needs)
+    Ok((needs, refused))
 }
 
 /// PPT-FR-OVKT to PPT-FR-QCTM: the checks of one row that the arguments alone
@@ -176,10 +221,8 @@ fn check_issue_row(
     if row.parent_issue.is_some() && row.parent_row.is_some() {
         return Err(bad_rows());
     }
+    // PPT-FR-DPQP: on a new issue and on a changed issue alike.
     if let Some(parent) = &row.parent_row {
-        if op != OP_CREATE {
-            return Err(parent_row_on_modify(at));
-        }
         if !creates.contains(parent.trim()) {
             return Err(bad_parent_row(at));
         }
@@ -295,9 +338,27 @@ fn waiting(key: &str, fields: RowFields) -> MapPlanRow {
     }
 }
 
-/// PPT-FR-UZEK: the rows of the proposal, every one `waiting`.
-pub fn build_rows(rows: &[PlanRowArg], facts: &PlanFacts) -> Result<Vec<MapPlanRow>, PlanRefusal> {
-    rows.iter().enumerate().map(|(index, row)| build_row(row, index + 1, facts)).collect()
+/// PPT-FR-UZEK: the rows of the proposal, every one `waiting`. The rows at the
+/// places of `refused` are not built again. Each row that the facts refuse is
+/// added to `refused` (PPT-FR-ELJI).
+pub fn build_rows(
+    rows: &[PlanRowArg],
+    facts: &PlanFacts,
+    refused: &mut Refused,
+) -> Vec<MapPlanRow> {
+    let skipped: HashSet<usize> = refused.iter().map(|(at, _)| *at).collect();
+    let mut built = Vec::with_capacity(rows.len());
+    for (index, row) in rows.iter().enumerate() {
+        let at = index + 1;
+        if skipped.contains(&at) {
+            continue;
+        }
+        match build_row(row, at, facts) {
+            Ok(row) => built.push(row),
+            Err(refusal) => refused.push((at, refusal)),
+        }
+    }
+    built
 }
 
 /// PPT-FR-UZEK: one `waiting` row, checked against the facts of the plan. `at`

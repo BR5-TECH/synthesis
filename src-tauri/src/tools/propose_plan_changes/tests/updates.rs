@@ -46,7 +46,6 @@ fn an_update_changes_the_open_proposal_in_place() {
     f.rows(json!([create("a", "First"), create("b", "Second"), draft("c")])).unwrap();
     let proposal = f.proposals().remove(0);
     let comments = f.plan.comments();
-    f.proposed.store(false, Ordering::SeqCst);
     f.plan.h.fake.lock().calls.clear();
     let out = f
         .updates(json!([
@@ -56,7 +55,7 @@ fn an_update_changes_the_open_proposal_in_place() {
         ]))
         .unwrap();
     assert_eq!(out, json!({ "updated": true, "changed": 1, "added": 1, "withdrawn": 1 }));
-    assert!(f.proposed.load(Ordering::SeqCst), "the turn ends");
+    assert!(f.carded(), "the update makes the proposal the card of its turn");
     assert_eq!(f.proposals().len(), 1);
     assert_eq!(f.proposals()[0].id, proposal.id);
     assert_eq!(f.keys(), ["a", "c", "d"]);
@@ -258,13 +257,12 @@ fn an_update_keeps_at_most_twenty_rows() {
 fn an_update_call_is_all_or_nothing() {
     let f = Fixture::new();
     f.rows(json!([draft("a"), draft("b")])).unwrap();
-    f.proposed.store(false, Ordering::SeqCst);
     let before = f.proposals();
     let comments = f.plan.comments();
     refused(f.updates(json!([withdraw("a"), withdraw("z")])));
     assert_eq!(f.proposals(), before);
     assert_eq!(f.plan.comments(), comments);
-    assert!(!f.proposed.load(Ordering::SeqCst));
+    assert!(!f.carded());
 }
 
 // PPT-FR-NXPZ, PPT-FR-BSSO: an update keeps the rules of the rationale and of

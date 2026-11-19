@@ -1,5 +1,5 @@
-//! MPR-FR-TMTI to MPR-FR-AESZ: the update of the open proposal of a Map
-//! discussion, the in-process half that the tool `propose_plan_changes` calls
+//! MPR-FR-TMTI to MPR-FR-AESZ: the update of the open proposal of a
+//! discussion (MPR-FR-KDTQ), the in-process half that the tool `propose_plan_changes` calls
 //! with `updates`. An update changes, adds, and withdraws rows of the proposal
 //! that holds a `waiting` row, and appends one comment, as one step. A later
 //! call of a turn updates with no comment (PPT-FR-IRFE).
@@ -7,13 +7,14 @@
 use std::collections::HashSet;
 
 use super::errors::{
-    announce, error, log_operation, store_unavailable, ERR_DISCUSSION_NOT_FOUND, ERR_KEY_TAKEN,
-    ERR_KIND_CHANGED, ERR_NO_OPEN_PROPOSAL, ERR_NO_ROW_LEFT, ERR_PARENT_WITHDRAWN, ERR_ROW_DECIDED,
+    announce, error, log_operation, store_unavailable, ERR_KEY_TAKEN, ERR_KIND_CHANGED,
+    ERR_NO_OPEN_PROPOSAL, ERR_NO_ROW_LEFT, ERR_PARENT_WITHDRAWN, ERR_ROW_DECIDED,
     ERR_ROW_NOT_FOUND,
 };
 use super::model::{
     MapPlanError, MapPlanProposal, MapPlanRow, ProposalComment, RowFields, RowState,
 };
+use super::owner::ProposalDiscussion;
 use super::recording::open_store;
 use super::{rules, store};
 use crate::comments::{ProposalUpdateCounts, Stamp, ERR_DISCUSSION_RESOLVED};
@@ -57,17 +58,20 @@ pub fn read_open_proposal<R: tauri::Runtime>(
 
 /// MPR-FR-TMTI, MPR-FR-EAAJ, MPR-FR-AESZ: apply `updates` to the open proposal
 /// of the discussion and append the comment of the update, where it carries
-/// one, as one step.
+/// one, as one step. `discussion` is a Map thread id or the origin of a turn
+/// of any discussion (MPR-FR-KDTQ).
 pub fn update_map_plan_proposal<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    discussion_id: &str,
+    discussion: impl Into<ProposalDiscussion>,
     updates: Vec<MapPlanUpdate>,
     comment: Option<ProposalComment>,
 ) -> Result<MapPlanProposal, MapPlanError> {
+    let discussion = discussion.into();
+    let discussion_id = discussion.id.as_str();
     let result = open_store(app).and_then(|store| {
         // MPR-FR-AESZ: an update and a decision never run at the same time.
         let _turn = super::deciding::lock_decisions();
-        update_in(app, &store, discussion_id, updates, comment)
+        update_in(app, &store, &discussion, updates, comment)
     });
     match &result {
         Ok((proposal, discussion)) => {
@@ -88,14 +92,12 @@ pub fn update_map_plan_proposal<R: tauri::Runtime>(
 fn update_in<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     store: &RootFs,
-    discussion_id: &str,
+    discussion: &ProposalDiscussion,
     updates: Vec<MapPlanUpdate>,
     comment: Option<ProposalComment>,
 ) -> Result<(MapPlanProposal, Option<crate::comments::Discussion>), MapPlanError> {
-    let thread = crate::comments::fold_map_discussions(store)
-        .into_iter()
-        .find(|d| d.id == discussion_id)
-        .ok_or_else(|| error(ERR_DISCUSSION_NOT_FOUND, "The Map discussion does not exist."))?;
+    let owner = discussion.owner.as_ref();
+    let thread = super::owner::find_thread(store, owner, &discussion.id)?;
     // MPR-FR-NSEP.
     let before = open_proposal_of(store::read_for(store, &thread.id))
         .ok_or_else(|| error(ERR_NO_OPEN_PROPOSAL, "The discussion has no open proposal."))?;
@@ -110,6 +112,7 @@ fn update_in<R: tauri::Runtime>(
     let now = crate::notes::now_rfc3339();
     let appended = crate::comments::append_map_proposal_comment(
         store,
+        super::owner::log_of(owner),
         &thread.id,
         crate::notes::new_note_id(),
         comment.body,

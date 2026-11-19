@@ -38,7 +38,6 @@ pub const SEARCH_DESCRIPTION: &str = "Search the issues of the delivery plan by 
 pub const READ_DESCRIPTION: &str = "Read one issue of the delivery plan in full by its number: body, labels, milestone, parent, sub-issues, Status, and relations. It reads no issue that is not part of the plan.";
 
 /// PIR contract surface, "Refusals".
-pub const NOT_A_MAP: &str = "This conversation is not a Map discussion, so it has no plan issues. Asking again will not succeed.";
 pub const PLAN_UNAVAILABLE: &str = "The project has no GitHub Project selected for its plan, or its configuration is not valid. Tell the author; asking again will not succeed.";
 pub const BLANK_QUERY: &str = "Give words to search for in `query`.";
 pub const COULD_NOT_READ: &str = "The plan could not be read.";
@@ -58,7 +57,7 @@ const SEARCH_MAX: usize = 50;
 /// PIR-FR-GYHA: the body of an issue is cut at this many characters.
 const BODY_MAX_CHARS: usize = 20_000;
 
-const WORDS: GateWords = GateWords { not_a_map: NOT_A_MAP, plan_unavailable: PLAN_UNAVAILABLE };
+const WORDS: GateWords = GateWords { plan_unavailable: PLAN_UNAVAILABLE };
 
 fn read_refusal(error: &DeliveryError) -> PlanRefusal {
     if error.code == crate::delivery::ERR_NO_PROJECT_OPEN {
@@ -370,10 +369,10 @@ where
 {
     async fn run(
         app: tauri::AppHandle<R>,
-        origin: ConversationOrigin,
+        _origin: ConversationOrigin,
         args: ListPlanIssuesArgs,
     ) -> Result<ListPlanIssuesOutput, PlanRefusal> {
-        gate(&app, &origin, &WORDS)?;
+        gate(&app, &WORDS)?;
         let limit = size_of(args.limit, LIST_DEFAULT, LIST_MAX);
         let offset = args.offset.map_or(0, |o| usize::try_from(o).unwrap_or(0));
         let filter = PlanIssueFilter {
@@ -420,10 +419,10 @@ where
 {
     async fn run(
         app: tauri::AppHandle<R>,
-        origin: ConversationOrigin,
+        _origin: ConversationOrigin,
         args: SearchPlanIssuesArgs,
     ) -> Result<SearchPlanIssuesOutput, PlanRefusal> {
-        gate(&app, &origin, &WORDS)?;
+        gate(&app, &WORDS)?;
         // PIR-FR-APBD.
         let query = args.query.trim().to_string();
         if query.is_empty() {
@@ -451,10 +450,10 @@ where
 {
     async fn run(
         app: tauri::AppHandle<R>,
-        origin: ConversationOrigin,
+        _origin: ConversationOrigin,
         args: ReadPlanIssueArgs,
     ) -> Result<ReadPlanIssueOutput, PlanRefusal> {
-        gate(&app, &origin, &WORDS)?;
+        gate(&app, &WORDS)?;
         let not_a_plan_issue = || {
             PlanRefusal::new(
                 ToolErrorKind::NotFound,

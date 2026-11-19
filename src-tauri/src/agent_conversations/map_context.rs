@@ -159,16 +159,48 @@ pub(super) fn map_state_text(
         ),
         Focus::WholeMap => "Focus: the whole Map.".to_string(),
     };
-    body.push_str("\n\nPlan proposals of this discussion:\n");
-    let rows = proposal_rows_summary(roots, &discussion.id);
+    body.push_str("\n\n");
+    body.push_str(&proposal_rows_text(
+        PROPOSALS_HEADING,
+        &proposal_rows_summary(roots, &discussion.id),
+    ));
+    body
+}
+
+/// The heading of the rows of the plan proposals in `discussion_state`.
+const PROPOSALS_HEADING: &str = "Plan proposals of this discussion:";
+
+/// MPR-FR-NXDX: the rows of the plan proposals under their heading, one line
+/// each, or `none`. Pure.
+fn proposal_rows_text(heading: &str, rows: &[String]) -> String {
+    let mut body = format!("{heading}\n");
     if rows.is_empty() {
         body.push_str("none\n");
-    } else {
-        for row in rows {
-            body.push_str(&format!("- {row}\n"));
-        }
+    }
+    for row in rows {
+        body.push_str(&format!("- {row}\n"));
     }
     body
+}
+
+/// MPR-FR-VYPE: the part of `discussion_state` of a turn of a discussion that
+/// is not a Map thread: the rows of the plan proposals of the discussion, or
+/// `None` where the discussion holds no proposal.
+///
+/// Each proposal posts a comment with a `map_plan_proposal` attachment in its
+/// discussion, so a discussion with no such comment holds no proposal, and the
+/// proposals folder is not read for it.
+pub(super) fn proposal_state_text(roots: Roots<'_>, discussion: &Discussion) -> Option<String> {
+    let announced = discussion.comments.iter().any(|c| {
+        c.attachments
+            .iter()
+            .any(|a| matches!(a, crate::comments::Attachment::MapPlanProposal { .. }))
+    });
+    if !announced {
+        return None;
+    }
+    let rows = proposal_rows_summary(roots, &discussion.id);
+    (!rows.is_empty()).then(|| proposal_rows_text(PROPOSALS_HEADING, &rows))
 }
 
 /// MPR-FR-NXDX: the short summary of a plan, as text. Pure.

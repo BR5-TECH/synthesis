@@ -12,6 +12,7 @@ import type { EditMode } from "../../state/editHistory";
 import { Icon } from "../icons";
 import { Editor } from "../Editor";
 import { DraftVersionReading } from "../DraftVersionReading";
+import { MapPlanReviewLayer } from "../MapPlanProposal";
 import { sourceLabelOf, standingOf } from "./labels";
 
 type EditorProps = ComponentProps<typeof Editor>;
@@ -267,6 +268,9 @@ export function DraftDocumentColumn({
           <div className="draft-editor__empty" aria-busy="true" />
         )}
       </div>
+      {/* MPV-FR-ZQRE: the plan review sheet shows over the draft pane, beside
+          the discussion column. */}
+      <MapPlanReviewLayer placement="tab" />
     </div>
   );
 }

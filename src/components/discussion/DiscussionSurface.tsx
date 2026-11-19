@@ -76,6 +76,7 @@ import { UnreadDivider, UnreadIndicator } from "./UnreadMarks";
 import { useDiscussionFollow } from "./useDiscussionFollow";
 import { useThreadMenu } from "./useThreadMenu";
 import { useParticipantLabel } from "../../state/projectIdentity";
+import { useInPlaceArrivals } from "../MapPlanProposal/inPlaceArrivals";
 
 export interface DiscussionSurfaceProps {
   discussion: Discussion;
@@ -160,6 +161,12 @@ export interface DiscussionSurfaceProps {
   composerAccessory?: React.ReactNode;
   /** SMP-FR-DUUU: attachments each comment of the composer carries beside its strip. */
   composerAttachments?: readonly AttachmentInput[];
+  /**
+   * MPV-FR-ZQRE: what shows over the message list and not over the composer,
+   * as the plan review sheet of a conversation tab. Only the `embedded`
+   * variant draws it.
+   */
+  messagesOverlay?: React.ReactNode;
 }
 
 export function DiscussionSurface(props: DiscussionSurfaceProps) {
@@ -223,6 +230,8 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
 
   // CVP-FR-02 / CVP-FR-05: one surface per discussion.
   const active = useSurfaceSlot(thread.id, owner, focusInto);
+  // MPV-FR-UWQL: outside the Map tab, a plan proposal that arrives opens the sheet of the tab.
+  useInPlaceArrivals(active ? thread : undefined);
 
   useEffect(() => {
     if (!active) return;
@@ -371,6 +380,17 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
 
   const composerShown = !questionSet && composerOpen;
   const operationError = props.error ?? session.error;
+  // MPV-FR-ZQRE: the box that holds the message list and what shows over it.
+  const over = embedded ? props.messagesOverlay : undefined;
+  const wrapMessages = (messages: React.ReactNode) =>
+    over ? (
+      <div className="comment-card__over" data-testid="discussion-messages-box">
+        {messages}
+        {over}
+      </div>
+    ) : (
+      messages
+    );
 
   return (
     <div
@@ -450,69 +470,71 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
       {/* CVP-FR-TWRL: the scrolling half. The composer below is the half that
           stays put. A log region, so a message that arrives is announced
           politely and never takes focus (CVP-FR-43). */}
-      <div
-        ref={follow.ref}
-        className="comment-card__messages"
-        role="log"
-        aria-live="polite"
-        aria-relevant="additions"
-        aria-label="Messages"
-        onScroll={follow.onScroll}
-        data-testid="discussion-messages"
-      >
-        {stream ? (
-          <StreamMessages
-            comments={thread.comments}
-            pairing={pairing}
-            isOwn={(comment) => isOwnComment(comment.author, props.identity)}
-            roster={roster}
-            threadId={thread.id}
-            draftId={discussionDraftId(thread)}
-            visibleFrom={props.visibleFrom ?? 0}
-            beforeComment={beforeComment}
-            onQuote={quoteOffered ? quoteFrom : undefined}
-            authorOf={authorOf}
-            threadActions={messageActions}
-            pendingTurns={pendingTurns}
-            toolCallsByRow={toolCallsByRow}
-            onCancelTurn={onCancelTurn}
-            liveBubble={liveBubble}
-            footer={
-              <>
-                {dividerAtEnd}
-                {turnOutcomes}
-                {/* CTA-FR-ZBIB: the tool lists of the turns that ended. */}
-                <ActivityRows rows={session.activityRows} variant="stream" />
-              </>
-            }
-          />
-        ) : (
-          <DiscussionMessages
-            discussion={thread}
-            roster={roster}
-            identity={props.identity}
-            embedded={embedded}
-            pairing={pairing}
-            pendingTurns={pendingTurns}
-            toolCallsByRow={toolCallsByRow}
-            onCancelTurn={onCancelTurn}
-            onQuote={quoteOffered ? quoteFrom : undefined}
-            authorOf={authorOf}
-            threadActions={messageActions}
-            beforeComment={beforeComment}
-            visibleFrom={props.visibleFrom ?? 0}
-            afterComments={dividerAtEnd}
-            liveBubble={liveBubble}
-            footer={
-              <>
-                {turnOutcomes}
-                {/* CTA-FR-ZBIB: the tool lists of the turns that ended. */}
-                <ActivityRows rows={session.activityRows} />
-              </>
-            }
-          />
-        )}
-      </div>
+      {wrapMessages(
+        <div
+          ref={follow.ref}
+          className="comment-card__messages"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+          aria-label="Messages"
+          onScroll={follow.onScroll}
+          data-testid="discussion-messages"
+        >
+          {stream ? (
+            <StreamMessages
+              comments={thread.comments}
+              pairing={pairing}
+              isOwn={(comment) => isOwnComment(comment.author, props.identity)}
+              roster={roster}
+              threadId={thread.id}
+              draftId={discussionDraftId(thread)}
+              visibleFrom={props.visibleFrom ?? 0}
+              beforeComment={beforeComment}
+              onQuote={quoteOffered ? quoteFrom : undefined}
+              authorOf={authorOf}
+              threadActions={messageActions}
+              pendingTurns={pendingTurns}
+              toolCallsByRow={toolCallsByRow}
+              onCancelTurn={onCancelTurn}
+              liveBubble={liveBubble}
+              footer={
+                <>
+                  {dividerAtEnd}
+                  {turnOutcomes}
+                  {/* CTA-FR-ZBIB: the tool lists of the turns that ended. */}
+                  <ActivityRows rows={session.activityRows} variant="stream" />
+                </>
+              }
+            />
+          ) : (
+            <DiscussionMessages
+              discussion={thread}
+              roster={roster}
+              identity={props.identity}
+              embedded={embedded}
+              pairing={pairing}
+              pendingTurns={pendingTurns}
+              toolCallsByRow={toolCallsByRow}
+              onCancelTurn={onCancelTurn}
+              onQuote={quoteOffered ? quoteFrom : undefined}
+              authorOf={authorOf}
+              threadActions={messageActions}
+              beforeComment={beforeComment}
+              visibleFrom={props.visibleFrom ?? 0}
+              afterComments={dividerAtEnd}
+              liveBubble={liveBubble}
+              footer={
+                <>
+                  {turnOutcomes}
+                  {/* CTA-FR-ZBIB: the tool lists of the turns that ended. */}
+                  <ActivityRows rows={session.activityRows} />
+                </>
+              }
+            />
+          )}
+        </div>,
+      )}
 
       {/* CVP-FR-TWRL: the way to the first unread message. Outside the scroller,
           so its appearance moves no message. */}

@@ -389,33 +389,44 @@ fn plan_tool_names(f: &PlanFixture, origin: &ConversationOrigin) -> Vec<String> 
     names
 }
 
-// MPR-FR-ZCAM, CVL-FR-LCSN, PIR-FR-HRXN, PPT-FR-DDSX: the plan tools are attached
-// to a turn of a Map discussion only while the delivery source is a GitHub
-// Project with a valid configuration, checked at the start of the turn. Other
-// discussions never get them.
+// MPR-FR-ZCAM, CVL-FR-RWQB, CVL-FR-LCSN, PIR-FR-HRXN, PPT-FR-DDSX: while the
+// delivery source is a GitHub Project with a valid configuration, checked at
+// the start of the turn, the four plan tools are attached to a turn of every
+// discussion: a Map thread, a file, a draft, a note, and a change, with or
+// without a fragment target. While it is not valid, no turn gets them.
 #[test]
-fn the_plan_tools_need_a_map_turn_and_a_valid_github_source() {
+fn the_plan_tools_need_a_valid_github_source_and_reach_every_discussion() {
     let f = PlanFixture::new();
     let mut expected: Vec<String> = PLAN_TOOLS.map(str::to_string).to_vec();
     expected.sort();
-    assert_eq!(plan_tool_names(&f, &f.origin()), expected);
-
-    for other in [
+    let others = [
         ConversationOrigin::stub_artifact("t", "spec.md", false),
+        ConversationOrigin::stub_artifact("t", "spec.md", true),
         ConversationOrigin::stub_draft("t", "d", false),
+        ConversationOrigin::stub_draft("t", "d", true),
         ConversationOrigin::stub_note("t", "n"),
-    ] {
-        assert!(plan_tool_names(&f, &other).is_empty(), "{:?}", other.kind());
+        ConversationOrigin {
+            discussion_id: "t".into(),
+            target: crate::comments::DiscussionTarget::Change {
+                stream_id: "s".into(),
+                change: "c".into(),
+            },
+            fragment_target: None,
+        },
+    ];
+    assert_eq!(plan_tool_names(&f, &f.origin()), expected);
+    for other in &others {
+        assert_eq!(plan_tool_names(&f, other), expected, "{:?}", other.kind());
     }
-    assert!(plan_tools_wanted(&f.origin(), true));
-    assert!(!plan_tools_wanted(&f.origin(), false));
-    assert!(!plan_tools_wanted(&ConversationOrigin::stub_note("t", "n"), true));
 
     // A configuration that is not valid.
     f.h.fake.lock().status_field = None;
     let _ = crate::delivery::github::load_plan_impl(&f.app(), true);
     assert!(!crate::agent_conversations::tool_wiring::map_plan_tools_enabled(&f.app()));
     assert!(plan_tool_names(&f, &f.origin()).is_empty());
+    for other in &others {
+        assert!(plan_tool_names(&f, other).is_empty(), "{:?}", other.kind());
+    }
 }
 
 // MPR-FR-ZCAM: a source that is a Flow file, and a project with no GitHub

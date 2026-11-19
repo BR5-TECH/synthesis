@@ -127,6 +127,10 @@
   background: var(--bg-elevated); border: 1px solid var(--border-2); border-radius: var(--r-md); box-shadow: var(--shadow-4);
 }
 .pp-sheet[hidden] { display: none; }
+/* MPV-FR-ZQRE: in a tab other than the Map tab, the sheet covers the content of
+   the tab and stays below its chrome: the floating composer (4), the action
+   control and the discussions control (5), and the floating discussion panel (6). */
+.pp-sheet[data-placement="tab"] { z-index: 3; }
 .pp-sheet__head { display: flex; align-items: center; gap: var(--sp-2); min-height: 40px; padding: 0 var(--sp-3); background: var(--bg-panel); border-bottom: 1px solid var(--border-1); }
 .pp-sheet__title { font-size: var(--fs-ui-md); font-weight: 600; color: var(--fg-1); white-space: nowrap; }
 .pp-sheet__meta { font: 400 var(--fs-src-xs)/1.35 var(--font-mono); color: var(--fg-3); white-space: nowrap; }
@@ -187,3 +191,13 @@
 }
 .pp-detail__scroll > *, .pp-detail__foot > * { box-sizing: border-box; }
 .pp-code:not([data-language=""]) .pp-code__pre { padding-top: 20px; }
+/* MPV-FR-ZQRE: a sheet in a narrow pane, such as the draft or the file beside
+   the Discussion column, puts the list of rows above the detail, so the detail
+   and its Accept and Reject keep the full width of the sheet. */
+.pp-sheet { container: pp-sheet / inline-size; }
+@container pp-sheet (max-width: 640px) {
+  .pp-sheet__body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(72px, 30%) minmax(0, 1fr); }
+  .pp-list { border-right: 0; border-bottom: 1px solid var(--border-1); }
+  .pp-detail__id, .pp-act, .pp-bar { flex-wrap: wrap; }
+  .pp-sheet__sum { display: none; }
+}

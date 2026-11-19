@@ -14,6 +14,7 @@ use crate::tools::tests::plan_fixture::{agent, human, PlanFixture};
 mod batch;
 mod cache_reads;
 mod chaining;
+mod other_discussions;
 mod updates;
 
 type Tool = ProposePlanChangesTool<Mock>;
@@ -239,21 +240,11 @@ fn the_tool_is_bound_to_its_turn() {
     assert_eq!(thread.comments.last().unwrap().author, agent());
 }
 
-// PPT-FR-DDSX: a turn that is not a Map turn, a plan that is not available, and
-// no open project each have their refusal. Nothing is recorded.
+// PPT-FR-DDSX: a plan that is not available and no open project each have
+// their refusal. Nothing is recorded.
 #[test]
-fn only_a_map_turn_with_a_plan_can_call_the_tool() {
+fn only_a_turn_with_a_plan_can_call_the_tool() {
     let f = Fixture::new();
-    let elsewhere =
-        crate::agent_conversations::ConversationOrigin::stub_artifact("t", "spec.md", false);
-    let refusal = refused(run(
-        &f.tool_for(elsewhere),
-        json!({ "rationale": RATIONALE, "rows": [draft("a")] }),
-    ));
-    assert_eq!(refusal.kind, ToolErrorKind::PermissionDenied);
-    assert!(!refusal.retryable);
-    assert_eq!(refusal.message, NOT_A_MAP);
-
     f.plan.h.select_project(None);
     let refusal = refused(f.rows(json!([draft("a")])));
     assert_eq!((refusal.kind, refusal.retryable), (ToolErrorKind::NotFound, false));

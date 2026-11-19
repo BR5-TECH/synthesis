@@ -1,8 +1,10 @@
 /**
  * What the Map tab gives the review of a plan proposal beside the proposal
  * itself (`MPV-map-proposal-review.md`): the shared review state (MPV-FR-CZDO)
- * and the ways into the canvas and the composer. A summary row outside the Map
- * tab has no host. It then reads a store of its own and offers no review.
+ * and the ways into the canvas and the composer. Another tab that shows a
+ * discussion gives an in-place host (`InPlaceScope.tsx`, MPV-FR-HGLN). A
+ * summary row outside every tab has no host. It then reads a store of its own
+ * and offers no review.
  */
 import { createContext, useContext } from "react";
 
@@ -31,6 +33,12 @@ export interface MapPlanHost {
 export interface MapPlanContextValue {
   store: MapPlanReviewStore;
   host: MapPlanHost | null;
+  /**
+   * MPV-FR-HGLN: the review of a tab other than the Map tab. Its discussion
+   * surfaces open the sheet when a proposal arrives (MPV-FR-UWQL), and its
+   * sheet shows over the content of the tab (MPV-FR-ZQRE).
+   */
+  inPlace?: boolean;
 }
 
 export const MapPlanContext = createContext<MapPlanContextValue | null>(null);

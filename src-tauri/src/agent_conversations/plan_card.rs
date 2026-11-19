@@ -1,4 +1,4 @@
-//! How a Map turn that posted a plan card ends (`CVL-conversation-loop.md`
+//! How a turn that posted a plan card ends (`CVL-conversation-loop.md`
 //! CVL-FR-KYBE to CVL-FR-SUIZ).
 //!
 //! `propose_plan_changes` does not end the turn. Its first successful call
@@ -118,7 +118,7 @@ fn log_closing_failed<R: tauri::Runtime>(
     );
 }
 
-/// MPR-FR-BCKW: whether a turn of the agent `nickname` runs in the Map
+/// MPR-FR-BCKW: whether a turn of the agent `nickname` runs in the
 /// discussion `discussion_id`. A turn that awaits a reply does not run.
 pub(crate) fn agent_turn_runs<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,

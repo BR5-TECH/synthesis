@@ -282,6 +282,7 @@ fn changed_and_added_rows_come_in_waiting() {
     let proposal = MapPlanProposal {
         id: "p".into(),
         discussion_id: "d".into(),
+        owner: None,
         comment_id: "c".into(),
         created_at: AT.into(),
         reprepare_requested_at: None,

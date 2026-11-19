@@ -877,10 +877,9 @@ pub(super) fn run_turn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, plan: TurnP
             }),
         },
     );
-    // MPR-FR-BCKW: a follow-up that this turn deferred is checked again now
-    // that the turn does not run.
-    if plan.origin.is_map() {
-        crate::map_plan::follow_up::request_deferred(app, plan.origin.discussion_id());
-    }
+    // MPR-FR-BCKW, MPR-FR-KDTQ: a follow-up that this turn deferred is checked
+    // again now that the turn does not run. A proposal can belong to any
+    // discussion, and the check costs nothing where nothing waits.
+    crate::map_plan::follow_up::request_deferred(app, plan.origin.discussion_id());
     redispatch_unread_steering(app, &plan, state, unread);
 }

@@ -9,7 +9,6 @@
 use rig::tool::{ToolErrorKind, ToolExecutionError};
 
 use super::{require_open_project, ToolRefusal};
-use crate::agent_conversations::ConversationOrigin;
 use crate::delivery::DeliveryError;
 use crate::logging::{self, Domain, Fields, LogBuffer, LogSink};
 
@@ -66,30 +65,20 @@ impl std::fmt::Display for PlanRefusal {
 
 impl std::error::Error for PlanRefusal {}
 
-/// The two refusals of the gate, in the words of one tool group.
+/// The refusal of the gate, in the words of one tool group.
 pub struct GateWords {
-    pub not_a_map: &'static str,
     pub plan_unavailable: &'static str,
 }
 
 /// PIR-FR-HRXN, PPT-FR-DDSX: the conditions of a call of a plan tool. A project
-/// is open, the turn is a Map turn, and the delivery source is a GitHub Project
-/// with a valid configuration. It reads memory and the settings of the project
-/// and makes no request.
+/// is open, and the delivery source is a GitHub Project with a valid
+/// configuration. The turn can be of any discussion (CVL-FR-RWQB). It reads
+/// memory and the settings of the project and makes no request.
 pub fn gate<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    origin: &ConversationOrigin,
     words: &GateWords,
 ) -> Result<(), PlanRefusal> {
     require_open_project(app)?;
-    if !origin.is_map() {
-        return Err(PlanRefusal::new(
-            ToolErrorKind::PermissionDenied,
-            "not_a_map_discussion",
-            false,
-            words.not_a_map,
-        ));
-    }
     if !crate::agent_conversations::tool_wiring::map_plan_tools_enabled(app) {
         return Err(PlanRefusal::new(
             ToolErrorKind::NotFound,

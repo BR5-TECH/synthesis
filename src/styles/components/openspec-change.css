@@ -303,6 +303,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* MPV-FR-ZQRE: the box the plan review sheet is centred in. */
+  position: relative;
 }
 
 /* OCW-FR-ZZHS: a worktree that is not a stream has no discussion column. */

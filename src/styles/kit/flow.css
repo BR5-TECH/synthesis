@@ -691,6 +691,8 @@ button.flow-draft:hover { border-color: var(--border-3); color: var(--fg-1); }
 /* FLO-FR-34 / ACT-FR-10: the action control sits leading of the view
    controls, which keep the trailing end of the bottom line. Its own rules
    place it against this host's trailing edge. */
+/* MPV-FR-ZQRE: the plan review sheet is positioned against the canvas. */
+.flow-reviewhost { display: contents; }
 .flow-actionhost { position: absolute; inset: 0 148px 0 0; pointer-events: none; z-index: 6; }
 .flow-actionhost .draft-actions__toggle,
 .flow-actionhost .draft-actions__menu,

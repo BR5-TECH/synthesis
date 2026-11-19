@@ -750,8 +750,8 @@ fn conversation_tools<R: tauri::Runtime>(
             session,
         )));
     }
-    // CVL-FR-LCSN: the plan tools of a Map turn, while the delivery source allows
-    // them. Decided at the start of this turn, and never for another turn.
+    // CVL-FR-RWQB: the plan tools of every turn, while the delivery source
+    // allows them. Decided at the start of this turn.
     tools.extend(plan_tools_for_turn(app, roots, origin, author, plan_card));
     // CVL-FR-TJZI: the tools of the ready MCP servers of the project, last.
     tools.extend(crate::mcp::conversation_tools(app));

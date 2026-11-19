@@ -21,6 +21,7 @@ import { FindPanel } from "../FindPanel";
 import { gridTemplate } from "../DraftDiscussion";
 import { EditorDiscussionColumn } from "./EditorDiscussionColumn";
 import { GithubTokenPicker } from "../GithubTokenPicker";
+import { MapPlanReviewLayer } from "../MapPlanProposal";
 import { ReviewOverlay } from "./ReviewOverlay";
 import { SourceReview } from "./SourceReview";
 import type { HunkOpening } from "../DraftDiscussion/OpenDiscussion";
@@ -706,7 +707,12 @@ export function EditorView(props: EditorViewProps) {
           data-discussion={split.view.hidden ? "hidden" : "shown"}
           data-testid="editor-discussion-split"
         >
-          <div className="editor__column">{documentColumn}</div>
+          <div className="editor__column">
+            {documentColumn}
+            {/* MPV-FR-ZQRE: the plan review sheet shows over the file, beside
+                the discussion column. */}
+            <MapPlanReviewLayer placement="tab" />
+          </div>
           <EditorDiscussionColumn
             group={props.railGroup}
             splitRef={splitRef}

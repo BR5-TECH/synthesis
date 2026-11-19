@@ -77,7 +77,6 @@ const STATUS_DESCRIPTION: &str =
 const NAME_DESCRIPTION: &str = "The name of the new draft. `new_draft` only. Its prompt is `body`.";
 
 // PPT contract surface, "Refusals".
-pub const NOT_A_MAP: &str = "This conversation is not a Map discussion, so there is no plan to change. Say what you would change instead.";
 pub const PLAN_UNAVAILABLE: &str = "The project has no valid GitHub Project for its plan. Tell the author; asking again will not succeed.";
 pub const CONVERSATION_RESOLVED: &str =
     "This conversation is resolved and takes no further comments, so nothing was proposed.";
@@ -87,7 +86,7 @@ pub const BLANK_RATIONALE: &str =
     "Say what you propose and why. The author reads this beside the card.";
 pub const NOT_RECORDED: &str = "The proposal could not be recorded.";
 
-const WORDS: GateWords = GateWords { not_a_map: NOT_A_MAP, plan_unavailable: PLAN_UNAVAILABLE };
+const WORDS: GateWords = GateWords { plan_unavailable: PLAN_UNAVAILABLE };
 
 /// A value that can be absent, `null`, or given: `None`, `Some(None)`, or
 /// `Some(Some(_))`.
@@ -403,7 +402,7 @@ where
         &self,
         args: ProposePlanChangesArgs,
     ) -> Result<(ProposePlanChangesOutput, BTreeMap<&'static str, usize>), PlanRefusal> {
-        gate(&self.app, &self.origin, &WORDS)?;
+        gate(&self.app, &WORDS)?;
         // PPT-FR-MYQS.
         let form = match (args.rows, args.updates) {
             (Some(rows), None) => Ok(rows),
@@ -466,9 +465,9 @@ where
         let kinds = Self::kinds(&built);
         let count = built.len();
         let comment = self.comment_of(rationale);
-        let (app, id) = (self.app.clone(), self.origin.discussion_id().to_string());
+        let (app, origin) = (self.app.clone(), self.origin.clone());
         let proposal = crate::project_scope::context::spawn_blocking(move || {
-            map_plan::record_map_plan_proposal(&app, &id, built, comment)
+            map_plan::record_map_plan_proposal(&app, &origin, built, comment)
         })
         .await
         .map_err(|_| not_recorded())?
@@ -507,9 +506,9 @@ where
         counts.insert("withdrawUpdates", withdrawn);
         let silent = comment.is_none();
         counts.insert("silentUpdates", usize::from(silent));
-        let (app, id) = (self.app.clone(), self.origin.discussion_id().to_string());
+        let (app, origin) = (self.app.clone(), self.origin.clone());
         let proposal = crate::project_scope::context::spawn_blocking(move || {
-            map_plan::update_map_plan_proposal(&app, &id, built, comment)
+            map_plan::update_map_plan_proposal(&app, &origin, built, comment)
         })
         .await
         .map_err(|_| not_recorded())?

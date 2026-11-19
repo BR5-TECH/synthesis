@@ -216,7 +216,7 @@ fn a_note_edited_after_its_discussion_began_is_discussed_as_it_now_reads() {
 /// CVL-FR-03, CVL-FR-04, CVL-FR-08: the prompt is `discuss-note.md`, it differs from the other three,
 /// and it offers no rewrite.
 #[test]
-fn a_note_turn_carries_the_note_prompt_and_cannot_propose() {
+fn a_note_turn_carries_the_note_prompt_and_offers_no_rewrite() {
     let compiled = |kind| compile_prompt(kind, "Argue about structure.", "");
     let note = compiled(OriginKind::NoteDiscussion);
 
@@ -233,7 +233,11 @@ fn a_note_turn_carries_the_note_prompt_and_cannot_propose() {
     // instruction telling the agent it may offer a rewrite.
     assert!(!ConversationOrigin::stub_note("t", "n").is_draft());
     let lowered = DISCUSS_NOTE_PROMPT_TEMPLATE.to_lowercase();
-    assert!(!lowered.contains("propose"), "the note prompt offers no rewrite");
+    for rewrite in ["propose_draft_changes", "propose_prompt_changes", "propose_diagram_changes"] {
+        assert!(!lowered.contains(rewrite), "the note prompt offers no rewrite: {rewrite}");
+    }
+    // CVL-FR-JMEP: the one proposal a note turn can make is a plan proposal.
+    assert!(lowered.contains("propose_plan_changes"));
 }
 
 /// CVL-FR-06: prompt/builder tag parity, per origin kind and in order.

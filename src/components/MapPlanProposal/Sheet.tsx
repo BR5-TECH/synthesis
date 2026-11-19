@@ -141,7 +141,16 @@ function ReviewBar({
   );
 }
 
-export function ReviewSheet({ store, host }: { store: MapPlanReviewStore; host: MapPlanHost | null }) {
+export function ReviewSheet({
+  store,
+  host,
+  placement = "map",
+}: {
+  store: MapPlanReviewStore;
+  host: MapPlanHost | null;
+  /** MPV-FR-ZQRE: "tab" for the sheet over the content of a tab other than the Map tab. */
+  placement?: "map" | "tab";
+}) {
   useSyncExternalStore(store.subscribe, store.getVersion);
   const snap = store.snapshot();
   const review = snap.review;
@@ -203,6 +212,7 @@ export function ReviewSheet({ store, host }: { store: MapPlanReviewStore; host: 
     <div
       ref={sheet}
       className="pp-sheet"
+      data-placement={placement}
       role="dialog"
       aria-modal="false"
       aria-label="Plan proposal review"

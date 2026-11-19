@@ -18,6 +18,7 @@ import { useEffect, useRef } from "react";
 
 import * as api from "../api";
 import { DiscussionComposer, DiscussionSurface } from "./discussion";
+import { MapPlanReviewLayer } from "./MapPlanProposal";
 import type { OpenDiscussionRequest } from "./discussion";
 import { identityBlockFor } from "../hooks/useComments";
 import {
@@ -161,6 +162,8 @@ export function ConversationTabView({
             ownerLabel={ownerLabel}
             onReply={session.reply}
             onSetResolved={session.setResolved}
+            // MPV-FR-ZQRE: the plan review sheet covers the messages, not the composer.
+            messagesOverlay={<MapPlanReviewLayer placement="tab" />}
           />
         ) : opening && tab.ownerTarget ? (
           <div className="note-opener" data-testid="note-discussion-opener">

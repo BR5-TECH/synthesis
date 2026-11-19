@@ -72,11 +72,21 @@
 /* In a rail card there is nothing to pin against — the card scrolls as one with
    the margin around it — so this is a plain wrapper there and the scroller only
    in the two surfaces that have a foot to pin to. */
-.comment-card--embedded > .comment-card__messages {
+.comment-card--embedded > .comment-card__messages,
+.comment-card--embedded > .comment-card__over > .comment-card__messages {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: var(--sp-3);
+}
+/* MPV-FR-ZQRE: the box of the message list that the plan review sheet covers in
+   a conversation tab. The composer is below it, so it stays usable. */
+.comment-card--embedded > .comment-card__over {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
 }
 /* CVP-FR-58: the composer floats at the foot of the conversation rather than
    banding across it.

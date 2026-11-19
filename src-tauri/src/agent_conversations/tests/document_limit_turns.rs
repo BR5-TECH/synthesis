@@ -86,7 +86,9 @@ fn a_compaction_call_reports_no_context() {
             Ok(ScriptedReply::answer("The earlier rounds read hld.md.")),
             Ok(ScriptedReply::answer("Done.")),
         ],
-        Some(16_000),
+        // The window holds the comment prompt with its plan tools part
+        // (CVL-FR-JMEP), so the compaction point stays where it is described.
+        Some(16_500),
         1,
     );
     // A fragment discussion opens its history with the fragment, which is the

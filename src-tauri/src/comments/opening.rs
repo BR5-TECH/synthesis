@@ -322,27 +322,46 @@ fn open_discussion_unchecked_spoken(
     log.find(root, &discussion_id)
 }
 
-/// The log a target and an optional fragment select.
-pub(super) fn log_ref_of<'a>(
+/// MPR-FR-KDTQ: the log a target selects, with `fragment_file` the file of the
+/// fragment target of a discussion that has one.
+pub fn log_ref_for<'a>(
     target: &'a DiscussionTarget,
-    fragment: Option<&'a FragmentTarget>,
+    fragment_file: Option<&'a str>,
 ) -> ThreadRef<'a> {
-    match (target, fragment) {
+    match (target, fragment_file) {
         (DiscussionTarget::Artifact { artifact_id }, Some(_)) => ThreadRef::artifact(artifact_id),
         (DiscussionTarget::Artifact { artifact_id }, None) => {
             ThreadRef::artifact_discussion(artifact_id)
         }
-        (DiscussionTarget::Draft { draft_id }, Some(f)) => ThreadRef::draft_file(draft_id, &f.path),
+        (DiscussionTarget::Draft { draft_id }, Some(file)) => ThreadRef::draft_file(draft_id, file),
         (DiscussionTarget::Draft { draft_id }, None) => ThreadRef::discussion(draft_id),
         (DiscussionTarget::Note { note_id }, _) => ThreadRef::note_discussion(note_id),
         (DiscussionTarget::Map, _) => ThreadRef::map_discussion(),
-        (DiscussionTarget::Change { stream_id, change }, Some(f)) => {
-            ThreadRef::change_file(stream_id, change, &f.path)
+        (DiscussionTarget::Change { stream_id, change }, Some(file)) => {
+            ThreadRef::change_file(stream_id, change, file)
         }
         (DiscussionTarget::Change { stream_id, change }, None) => {
             ThreadRef::change_discussion(stream_id, change)
         }
     }
+}
+
+/// MPR-FR-KDTQ: the discussion `thread_id` of the log `log`, or
+/// `discussion_not_found`.
+pub fn find_in_log(
+    root: &crate::fs::RootFs,
+    log: ThreadRef<'_>,
+    thread_id: &str,
+) -> Result<Discussion, String> {
+    log.find(root, thread_id)
+}
+
+/// The log a target and an optional fragment select.
+pub(super) fn log_ref_of<'a>(
+    target: &'a DiscussionTarget,
+    fragment: Option<&'a FragmentTarget>,
+) -> ThreadRef<'a> {
+    log_ref_for(target, fragment.map(|f| f.path.as_str()))
 }
 
 /// CMS-FR-62: serializes the decide-and-commit of a note's one discussion.

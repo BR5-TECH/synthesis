@@ -161,6 +161,9 @@ pub struct MapPlanRow {
 pub struct MapPlanProposal {
     pub id: String,
     pub discussion_id: String,
+    /// MPR-FR-RVRN: the owner of the discussion. `None` for a Map thread.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<super::owner::ProposalOwner>,
     pub comment_id: String,
     pub created_at: String,
     /// MPR-FR-QIJF: when the module asked the agent to propose the failed rows

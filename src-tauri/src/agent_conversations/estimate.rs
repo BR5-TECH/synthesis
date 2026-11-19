@@ -107,6 +107,9 @@ pub fn estimate_impl<R: tauri::Runtime>(
         if matches!(discussion.target, DiscussionTarget::Map) {
             let focus = map_context::map_state_text(roots, discussion, "");
             prepend_state_text(&mut sections, &format!("{focus}\n"));
+        } else if let Some(rows) = map_context::proposal_state_text(roots, discussion) {
+            // MPR-FR-VYPE: the estimate counts the rows as a turn carries them.
+            append_state_text(&mut sections, &rows);
         }
     }
 

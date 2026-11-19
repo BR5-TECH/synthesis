@@ -14,6 +14,7 @@ import {
 } from "../../state/flowDocument";
 import type { FlowViolation } from "../../types";
 import { ActionControl } from "../ActionControl";
+import { MapPlanReviewLayer } from "../MapPlanProposal";
 import { Icon } from "../icons";
 import { useDiscussMenu } from "../MapDiscussion/NodeMenu";
 import { Band } from "./Band";
@@ -697,6 +698,16 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
                 sit on a strip below the canvas. A press on it moves nothing. */}
             {c.board && (
               <div className="dm-foot" aria-hidden="true" onPointerDown={(e) => e.stopPropagation()} />
+            )}
+
+            {/* MPV-FR-ZQRE: the plan review sheet of a Flow tab, over the
+                canvas and below the floating discussion panel. A press in it
+                is chrome, so it pans and selects nothing. The Map tab shows
+                its own sheet. */}
+            {!planMode && (
+              <div className="flow-reviewhost" data-flow-chrome="">
+                <MapPlanReviewLayer placement="tab" />
+              </div>
             )}
 
             {/* FLO-FR-34 / FLO-FR-35: the action control, over the Flow file. A

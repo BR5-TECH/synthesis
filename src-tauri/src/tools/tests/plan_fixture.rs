@@ -88,6 +88,30 @@ impl PlanFixture {
         ConversationOrigin::stub_map(self.discussion_id.clone())
     }
 
+    /// MPR-FR-TQVZ: a passage thread of the file `spec.md`, which is not a Map
+    /// thread, and the origin of a turn in it.
+    pub fn passage_thread(&self) -> ConversationOrigin {
+        let position = crate::comments::FragmentTarget::in_artifact("spec.md", 0, 4, "Spec");
+        let thread = crate::comments::open_artifact_fragment_in(
+            &self.store(),
+            "spec.md",
+            position,
+            "File an issue for this".into(),
+            Vec::new(),
+            &human(),
+            "2026-03-01T10:00:00Z",
+        )
+        .unwrap();
+        ConversationOrigin::of(&thread)
+    }
+
+    /// The comments of the discussion of `origin`, in its own log.
+    pub fn comments_of(&self, origin: &ConversationOrigin) -> Vec<crate::comments::Comment> {
+        crate::comments::locate_discussion_of(&self.store(), &origin.target, origin.discussion_id())
+            .map(|d| d.comments)
+            .unwrap_or_default()
+    }
+
     /// The comments of the Map thread.
     pub fn comments(&self) -> usize {
         crate::comments::fold_map_discussions(&self.store())

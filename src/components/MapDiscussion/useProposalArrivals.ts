@@ -1,7 +1,9 @@
 /**
  * MPV-FR-UWQL: the plan proposal comments that arrive in the thread that the
- * Discussion column shows. Each one asks the review store to open its sheet.
- * The comments that the thread held when the column showed it open nothing.
+ * Discussion column shows, or that a discussion surface of another tab shows
+ * (`../MapPlanProposal/inPlaceArrivals.ts`). Each one asks the review store to
+ * open its sheet. The comments that the thread held when the column showed it
+ * open nothing.
  */
 import { useEffect, useRef } from "react";
 
@@ -12,14 +14,15 @@ import type { Discussion } from "../../types";
 
 export function useProposalArrivals(
   thread: Discussion | undefined,
-  review: MapPlanReviewStore,
+  /** Null follows nothing, as no thread does. */
+  review: MapPlanReviewStore | null,
   onOpen: (() => void) | undefined,
 ): void {
   const seen = useRef<{ threadId: string | null; comments: Set<string> }>({ threadId: null, comments: new Set() });
   const openRef = useRef(onOpen);
   openRef.current = onOpen;
   useEffect(() => {
-    if (!thread) {
+    if (!thread || !review) {
       seen.current = { threadId: null, comments: new Set() };
       return;
     }

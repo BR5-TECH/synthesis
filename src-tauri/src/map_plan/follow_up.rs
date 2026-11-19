@@ -3,7 +3,8 @@
 //! agent that proposed one turn with the results, so that it can propose the
 //! next step that depends on them, or say that the step is done.
 //!
-//! The request is one Synthesis comment in the Map discussion and one turn of
+//! The request is one Synthesis comment in the discussion of the proposal
+//! (MPR-FR-KDTQ) and one turn of
 //! that agent, on the terms of the re-prepare request (MPR-FR-QIJF,
 //! MPR-FR-LOUI). It runs inside the turn of a decision (MPR-FR-HKYH).
 
@@ -15,7 +16,7 @@ use super::model::{MapPlanError, MapPlanProposal, MapPlanRow, RowFields, RowStat
 use super::recording::open_store;
 use super::reprepare::{dispatch_turn, join, proposer, TurnRequest};
 use super::store;
-use crate::comments::{Participant, Stamp, ThreadRef};
+use crate::comments::{Participant, Stamp};
 use crate::delivery::github::ERR_CHANGED_ON_TRACKER;
 use crate::fs::RootFs;
 use crate::logging::{Domain, BUFFER};
@@ -172,9 +173,10 @@ fn request<R: tauri::Runtime>(
 ) -> Result<(), MapPlanError> {
     let comment_id = crate::notes::new_note_id();
     let now = crate::notes::now_rfc3339();
+    // MPR-FR-KDTQ: the comment goes to the discussion of the proposal.
     let appended = crate::comments::append_agent_comment_with(
         store,
-        ThreadRef::map_discussion(),
+        super::owner::log_of(proposal.owner.as_ref()),
         &proposal.discussion_id,
         comment_id.clone(),
         follow_up_body(proposal, &handle),
@@ -190,6 +192,7 @@ fn request<R: tauri::Runtime>(
     crate::comments::emit_discussion_changed(app, &appended);
     let turn = TurnRequest {
         discussion_id: proposal.discussion_id.clone(),
+        target: super::owner::target_of(proposal.owner.as_ref()),
         nickname: handle,
         trigger_comment_id: comment_id,
     };
@@ -248,7 +251,7 @@ pub(super) fn request_after_decision<R: tauri::Runtime>(
     request_if_wanted(app, store, proposal);
 }
 
-/// MPR-FR-BCKW: a turn of the Map discussion terminated. Each follow-up of the
+/// MPR-FR-BCKW: a turn of a discussion terminated. Each follow-up of the
 /// discussion that a running turn deferred is checked again, under the turn of
 /// a decision.
 pub fn request_deferred<R: tauri::Runtime>(app: &tauri::AppHandle<R>, discussion_id: &str) {

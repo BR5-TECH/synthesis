@@ -127,25 +127,22 @@ fn the_description_and_the_schema_are_fixed() {
     assert_eq!(list(&f).parameters(), List::new(other.app(), other.origin()).parameters());
 }
 
-// PIR-FR-HRXN, PIR-FR-APMQ: a turn that is not a Map turn, a plan that is not
-// available, and no open project each have their refusal. Nothing is read.
+// PIR-FR-HRXN, PIR-FR-APMQ: a turn of any discussion, a file discussion
+// here, reads the plan; a plan that is not available and no open project each
+// have their refusal, and a refused call reads nothing.
 #[test]
-fn only_a_map_turn_with_a_plan_can_call_the_tools() {
+fn a_turn_of_any_discussion_with_a_plan_can_call_the_tools() {
     let f = PlanFixture::new();
-    f.h.fake.lock().calls.clear();
     let elsewhere = ConversationOrigin::stub_artifact("t", "spec.md", false);
-    for refused in [
-        run(&List::new(f.app(), elsewhere.clone()), json!({})).unwrap_err(),
-        run(&Search::new(f.app(), elsewhere.clone()), json!({ "query": "x" })).unwrap_err(),
-        run(&Read::new(f.app(), elsewhere), json!({ "number": 1 })).unwrap_err(),
-    ] {
-        assert_eq!(refused.kind, ToolErrorKind::PermissionDenied);
-        assert!(!refused.retryable);
-        assert_eq!(refused.message, NOT_A_MAP);
-    }
-    assert!(f.h.fake.calls().is_empty(), "a refused call reads nothing");
+    let listed = run(&List::new(f.app(), elsewhere.clone()), json!({})).expect("a list");
+    assert!(listed["total"].as_u64().unwrap() > 0, "{listed}");
+    let found = run(&Search::new(f.app(), elsewhere.clone()), json!({ "query": "x" }));
+    assert!(found.is_ok(), "{found:?}");
+    let issue = run(&Read::new(f.app(), elsewhere), json!({ "number": 1 })).expect("a read");
+    assert_eq!(issue["number"], 1);
 
     f.h.select_project(None);
+    f.h.fake.lock().calls.clear();
     for refused in [
         run(&list(&f), json!({})).unwrap_err(),
         run(&search(&f), json!({ "query": "x" })).unwrap_err(),
@@ -155,6 +152,7 @@ fn only_a_map_turn_with_a_plan_can_call_the_tools() {
         assert!(!refused.retryable);
         assert_eq!(refused.message, PLAN_UNAVAILABLE);
     }
+    assert!(f.h.fake.calls().is_empty(), "a refused call reads nothing");
 
     f.close();
     let refused = run(&list(&f), json!({})).unwrap_err();
@@ -485,7 +483,6 @@ fn the_refusals_are_those_of_the_contract_surface() {
         assert_eq!(delivered.retryable(), Some(retryable));
         assert_eq!((refusal.kind, refusal.retryable), (kind, retryable));
     }
-    assert_eq!(NOT_A_MAP, "This conversation is not a Map discussion, so it has no plan issues. Asking again will not succeed.");
     assert_eq!(
         PLAN_UNAVAILABLE,
         "The project has no GitHub Project selected for its plan, or its configuration is not valid. Tell the author; asking again will not succeed."

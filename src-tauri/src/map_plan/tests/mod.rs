@@ -16,6 +16,7 @@ mod drafts;
 mod follow_up;
 mod issue_rows;
 mod modify_parents;
+mod other_owners;
 mod recording;
 mod refusals;
 mod reopening;

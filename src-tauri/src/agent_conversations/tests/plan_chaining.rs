@@ -14,10 +14,28 @@ use crate::delivery::github::tests::fake::{
 
 const PLAN_TOOL: &str = crate::tools::propose_plan_changes::NAME;
 
-/// A harness whose open project has a GitHub Project plan with a `valid`
-/// configuration, so a Map turn is attached the plan tools, and a Map thread
-/// that addresses `arch`.
+/// [`plan_project`] with a Map thread that addresses `arch`.
 fn plan_harness(replies: Vec<Result<ScriptedReply, &'static str>>) -> (Harness, Discussion) {
+    let h = plan_project(replies);
+    let thread = crate::comments::open_map_discussion_in(
+        &h.root(),
+        None,
+        Opening {
+            body: "@arch plan the payments work".into(),
+            attachments: Vec::new(),
+            spoken_original: None,
+        },
+        Stamp { by: &human("ada"), at: "2026-03-01T10:00:00Z" },
+    )
+    .expect("a Map thread")
+    .discussion;
+    (h, thread)
+}
+
+/// A harness whose open project has a GitHub Project plan with a `valid`
+/// configuration, so every turn is attached the plan tools (CVL-FR-RWQB), and
+/// the agent `arch`.
+pub(super) fn plan_project(replies: Vec<Result<ScriptedReply, &'static str>>) -> Harness {
     let h = Harness::scripted(replies);
     let root = h.root().path().to_path_buf();
     let repo = git2::Repository::init(&root).expect("a repository");
@@ -51,19 +69,7 @@ fn plan_harness(replies: Vec<Result<ScriptedReply, &'static str>>) -> (Harness, 
     crate::project_settings::save_github_polling_settings_to(&h.root(), &settings).unwrap();
     crate::delivery::github::load_plan_impl(&h.app.handle().clone(), true).expect("a plan");
     h.create_agent("arch", "");
-    let thread = crate::comments::open_map_discussion_in(
-        &h.root(),
-        None,
-        Opening {
-            body: "@arch plan the payments work".into(),
-            attachments: Vec::new(),
-            spoken_original: None,
-        },
-        Stamp { by: &human("ada"), at: "2026-03-01T10:00:00Z" },
-    )
-    .expect("a Map thread")
-    .discussion;
-    (h, thread)
+    h
 }
 
 fn run_turn(h: &Harness, thread: &Discussion) -> AgentTurn {

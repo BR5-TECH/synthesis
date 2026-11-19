@@ -77,6 +77,18 @@ fn references_of(h: &Harness, index: usize) -> InputSection {
     request.input.into_iter().find(|s| s.tag == TAG_PLAN_REFERENCES).expect("plan_references")
 }
 
+/// MPR-FR-EHCG: the change marks of request `index`, which are in its
+/// `discussion_state` section.
+fn marks_of(h: &Harness, index: usize) -> String {
+    let request = h.seam.requests().into_iter().nth(index).expect("a request").0;
+    request
+        .input
+        .into_iter()
+        .find(|s| s.tag == TAG_DISCUSSION_STATE)
+        .map(|s| s.body)
+        .unwrap_or_default()
+}
+
 fn recorded(h: &Harness, thread: &Discussion) -> Vec<(String, Option<String>)> {
     read_fingerprints(&h.root(), &thread.id)
         .expect("a record")
@@ -113,7 +125,9 @@ fn a_turn_carries_the_references_of_the_flow_and_records_them() {
     assert!(hld < api, "{body}");
     assert!(body.contains("Payments use cards."), "{body}");
     assert!(body.contains("API v1"), "{body}");
-    assert_eq!(body.matches("change: first").count(), 2, "{body}");
+    let marks = marks_of(&h, 0);
+    assert_eq!(marks.matches("change: first").count(), 2, "{marks}");
+    assert!(!body.contains("change: first"), "the marks are state: {body}");
     assert_eq!(
         recorded(&h, &thread),
         vec![
@@ -143,8 +157,9 @@ fn an_edit_on_disk_reaches_the_next_turn_marked_changed() {
     let body = references_of(&h, 1).body;
     assert!(body.contains("New design."), "{body}");
     assert!(!body.contains("Old design."), "{body}");
-    assert!(body.contains("path: docs/hld.md\ntype: none\nchange: changed"), "{body}");
-    assert!(body.contains("path: docs/api.md\ntype: none\nchange: unchanged"), "{body}");
+    let marks = marks_of(&h, 1);
+    assert!(marks.contains("- path: docs/hld.md, change: changed"), "{marks}");
+    assert!(marks.contains("- path: docs/api.md, change: unchanged"), "{marks}");
     assert_eq!(recorded(&h, &thread)[0].1, fp("New design."));
 }
 
@@ -167,7 +182,7 @@ fn a_failed_turn_keeps_the_record() {
     assert_eq!(turn(&h, &thread, 2).state, AgentTurnState::Delivered);
     let last = h.seam.requests().len() - 1;
     let body = references_of(&h, last).body;
-    assert!(body.contains("change: changed"), "{body}");
+    assert!(marks_of(&h, last).contains("change: changed"), "{body}");
     assert!(body.contains("v2"), "{body}");
     assert_eq!(recorded(&h, &thread), vec![("docs/hld.md".into(), fp("v2"))]);
 }
@@ -192,13 +207,14 @@ fn references_added_and_removed_between_turns_are_marked() {
 
     file_source(&h, &["docs/hld.md"]);
     assert_eq!(turn(&h, &thread, 1).state, AgentTurnState::Delivered);
-    assert!(references_of(&h, 1).body.contains("change: added"));
+    assert!(marks_of(&h, 1).contains("change: added"));
 
     file_source(&h, &["docs/api.md"]);
     assert_eq!(turn(&h, &thread, 2).state, AgentTurnState::Delivered);
     let body = references_of(&h, 2).body;
-    assert!(body.contains("path: docs/api.md\ntype: none\nchange: added"), "{body}");
-    assert!(body.contains("- path: docs/hld.md, change: removed"), "{body}");
+    let marks = marks_of(&h, 2);
+    assert!(marks.contains("- path: docs/api.md, change: added"), "{marks}");
+    assert!(marks.contains("- path: docs/hld.md, change: removed"), "{marks}");
     assert!(!body.contains("Design."), "{body}");
 }
 
@@ -359,7 +375,7 @@ fn a_record_that_cannot_be_written_does_not_change_the_turn() {
     assert!(!format!("{warns:?}").contains("hld"), "{warns:?}");
 
     assert_eq!(turn(&h, &thread, 1).state, AgentTurnState::Delivered);
-    assert!(references_of(&h, 1).body.contains("change: first"));
+    assert!(marks_of(&h, 1).contains("change: first"));
 }
 
 // MPR-FR-CHRV, MPR-FR-VGCX, AGC-FR-13: a turn in flight keeps the text it was
@@ -395,5 +411,5 @@ fn a_turn_in_flight_keeps_its_text_and_records_it() {
     assert_eq!(turn(&h, &thread, 1).state, AgentTurnState::Delivered);
     let body = references_of(&h, 1).body;
     assert!(body.contains("After."), "{body}");
-    assert!(body.contains("change: changed"), "{body}");
+    assert!(marks_of(&h, 1).contains("change: changed"), "{body}");
 }

@@ -235,6 +235,11 @@ export interface ContextSplit {
   history: number;
   currentComment: number;
   toolResults: number;
+  /**
+   * ERP-FR-XTQI: the replayed rounds and stored states of the agent's earlier
+   * exchanges. Absent in a figure from a build that replays nothing.
+   */
+  replayed?: number;
 }
 
 /** AGC-FR-OYVH: the size of the whole document under discussion. */

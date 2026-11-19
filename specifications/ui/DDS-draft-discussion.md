@@ -52,7 +52,7 @@ The two-column shape of the New Artifact tab, where an author and one or more ag
 30. **DDS-FR-TSPL** The window is the one of the agent that answered the latest turn of the shown discussion. Before any turn, it is the window of the first agent of the column's agent list. The window is always known (per `../core/AGC-agent-conversations.md` AGC-FR-GMSF), so the indicator always shows a percent.
 30. **DDS-FR-WCET** A small circular progress ring stands before the percent, inside the indicator. Its arc is the used share of the window, full at 100% and above. The ring is no taller than the percent text, so the header row keeps its height. Its geometry is the same in both themes, and it does not animate.
 30. **DDS-FR-WUCD** The indicator has a **level**: `normal` below 50%, `high` from 50% to below 85%, and `critical` from 85% up. The ring takes the accent tone at `normal`, the warning tone at `high`, and the danger tone at `critical`, each a theme token. The level does not depend on `above_limit`, and the warning of DDS-FR-ZQVE does not depend on the level.
-30. **DDS-FR-WRNB** On hover and on keyboard focus, the indicator shows a tooltip with the split of the turn in tokens — instructions, document, discussion history, current comment, and tool results, each labelled as an estimate — the window size, and the level. The accessible name states the percent and the level. The percent text stays visible at every column width.
+30. **DDS-FR-WRNB** On hover and on keyboard focus, the indicator shows a tooltip with the split of the turn in tokens — instructions, document, discussion history, current comment, tool results, and earlier exchanges (per `../ai/ERP-exchange-replay.md` ERP-FR-XTQI), each labelled as an estimate — the window size, and the level. The accessible name states the percent and the level. The percent text stays visible at every column width.
 30. **DDS-FR-ZQVE** While the document under discussion is above the size limit (`above_limit`), a warning icon stands next to the indicator. On hover and on keyboard focus, its tooltip states the document size in estimated tokens and the limit, and says that the author must split or shorten the document. At or below the limit, no warning shows.
     - *Why:* The agent then gets only part of the document, and the author alone can change the document's size.
 30. **DDS-FR-HJMF** The indicator and the warning block nothing: posting, dispatching a turn, and deciding a proposal stay available above the limit. Both refresh when a turn reports its context, when the shown discussion changes, and when the document under discussion is saved.
@@ -145,6 +145,7 @@ The context indicator and the warning in the header, each with its tooltip open:
 │                         │ Discussion history ~9,400 est.   │ │
 │                         │ Current comment      ~120 est.   │ │
 │                         │ Tool results      ~12,500 est.   │ │
+│                         │ Earlier exchanges  ~8,300 est.   │ │
 │                         │ Window 200,000 tokens. Normal.   │ │
 │                         └──────────────────────────────────┘ │
 │                            ┌───────────────────────────────┐ │

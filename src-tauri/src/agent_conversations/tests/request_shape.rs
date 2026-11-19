@@ -681,6 +681,9 @@ fn the_prompt_and_the_builders_name_the_same_tags() {
         // draft, and a change, so it describes both first sections, each for
         // the targets that emit it.
         let mut described = tags_described_by(prompt_template(kind));
+        // CVL-FR-06: every prompt also describes `discussion_state`, which a
+        // turn with no state does not carry.
+        assert!(described.remove(TAG_DISCUSSION_STATE), "{kind:?} describes `discussion_state`");
         if prompt_template(kind) == COMMENT_PROMPT_TEMPLATE {
             assert!(
                 described.remove(TAG_OPENSPEC_CHANGE),

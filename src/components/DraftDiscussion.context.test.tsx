@@ -42,6 +42,7 @@ const SPLIT = {
   history: 9400,
   currentComment: 120,
   toolResults: 12500,
+  replayed: 8300,
 };
 
 function estimate(over: Partial<DiscussionContext> = {}): DiscussionContext {
@@ -311,11 +312,13 @@ describe("the context indicator in the column header", () => {
       "Discussion history",
       "Current comment",
       "Tool results",
+      "Earlier exchanges",
     ]) {
       expect(tip).toHaveTextContent(label);
     }
     expect(tip).toHaveTextContent("~60,000 est.");
     expect(tip).toHaveTextContent("~12,500 est.");
+    expect(tip).toHaveTextContent("~8,300 est.");
     expect(tip).toHaveTextContent("Window 200,000 tokens. Normal.");
     expect(indicator).toHaveAttribute("aria-describedby");
   });

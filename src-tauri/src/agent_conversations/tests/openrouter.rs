@@ -59,9 +59,9 @@ fn cache_markers(message: &openrouter_rs::api::chat::Message) -> Vec<String> {
     }
 }
 
-/// The marker every call is expected to carry: ephemeral, five minutes
+/// The marker every call is expected to carry: ephemeral, one hour
 /// (CVL-FR-23).
-const FIVE_MINUTE_MARKER: &str = "Ephemeral/5m";
+const ONE_HOUR_MARKER: &str = "Ephemeral/1h";
 
 /// CVL-FR-39: material with no stable head, which is marked exactly as an
 /// unsplit input is. Named rather than spelled `Default::default()` at each
@@ -250,13 +250,13 @@ fn the_bridge_marks_the_prompt_and_the_input_for_caching_on_every_round() {
         let carried = openrouter_bridge::messages_out(&exchange_after_rounds(rounds), &unsplit());
         assert_eq!(
             cache_markers(&carried[0]),
-            vec![FIVE_MINUTE_MARKER.to_string()],
-            "round {rounds}: the compiled prompt is marked, for five minutes",
+            vec![ONE_HOUR_MARKER.to_string()],
+            "round {rounds}: the compiled prompt is marked, for one hour",
         );
         assert_eq!(
             cache_markers(&carried[1]),
-            vec![FIVE_MINUTE_MARKER.to_string()],
-            "round {rounds}: the input is marked, for five minutes",
+            vec![ONE_HOUR_MARKER.to_string()],
+            "round {rounds}: the input is marked, for one hour",
         );
         // Nothing after the input is marked *and* nothing after it is even put
         // into parts: a tool result whose content is an array rather than a
@@ -297,13 +297,13 @@ fn the_bridge_marks_the_stable_head_apart_from_the_conversation_that_grew() {
         let carried = openrouter_bridge::messages_out(&request, &split_at("MATERIAL"));
         assert_eq!(
             cache_markers(&carried[0]),
-            vec![FIVE_MINUTE_MARKER.to_string()],
-            "round {rounds}: the compiled prompt is marked, for five minutes",
+            vec![ONE_HOUR_MARKER.to_string()],
+            "round {rounds}: the compiled prompt is marked, for one hour",
         );
         assert_eq!(
             marked_parts(&carried[1]),
             vec![
-                ("MATERIAL".to_string(), Some(FIVE_MINUTE_MARKER.to_string())),
+                ("MATERIAL".to_string(), Some(ONE_HOUR_MARKER.to_string())),
                 ("\n\nDISCUSSION".to_string(), None),
             ],
             "round {rounds}: the head carries the input's only mark",
@@ -340,7 +340,7 @@ fn a_head_the_message_does_not_open_with_marks_the_message_whole() {
     // back to the mark an unsplit input already carries rather than cutting the
     // message in the wrong place or leaving an empty part behind.
     let request = exchange_after_rounds_with_input(1, "MATERIAL\n\nDISCUSSION");
-    let whole = vec![("MATERIAL\n\nDISCUSSION".to_string(), Some(FIVE_MINUTE_MARKER.to_string()))];
+    let whole = vec![("MATERIAL\n\nDISCUSSION".to_string(), Some(ONE_HOUR_MARKER.to_string()))];
 
     for (head, why) in [
         ("SOMETHING ELSE", "a head the message does not open with"),
@@ -407,6 +407,7 @@ fn the_stable_head_is_a_real_prefix_of_the_message_it_marks() {
             tools: Vec::new(),
             native_tools: Vec::new(),
             stable_head_sections: 1,
+            ..Default::default()
         };
         let exchange = opening_exchange(&request, with_images);
         let head = stable_head_text(&request, &exchange).expect("the material is a head");
@@ -497,12 +498,12 @@ fn a_retry_presents_the_same_exchange_marked_the_same_way() {
     );
     // And the marks are actually there, so this cannot pass by both attempts
     // carrying none of them.
-    assert_eq!(cache_markers(&carried[0][0]), vec![FIVE_MINUTE_MARKER.to_string()],);
-    assert_eq!(cache_markers(&carried[0][1]), vec![FIVE_MINUTE_MARKER.to_string()],);
+    assert_eq!(cache_markers(&carried[0][0]), vec![ONE_HOUR_MARKER.to_string()],);
+    assert_eq!(cache_markers(&carried[0][1]), vec![ONE_HOUR_MARKER.to_string()],);
 }
 
 #[test]
-fn the_anthropic_carrier_asks_for_caching_at_the_short_lifetime() {
+fn the_anthropic_carrier_asks_for_caching_at_the_long_lifetime() {
     // CVL-FR-20, CVL-FR-01, CVL-FR-10 / CVL-FR-23: the other half of "a provider that caches of its own
     // accord is marked with nothing; one that caches only what it is told is
     // told". Asserted on the model the carrier builds rather than on a response,
@@ -530,14 +531,17 @@ fn the_anthropic_carrier_asks_for_caching_at_the_short_lifetime() {
     ));
     assert_eq!(
         built.options.cache,
-        Some(rig::completion::CacheRetention::Short),
-        "the provider is told to cache what each call presents, for the short lifetime",
+        Some(rig::completion::CacheRetention::Long),
+        "the provider is told to cache what each call presents, for the long lifetime",
     );
+    // CVL-FR-TUBB: the tools and the prompt are a fixed place with the same
+    // lifetime.
     let model = anthropic_model(&client, &endpoint);
-    assert!(
-        model.wire.static_prefix_cache_ttl.is_none() && !model.wire.prompt_caching,
-        "no fixed breakpoint and no other lifetime is asked for",
+    assert_eq!(
+        model.wire.static_prefix_cache_ttl,
+        Some(rig::providers::anthropic::completion::CacheTtl::OneHour),
     );
+    assert!(!model.wire.prompt_caching, "no other breakpoint is asked for");
 }
 
 #[test]
@@ -552,7 +556,7 @@ fn an_exchange_with_no_preamble_marks_the_input_rather_than_the_wrong_message() 
     let carried = openrouter_bridge::messages_out(&request, &unsplit());
     assert!(matches!(carried[0].role, openrouter_rs::types::Role::User));
     assert_eq!(content_text(&carried[0]), "INPUT");
-    assert_eq!(cache_markers(&carried[0]), vec![FIVE_MINUTE_MARKER.to_string()],);
+    assert_eq!(cache_markers(&carried[0]), vec![ONE_HOUR_MARKER.to_string()],);
     for message in carried.iter().skip(1) {
         assert!(cache_markers(message).is_empty());
     }

@@ -174,8 +174,11 @@ fn a_whole_change_turn_uses_the_change_prompt_and_tools() {
         assert!(!tools.iter().any(|t| t == name), "{name} offered on a change turn");
     }
     let described = super::request_shape::tags_described_by(DISCUSS_CHANGE_PROMPT_TEMPLATE);
-    let emitted: std::collections::BTreeSet<String> =
+    let mut emitted: std::collections::BTreeSet<String> =
         request.input.iter().map(|s| s.tag.clone()).collect();
+    // CVL-FR-06: the prompt also describes `discussion_state`, which a turn
+    // with no state does not carry.
+    emitted.insert(TAG_DISCUSSION_STATE.to_string());
     assert_eq!(described, emitted);
 }
 
@@ -364,10 +367,13 @@ fn the_history_of_a_change_turn_ends_with_the_split() {
     .expect("answer");
     let input = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&answer), "answer-1");
     let history = input.iter().find(|s| s.tag == TAG_DISCUSSION_HISTORY).expect("history");
-    assert!(history
+    // AGC-FR-JNOS, AGC-FR-06: the split is in `discussion_state`.
+    let state = input.iter().find(|s| s.tag == TAG_DISCUSSION_STATE).expect("state");
+    assert!(state
         .body
         .contains(&format!("The split {} of this change, not confirmed", record.set_id)));
-    assert!(history.body.contains("Part one only."), "the pending files are shown");
+    assert!(state.body.contains("Part one only."), "the pending files are shown");
+    assert!(!history.body.contains("Part one only."), "not in the history");
     assert!(history
         .body
         .contains(&format!("[proposed a new OpenSpec change: {} — 1 of 2 — part-one", record.id)));

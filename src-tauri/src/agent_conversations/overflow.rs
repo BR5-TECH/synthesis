@@ -37,8 +37,19 @@ pub(super) fn is_context_overflow(failure: &CallFailure) -> bool {
 
 /// CVL-FR-QJLU: cut each tool result of the latest round, other than that of
 /// `load_skill`, to `max_chars`. Returns how many results were cut.
+#[cfg(test)]
 pub(super) fn cut_latest_results(exchange: &mut [Message], max_chars: usize) -> usize {
-    let start = compaction::latest_round_start(exchange);
+    cut_latest_results_after(exchange, max_chars, 0)
+}
+
+/// [`cut_latest_results`] in an exchange whose input message stands at
+/// `opening`. A replayed result is never cut (ERP-FR-WZAV).
+pub(super) fn cut_latest_results_after(
+    exchange: &mut [Message],
+    max_chars: usize,
+    opening: usize,
+) -> usize {
+    let start = compaction::latest_round_start_after(exchange, opening);
     let mut cut = 0;
     for message in exchange.iter_mut().skip(start) {
         let Message::User { content } = message else {
@@ -89,9 +100,11 @@ pub(super) fn recover<R: tauri::Runtime>(
         ModelCall { recovery: true, ..call },
         true,
     )?;
-    let cut = cut_latest_results(
+    let opening = opening_of(conversation.request(plan));
+    let cut = cut_latest_results_after(
         &mut conversation.exchange,
         result_cap::minimum_bound(endpoint.context_size),
+        opening,
     );
     let changed = compacted || cut > 0;
     logging::log_warn(

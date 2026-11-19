@@ -74,6 +74,12 @@ pub(super) fn flow_context_text(
     out
 }
 
+/// AGC-FR-KQNF, AGC-FR-XHHT: whether `extra` fits beside a document of
+/// `document_chars` characters in `bound` characters.
+pub(super) fn fits_with(document_chars: usize, extra: &str, bound: usize) -> bool {
+    document_chars + extra.chars().count() <= bound
+}
+
 /// AGC-FR-KQNF, AGC-FR-XHHT: append `extra` to a whole `artifact` section when
 /// the section stays within `bound` characters. Returns whether it was added.
 pub(super) fn append_within(section: &mut InputSection, extra: &str, bound: usize) -> bool {
@@ -97,21 +103,26 @@ fn flow_section(sections: &mut [InputSection]) -> Option<(&mut InputSection, Flo
     Some((section, doc))
 }
 
-/// AGC-FR-KQNF: add the delivery state and the overlaps to a Flow's material.
-/// A Flow that fails validation adds neither.
+/// AGC-FR-KQNF: add the delivery state and the overlaps of a Flow to the
+/// `discussion_state` section. They count against the bound of the `artifact`
+/// section with the document. A Flow that fails validation adds neither.
 pub(super) fn extend_flow_material<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     roots: Roots<'_>,
     budget: &DocumentBudget,
-    sections: &mut [InputSection],
+    sections: &mut Vec<InputSection>,
 ) {
     let Some((section, doc)) = flow_section(sections) else { return };
+    let document_chars = section.body.chars().count();
     let mut drafts = crate::drafts::list_drafts_impl(roots.worktree).drafts;
     crate::drafts::attach_graduation(app, &mut drafts);
     let state = crate::flow_delivery::delivery_state(&doc, &drafts);
     let overlaps = crate::flow_overlap::overlaps(&doc);
     let extra = flow_context_text(&doc, &state, &overlaps);
-    let added = append_within(section, &extra, budget.bound_chars());
+    let added = fits_with(document_chars, &extra, budget.bound_chars());
+    if added {
+        append_state_text(sections, extra.trim_start_matches('\n'));
+    }
     logging::log_debug(
         app,
         &logging::BUFFER,
@@ -178,6 +189,35 @@ mod tests {
         let mut cut = section("abc", "flow");
         cut.truncated = true;
         assert!(!append_within(&mut cut, "x", 100));
+    }
+
+    /// AGC-FR-KQNF, AGC-FR-06: the delivery state and the overlaps go into
+    /// `discussion_state`, after the current comment, and the document stays
+    /// as it was; a cut document adds neither.
+    #[test]
+    fn the_flow_state_goes_into_the_discussion_state() {
+        let app = crate::tools::tests::mock_app();
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let root = crate::fs::RootFs::for_root(dir.path());
+        let current = InputSection { tag: TAG_CURRENT_COMMENT.into(), ..Default::default() };
+        let mut sections = vec![section(PLAN, "flow"), current.clone()];
+        let budget = DocumentBudget::default_window();
+        extend_flow_material(app.handle(), Roots::same(&root), &budget, &mut sections);
+        assert_eq!(sections[0].body, PLAN, "the document is unchanged");
+        assert_eq!(sections[2].tag, TAG_DISCUSSION_STATE);
+        assert!(sections[2].body.contains("Overlaps"), "{}", sections[2].body);
+        let mut cut = vec![section(PLAN, "flow"), current];
+        cut[0].truncated = true;
+        extend_flow_material(app.handle(), Roots::same(&root), &budget, &mut cut);
+        assert_eq!(cut.len(), 2, "a cut document adds no state");
+    }
+
+    /// AGC-FR-KQNF, AGC-FR-XHHT: the state fits beside the document within
+    /// the bound, the bound included.
+    #[test]
+    fn the_flow_state_counts_against_the_bound() {
+        assert!(fits_with(3, "0123456789", 13));
+        assert!(!fits_with(3, "0123456789", 12));
     }
 
     /// AGC-FR-KQNF: only the artifact section of a valid Flow qualifies.

@@ -62,9 +62,10 @@ pub fn build_input_within(
             sections.extend(note_section(roots, note_id));
             None
         }
-        // AGC-FR-UOPJ: the focus, and the rows of the plan proposals.
+        // AGC-FR-UOPJ: the summary of the plan; the focus and the rows of the
+        // plan proposals are in `discussion_state` (below).
         DiscussionTarget::Map => {
-            sections.push(map_context::map_context_section(roots, &discussion, trigger_comment_id));
+            sections.push(map_context::map_context_section(&discussion));
             None
         }
         target => {
@@ -73,15 +74,21 @@ pub fn build_input_within(
             material.document
         }
     };
-    let (history, question_set_unreadable) = discussion_history_with_status(
+    let parts = discussion_history_with_status(
         roots,
         &discussion,
         trigger_comment_id,
         budget.history_bound_chars(),
     );
-    sections.push(history);
+    sections.push(parts.history);
     sections.push(current_comment_section(roots, &discussion, trigger_comment_id));
-    BuiltInput { sections, document, question_set_unreadable }
+    // AGC-FR-06: the state follows the current comment.
+    sections.extend(parts.state);
+    if matches!(discussion.target, DiscussionTarget::Map) {
+        let focus = map_context::map_state_text(roots, &discussion, trigger_comment_id);
+        prepend_state_text(&mut sections, &format!("{focus}\n"));
+    }
+    BuiltInput { sections, document, question_set_unreadable: parts.unreadable }
 }
 
 /// The discussion an origin names, read from the store through the owner the

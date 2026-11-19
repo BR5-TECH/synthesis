@@ -61,6 +61,11 @@ describe("the indicator's figures", () => {
     expect(indicatorText(shown)).toBe("~33%");
   });
 
+  it("ERP-FR-XTQI: the sum counts the replayed part, and a split with none counts 0", () => {
+    expect(splitTotal({ ...SPLIT, replayed: 700 })).toBe(splitTotal(SPLIT) + 700);
+    expect(splitTotal(SPLIT)).toBe(3320);
+  });
+
   it("DDS-FR-KXWQ: before any turn the value is the estimate, marked", () => {
     const shown = shownContext(null, estimated(), false)!;
     expect(indicatorText(shown)).toBe("~33%");

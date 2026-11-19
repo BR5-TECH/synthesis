@@ -106,6 +106,11 @@ impl Draft {
     fn history(&self) -> InputSection {
         discussion_history_section(self.roots(), &self.thread(), "")
     }
+
+    /// AGC-FR-06: the `discussion_state` text beside the history.
+    fn state(&self) -> String {
+        discussion_state_text(self.roots(), &self.thread(), "")
+    }
 }
 
 // AGC-FR-EPNB, AGC-FR-TCCV
@@ -129,7 +134,7 @@ fn the_history_ends_with_every_hunk_of_the_open_proposal_by_place() {
         crate::draft_proposals::hunks::HunkState::Discussing,
     )
     .expect("held");
-    let body = d.history().body;
+    let body = d.state();
     let at = body.find("The open proposal to spec.md").expect("the open proposal is listed");
     let listing = &body[at..];
     assert!(body.trim_end().ends_with(listing.trim_end()), "it ends the section");
@@ -188,7 +193,7 @@ fn a_truncation_cuts_comments_and_keeps_the_open_proposal_whole() {
     let section = d.history();
     assert!(section.truncated, "the comments run past the bound");
     let listing = open_proposal_text(d.roots(), &d.thread().target).expect("open");
-    assert!(section.body.ends_with(&listing), "the proposal is whole at the end");
+    assert!(d.state().ends_with(&listing), "the proposal is whole in the state");
     assert!(section.body.contains("[Earlier comments omitted:"));
 }
 
@@ -245,7 +250,7 @@ fn an_artifact_target_reads_its_pending_proposal() {
         .find(|t| t.id == thread.id)
         .expect("thread");
     let roots = Roots { worktree: &root, store: &root };
-    let body = discussion_history_section(roots, &thread, "").body;
+    let body = discussion_state_text(roots, &thread, "");
     assert!(body.contains("The open proposal to prompts/review.md"), "{body}");
     assert!(body.contains(&format!(
         "  place 1 — id {} — pending — changes: \"Alpha line.\" — offers: \"Alpha better.\"",
@@ -260,7 +265,7 @@ fn the_open_proposal_stands_before_the_pending_question_set() {
     let set = super::super::pending_questions::tests::question_set(&d.thread_id);
     crate::comments::reserve_question_set_record(&d.root, &d.root, &d.thread_id, &set)
         .expect("reserved");
-    let body = d.history().body;
+    let body = d.state();
     let proposal = body.find("The open proposal to spec.md").expect("the proposal");
     let questions = body.find("A question set from arch").expect("the set");
     assert!(proposal < questions, "the proposal comes first");

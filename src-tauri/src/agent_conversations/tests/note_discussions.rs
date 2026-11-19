@@ -249,7 +249,7 @@ fn every_prompt_names_exactly_the_tags_its_builder_emits() {
         OriginKind::MapDiscussion,
     ] {
         let prompt = prompt_template(kind);
-        let expected = input_tags(kind);
+        let expected = described_tags(kind);
         // The tags as the prompt names them, in the order it names them in.
         // Matched on the angle-bracketed form rather than on the bare word, so a
         // prompt that happens to use "artifact" in its prose is not read as
@@ -265,6 +265,7 @@ fn every_prompt_names_exactly_the_tags_its_builder_emits() {
                 TAG_PLAN_REFERENCES,
                 TAG_DISCUSSION_HISTORY,
                 TAG_CURRENT_COMMENT,
+                TAG_DISCUSSION_STATE,
             ]
             .into_iter()
             .filter_map(|tag| {
@@ -283,7 +284,7 @@ fn every_prompt_names_exactly_the_tags_its_builder_emits() {
         }
         assert_eq!(
             named,
-            expected.to_vec(),
+            expected,
             "{} names exactly the tags its builder emits, in the same order",
             kind.as_str(),
         );

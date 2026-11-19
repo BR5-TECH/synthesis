@@ -2,8 +2,10 @@
 //! AGC-FR-HOND, AGC-FR-XOZQ, AGC-FR-YQVB, AGC-FR-MATQ).
 //!
 //! The section has a bound of its own, relative to the context window. Within
-//! it, the tail (decomposition, action requests, split, open proposal,
-//! question set) fills at most half, and the comments fill the rest. Comments
+//! it, the state (decomposition, action requests, split, open proposal,
+//! question set) fills at most half, and the comments fill the rest. The state
+//! goes into its own `discussion_state` section after `current_comment`
+//! (AGC-FR-06). Comments
 //! that do not fit are dropped whole, oldest first, so the agent always reads
 //! the newest part of the conversation.
 
@@ -98,7 +100,7 @@ pub(in crate::agent_conversations) fn omitted_comments_line(count: usize) -> Str
 
 /// The characters of text a comment's parts hold. Images are not counted, as
 /// the bound of AGC-FR-11 does not count them.
-fn text_chars(parts: &[InputPart]) -> usize {
+pub(in crate::agent_conversations) fn text_chars(parts: &[InputPart]) -> usize {
     parts
         .iter()
         .map(|part| match part {
@@ -142,9 +144,71 @@ fn end_of_text(parts: Vec<InputPart>, room: usize) -> Vec<InputPart> {
     vec![InputPart::Text(format!("{PARTIAL_COMMENT_LINE}{kept}"))]
 }
 
+/// AGC-FR-06: a `discussion_history` section of the anchor, the omitted line
+/// where `omitted` comments were dropped, and `comments`. The same order of
+/// parts as [`bounded_history`] gives, so the two give the same bytes for the
+/// same comments.
+pub(in crate::agent_conversations) fn compose_history(
+    anchor: &str,
+    omitted: usize,
+    comments: impl IntoIterator<Item = Vec<InputPart>>,
+    truncated: bool,
+) -> InputSection {
+    let mut parts: Vec<InputPart> = Vec::new();
+    if !anchor.is_empty() {
+        parts.push(InputPart::Text(anchor.to_string()));
+    }
+    if omitted > 0 {
+        parts.push(InputPart::Text(omitted_comments_line(omitted)));
+    }
+    parts.extend(comments.into_iter().flatten());
+    let mut section =
+        section_of_parts_within(TAG_DISCUSSION_HISTORY, Vec::new(), parts, usize::MAX);
+    section.truncated = truncated;
+    section
+}
+
+/// ERP-FR-IICX: the index of the first comment that a history of comments of
+/// `sizes` characters keeps in `room` characters beside an anchor of
+/// `anchor_chars`. 0 where every comment fits. `hint`, the first comment an
+/// earlier turn kept, is kept while the rest from it fits. Otherwise comments
+/// are dropped, oldest first, until the rest fits three quarters of the room.
+/// `None` where not even the newest comment fits the room whole. Pure.
+pub(in crate::agent_conversations) fn first_kept_comment(
+    anchor_chars: usize,
+    sizes: &[usize],
+    room: usize,
+    hint: Option<usize>,
+) -> Option<usize> {
+    let total = anchor_chars + sizes.iter().sum::<usize>();
+    if total <= room {
+        return Some(0);
+    }
+    let line = omitted_comments_line(sizes.len()).chars().count();
+    let from = |start: usize| anchor_chars + line + sizes[start..].iter().sum::<usize>();
+    if let Some(hint) = hint.filter(|h| *h > 0 && *h < sizes.len()) {
+        if from(hint) <= room {
+            return Some(hint);
+        }
+    }
+    for target in [room * 3 / 4, room] {
+        let mut used = anchor_chars + line;
+        let mut first = sizes.len();
+        while first > 0 && used + sizes[first - 1] <= target {
+            first -= 1;
+            used += sizes[first];
+        }
+        if first < sizes.len() {
+            return Some(first);
+        }
+    }
+    None
+}
+
 /// AGC-FR-HOND, AGC-FR-XOZQ, AGC-FR-YQVB: the `discussion_history` section of
-/// these comments (oldest first, each with its own parts) and this tail, in
-/// `bound` characters. The comments fill the bound less the tail. Comments that
+/// these comments (oldest first, each with its own parts) in `bound`
+/// characters less the tail, and the `discussion_state` section of the tail
+/// where it is not empty. Comments that
 /// do not fit are dropped whole, oldest first; the anchor stays first, and one
 /// line says how many were dropped. Where the newest comment alone does not
 /// fit, the section keeps the end of its text.
@@ -153,7 +217,7 @@ pub(in crate::agent_conversations) fn bounded_history(
     comments: Vec<Vec<InputPart>>,
     tail: (String, bool),
     bound: usize,
-) -> InputSection {
+) -> (InputSection, Option<InputSection>) {
     let (tail, tail_cut) = tail;
     let room = bound.saturating_sub(tail.chars().count());
     // AGC-FR-11: an anchor above the room keeps its start and says it is
@@ -167,7 +231,7 @@ pub(in crate::agent_conversations) fn bounded_history(
     if !anchor.is_empty() {
         parts.push(InputPart::Text(anchor));
     }
-    let mut truncated = tail_cut || anchor_cut;
+    let mut truncated = anchor_cut;
     if total <= room {
         parts.extend(comments.into_iter().flatten());
     } else {
@@ -203,10 +267,8 @@ pub(in crate::agent_conversations) fn bounded_history(
     let mut section =
         section_of_parts_within(TAG_DISCUSSION_HISTORY, Vec::new(), parts, usize::MAX);
     section.truncated = truncated;
-    if !tail.is_empty() {
-        append_open_proposal(&mut section, tail);
-    }
-    section
+    let state = (!tail.is_empty()).then(|| state_section(tail, tail_cut));
+    (section, state)
 }
 
 #[cfg(test)]

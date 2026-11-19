@@ -44,7 +44,7 @@ pub(super) mod rig_seam {
             // providers is the wire format the framework produces, never which
             // tools an agent was offered.
             .tools(request.tools.clone())
-            .additional_params(reasoning_params(endpoint))
+            .additional_params(call_params(request, endpoint))
             // AGC-FR-26: content telemetry would put the assembled context — and
             // in principle anything in it — on a span attribute.
             .record_content_telemetry(false)
@@ -60,6 +60,19 @@ pub(super) mod rig_seam {
             built = built.preamble(request.instructions.clone());
         }
         built
+    }
+
+    /// The provider parameters of a call: the reasoning of [`reasoning_params`],
+    /// and for an `openai` call its `prompt_cache_key` (CVL-FR-DNCX).
+    fn call_params(request: &AgentRequest, endpoint: &AiApiCall) -> Option<serde_json::Value> {
+        let reasoning = reasoning_params(endpoint);
+        let key = request.cache_key.as_ref().filter(|_| endpoint.provider == "openai");
+        let Some(key) = key else { return reasoning };
+        let mut params = reasoning.unwrap_or_else(|| serde_json::json!({}));
+        if let Some(object) = params.as_object_mut() {
+            object.insert("prompt_cache_key".to_string(), serde_json::json!(key));
+        }
+        Some(params)
     }
 
     /// The reasoning the agent asked for, in the shape an OpenAI-compatible
@@ -432,15 +445,15 @@ async fn carry_anthropic(
 /// presented, and the provider advancing its own breakpoint as the conversation
 /// grows is exactly that rule expressed on its side.
 ///
-/// The lifetime is the short one — five minutes, which spans a whole loop by a
-/// wide margin under the bound of CVL-FR-16. Asked for on Anthropic alone: a
+/// The lifetime is the long one — one hour, which spans the wait between two
+/// turns of a conversation as well as a whole loop. Asked for on Anthropic alone: a
 /// retention option on another provider's request switches on the framework's
 /// refusal of options a model cannot honour, and those providers cache a
 /// repeated prefix of their own accord.
 pub(super) fn anthropic_request(
     request: rig::completion::CompletionRequest,
 ) -> rig::completion::CompletionRequest {
-    request.cache(rig::completion::CacheRetention::Short)
+    request.cache(rig::completion::CacheRetention::Long)
 }
 
 /// The Anthropic completion model a turn's calls are carried by.
@@ -448,6 +461,10 @@ pub(super) fn anthropic_request(
 /// CVL-FR-KXTQ: the output-token limit is set here on every model. `rig` knows
 /// a default only for the model ids in its own catalog, and without a limit it
 /// refuses the call before it sends a request.
+///
+/// CVL-FR-TUBB: the wire also marks the end of the tool definitions and of the
+/// compiled prompt as a fixed place with the one-hour lifetime, so a later turn
+/// reuses them whatever its messages are.
 ///
 /// CVL-FR-HBNW: nothing here chooses thinking. The framework applies its own
 /// default for the model, which is adaptive thinking where its catalog marks
@@ -461,7 +478,10 @@ pub(super) fn anthropic_model(
     endpoint: &AiApiCall,
 ) -> rig::Model<rig::providers::anthropic::Messages> {
     let mut model = client.completion(endpoint.model_id.clone().unwrap_or_default());
-    model.wire = model.wire.with_default_max_tokens(ANTHROPIC_MAX_OUTPUT_TOKENS);
+    model.wire = model
+        .wire
+        .with_default_max_tokens(ANTHROPIC_MAX_OUTPUT_TOKENS)
+        .with_static_prefix_cache_ttl(rig::providers::anthropic::completion::CacheTtl::OneHour);
     model
 }
 

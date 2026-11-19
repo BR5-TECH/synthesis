@@ -28,6 +28,7 @@ const SPLIT_ROWS = [
   ["Discussion history", "history"],
   ["Current comment", "currentComment"],
   ["Tool results", "toolResults"],
+  ["Earlier exchanges", "replayed"],
 ] as const;
 
 /** The ring is drawn on a 16-unit box; the stroke runs on this radius. */
@@ -74,7 +75,7 @@ function SplitTip({ shown }: { shown: ShownContext }) {
       {SPLIT_ROWS.map(([label, key]) => (
         <span className="dds-context-tip__row" key={key}>
           <span>{label}</span>
-          <span className="dds-context-tip__num">~{fullTokens(shown.split[key])} est.</span>
+          <span className="dds-context-tip__num">~{fullTokens(shown.split[key] ?? 0)} est.</span>
         </span>
       ))}
       <span className="dds-context-tip__foot">

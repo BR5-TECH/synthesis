@@ -251,6 +251,7 @@ fn cvl_ts65_the_first_user_message_carries_ordered_content_parts() {
         tools: Vec::new(),
         native_tools: Vec::new(),
         stable_head_sections: 0,
+        ..Default::default()
     };
 
     let exchange = opening_exchange(&request, true);
@@ -328,6 +329,7 @@ fn cvl_ts66_a_text_only_request_carries_metadata_where_the_pictures_were() {
         tools: Vec::new(),
         native_tools: Vec::new(),
         stable_head_sections: 0,
+        ..Default::default()
     };
 
     let exchange = opening_exchange(&request, false);
@@ -361,6 +363,7 @@ fn cvl_ts66_a_text_only_request_carries_metadata_where_the_pictures_were() {
         tools: Vec::new(),
         native_tools: Vec::new(),
         stable_head_sections: 0,
+        ..Default::default()
     };
     assert_eq!(
         opening_exchange(&plain, true),

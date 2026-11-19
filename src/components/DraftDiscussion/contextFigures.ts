@@ -39,7 +39,8 @@ export function splitTotal(split: ContextSplit): number {
     split.document +
     split.history +
     split.currentComment +
-    split.toolResults
+    split.toolResults +
+    (split.replayed ?? 0)
   );
 }
 

@@ -363,8 +363,8 @@ fn every_discussion_prompt_asks_for_short_labels_and_concise_descriptions() {
     }
 }
 
-// CVL-FR-BHJE: each discussion prompt says that a waiting question set ends the
-// history, and that while it waits the agent replies with a comment and records
+// CVL-FR-BHJE: each discussion prompt says that a waiting question set stands
+// in `discussion_state`, and that while it waits the agent replies with a comment and records
 // no second set.
 #[test]
 fn every_discussion_prompt_says_to_reply_with_a_comment_while_a_set_waits() {
@@ -376,7 +376,7 @@ fn every_discussion_prompt_says_to_reply_with_a_comment_while_a_set_waits() {
         let lower = template.to_lowercase();
         assert!(
             lower.contains(
-                "a set of questions that waits for the author's answers stands at the end of the discussion history"
+                "a set of questions that waits for the author's answers stands in `<discussion_state>`"
             ),
             "{name} does not say where the waiting set stands",
         );

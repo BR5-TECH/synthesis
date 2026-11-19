@@ -49,6 +49,9 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
     let ModelCall { policy, deadline, model_calls, at_bound, compaction, speech_open, recovery } =
         call;
     let model_label = endpoint.model_id.as_deref().unwrap_or("<provider default>");
+    // CVL-FR-MOTF: the hashes of what this invocation presents. A compaction
+    // call presents another request, so it has no record.
+    let prefix = (!compaction).then(|| CallPrefix::of(request, exchange));
     for attempt in 1..=policy.max_attempts {
         check_cancelled(plan)?;
         // CVL-FR-SZDM: a steering message the turn took restarts the deadline,
@@ -140,6 +143,21 @@ pub(super) fn complete_with_retries<R: tauri::Runtime>(
                 }
                 reply
             });
+        // CVL-FR-MOTF, CVL-FR-XTMG: one record for the first attempt of each
+        // invocation, with what the provider reported of its cache.
+        if attempt == 1 {
+            if let Some(prefix) = &prefix {
+                emit_call_prefix(
+                    app,
+                    turns.buffer(),
+                    plan,
+                    endpoint,
+                    model_calls,
+                    prefix,
+                    outcome.as_ref().ok(),
+                );
+            }
+        }
         // CVL-FR-XBMT: every answered attempt, a compaction call included,
         // reports the model the response names.
         if let Ok(reply) = &outcome {

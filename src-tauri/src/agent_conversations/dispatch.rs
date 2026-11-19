@@ -105,6 +105,8 @@ pub(super) struct TurnPlan {
     /// AGC-FR-EFCL: the plan reference fingerprints that a Map turn's input was
     /// assembled with. A turn of another kind has none.
     pub(super) plan_fingerprints: Option<plan_references::AssembledFingerprints>,
+    /// ERP-FR-CMMA, ERP-FR-CRJL: the trigger comment; `None` for a speech turn.
+    pub(super) trigger_comment_id: Option<String>,
 }
 
 /// AGC-FR-24: `@<nickname> is thinking about <draft name>…` for a draft,
@@ -467,6 +469,8 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
     }
     // Read before the origin is moved into the plan below.
     let origin_kind = origin.kind();
+    // CVL-FR-DNCX: the calls of one agent in one discussion share a cache key.
+    let cache_key = conversation_cache_key(&agent.id, origin.discussion_id());
     document_language::log_document_language(app, turns.buffer(), "turn", &origin.target, language);
     // AGC-FR-16: the participant an agent contributes as, whether it is
     // answering or asking. Composed here so the two paths cannot disagree about
@@ -596,6 +600,30 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
     let max_model_calls = max_model_calls(
         tools.iter().any(|t| t.definition().name == crate::tools::propose_plan_changes::NAME),
     );
+    // ERP-FR-OPRO: the agent's own earlier exchanges, planned once the tools are
+    // final. The material then moves into the first opening.
+    let trigger_comment_id = match trigger {
+        Trigger::Comment(id) => Some(id.to_string()),
+        Trigger::Speech { .. } => None,
+    };
+    let definitions: Vec<_> = tools.iter().map(|tool| tool.definition()).collect();
+    let replay = replay_for_dispatch(
+        app,
+        turns.buffer(),
+        DispatchReplay {
+            turn_id: &turn.id,
+            roots,
+            origin: &origin,
+            agent: &agent,
+            provider: &provider,
+            trigger_comment_id: trigger_comment_id.as_deref(),
+            tools: &definitions,
+            instructions: &instructions,
+            budget: &document_budget,
+            advisor: setup.as_ref().is_some_and(|s| s.role == GroupRole::Advisor),
+        },
+        &mut input,
+    );
     let plan = TurnPlan {
         turn_id: turn.id.clone(),
         project_key: project_key.to_string(),
@@ -617,9 +645,13 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
             // CVL-FR-39: the material under discussion leads, and the discussion
             // itself follows it (CVL-FR-06), so the head is the run of sections
             // before the first one the conversation grows.
-            stable_head_sections: stable_head_of(&input),
+            stable_head_sections: if replay.blocks.is_empty() {
+                stable_head_of(&input)
+            } else {
+                replay.head
+            },
             input,
-            tools: tools.iter().map(|tool| tool.definition()).collect(),
+            tools: definitions,
             // CVL-FR-30: decided by the provider carrying the call and by nothing
             // else. Read from the dispatch's resolution rather than from the
             // resolved endpoint because the two are the same provider by
@@ -627,6 +659,8 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
             // and deciding it here is what lets the seam see a request whose
             // entries are already provider-decided.
             native_tools: conversation_native_tools(&provider),
+            cache_key: Some(cache_key),
+            replay: replay.blocks,
         },
         tools,
         model_calls: AtomicUsize::new(0),
@@ -646,6 +680,7 @@ pub(super) fn dispatch_grouped<R: tauri::Runtime>(
         group,
         attachments,
         plan_fingerprints,
+        trigger_comment_id,
     };
 
     let app = app.clone();

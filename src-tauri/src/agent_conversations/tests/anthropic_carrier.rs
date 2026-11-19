@@ -60,16 +60,16 @@ fn every_anthropic_model_carries_the_fixed_output_token_limit() {
     }
 }
 
-// CVL-FR-23: an Anthropic request asks for the provider's short cache
+// CVL-FR-23: an Anthropic request asks for the provider's long cache
 // retention, which the provider applies at the boundary it advances itself.
 // The limit of CVL-FR-KXTQ does not remove it.
 #[test]
-fn an_anthropic_request_asks_for_the_short_cache_retention() {
+fn an_anthropic_request_asks_for_the_long_cache_retention() {
     let request = AgentRequest::default();
     let exchange = opening_exchange(&request, false);
     let endpoint = anthropic_endpoint("https://example.invalid", "claude-opus-5-5", None);
     let built = anthropic_request(build_completion_request(&request, &exchange, &endpoint));
-    assert_eq!(built.options.cache, Some(rig::completion::CacheRetention::Short));
+    assert_eq!(built.options.cache, Some(rig::completion::CacheRetention::Long));
 }
 
 // CVL-FR-HBNW: no reasoning choice puts a parameter on an Anthropic request.
@@ -180,8 +180,20 @@ fn an_anthropic_call_reaches_the_messages_api_with_the_limit_and_no_reasoning() 
     assert_eq!(json["model"], "claude-opus-5-5");
     assert_eq!(json["max_tokens"], 32_000);
     assert!(json.get("reasoning").is_none(), "{body}");
-    // CVL-FR-23: the short retention, at the boundary the provider advances.
-    assert_eq!(json["cache_control"], serde_json::json!({ "type": "ephemeral" }), "{body}");
+    // CVL-FR-23: the long retention, at the boundary the provider advances.
+    assert_eq!(
+        json["cache_control"],
+        serde_json::json!({ "type": "ephemeral", "ttl": "1h" }),
+        "{body}"
+    );
+    // CVL-FR-TUBB: the end of the compiled prompt is a fixed place with the
+    // same lifetime.
+    let system = json["system"].as_array().expect("system blocks");
+    assert_eq!(
+        system.last().expect("a system block")["cache_control"],
+        serde_json::json!({ "type": "ephemeral", "ttl": "1h" }),
+        "{body}"
+    );
     // CVL-FR-HBNW: the framework's default for a model its catalog marks for
     // it is adaptive thinking.
     assert_eq!(json["thinking"]["type"], "adaptive", "{body}");

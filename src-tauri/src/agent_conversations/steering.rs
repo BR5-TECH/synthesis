@@ -298,6 +298,8 @@ pub(super) fn append_steering<R: tauri::Runtime>(
     if appended == 0 {
         return 0;
     }
+    // ERP-FR-CRJL: a turn that took a steering message is not captured.
+    conversation.replayable = false;
     // CVL-FR-ASBR: the ids and the count, never a body. A chunk has no id, so
     // the record counts chunks and never carries their text.
     logging::log_debug(

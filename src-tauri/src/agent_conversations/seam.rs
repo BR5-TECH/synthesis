@@ -50,6 +50,53 @@ pub struct AgentRequest {
     /// the assembled request of CVL-FR-01 is the same either way.
     #[serde(default)]
     pub stable_head_sections: usize,
+    /// CVL-FR-DNCX: the `prompt_cache_key` of an `openai` call — the first 32
+    /// hexadecimal characters of the SHA-256 of the agent id and the
+    /// discussion id. `None` where the request belongs to no conversation.
+    #[serde(default)]
+    pub cache_key: Option<String>,
+    /// ERP-FR-OPRO: the agent's own earlier exchanges, which the exchange opens
+    /// with before the input. Empty where no entry is selected (ERP-FR-SBBE).
+    #[serde(default)]
+    pub replay: Vec<ReplayBlock>,
+}
+
+/// ERP-FR-OPRO: one replayed entry: its opening user message, its rounds, and
+/// the assistant message of its answer where it has one.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplayBlock {
+    /// ERP-FR-ISTB, ERP-FR-VMRY: the sections of the opening message.
+    pub opening: Vec<InputSection>,
+    /// ERP-FR-GWPG: the messages of the entry after its opening.
+    pub rounds: Vec<rig::completion::Message>,
+    /// ERP-FR-BBXA: the answer, as the comment holds it now.
+    pub answer: Option<String>,
+}
+
+impl ReplayBlock {
+    /// The number of messages the block puts into the exchange.
+    pub fn message_count(&self) -> usize {
+        1 + self.rounds.len() + usize::from(self.answer.is_some())
+    }
+}
+
+/// ERP-FR-OPRO: the index of the input message in an exchange that opens with
+/// the replay of `request` — the number of replayed messages before it.
+pub fn opening_of(request: &AgentRequest) -> usize {
+    request.replay.iter().map(ReplayBlock::message_count).sum()
+}
+
+/// CVL-FR-DNCX: the cache key of the calls of one agent in one discussion. It
+/// holds no name and no content: a hash of two ids alone.
+pub fn conversation_cache_key(agent_id: &str, discussion_id: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(agent_id.as_bytes());
+    hasher.update([0u8]);
+    hasher.update(discussion_id.as_bytes());
+    let digest = hasher.finalize();
+    digest.iter().take(16).map(|b| format!("{b:02x}")).collect()
 }
 
 /// CVL-FR-12: one reply from the model — what it said, and what it asked for.

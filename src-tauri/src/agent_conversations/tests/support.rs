@@ -431,6 +431,7 @@ pub(super) fn wire_request() -> AgentRequest {
         tools: Vec::new(),
         native_tools: Vec::new(),
         stable_head_sections: 0,
+        ..Default::default()
     }
 }
 

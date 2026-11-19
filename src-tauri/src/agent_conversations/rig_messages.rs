@@ -18,9 +18,36 @@ pub(super) fn opening_exchange(
     request: &AgentRequest,
     with_images: bool,
 ) -> Vec<rig::completion::Message> {
+    // ERP-FR-OPRO: the replay comes first, then the input message.
+    let mut exchange = replay_messages(request, with_images);
+    exchange.push(input_message(request, with_images));
+    exchange
+}
+
+/// ERP-FR-OPRO: the messages of the replay of `request`: for each block, its
+/// opening, its rounds, and the assistant message of its answer. Every opening
+/// is rendered by the renderer of the input (ERP-FR-IVGL).
+fn replay_messages(request: &AgentRequest, with_images: bool) -> Vec<rig::completion::Message> {
+    let mut messages = Vec::with_capacity(opening_of(request));
+    for block in &request.replay {
+        let opening = with_images
+            .then(|| multimodal_message_of(&block.opening))
+            .flatten()
+            .unwrap_or_else(|| rig::completion::Message::user(render_sections(&block.opening)));
+        messages.push(opening);
+        messages.extend(block.rounds.iter().cloned());
+        if let Some(answer) = &block.answer {
+            messages.push(rig::completion::Message::assistant(answer.clone()));
+        }
+    }
+    messages
+}
+
+/// CVL-FR-12: the message of the input of `request`.
+fn input_message(request: &AgentRequest, with_images: bool) -> rig::completion::Message {
     if with_images {
         if let Some(message) = multimodal_user_message(request) {
-            return vec![message];
+            return message;
         }
         // AGC-FR-36 is all or nothing, and the caller has already recorded that
         // this turn carries its images. Reaching here would mean sending the
@@ -33,7 +60,7 @@ pub(super) fn opening_exchange(
             "a turn carrying images must build the multimodal request",
         );
     }
-    vec![rig::completion::Message::user(render_input(request))]
+    rig::completion::Message::user(render_input(request))
 }
 
 /// CVL-FR-39: the text of the input's **stable head**, or `None` where the
@@ -55,10 +82,13 @@ pub(super) fn stable_head_text(
     exchange: &[rig::completion::Message],
 ) -> Option<String> {
     let sections = request.stable_head_sections;
-    if sections == 0 || sections >= request.input.len() {
+    // CVL-FR-39: where the exchange opens with a replay, the head is the
+    // material of its first opening (ERP-FR-ISTB).
+    let first = request.replay.first().map_or(request.input.as_slice(), |b| b.opening.as_slice());
+    if sections == 0 || sections >= first.len() {
         return None;
     }
-    let head = &request.input[..sections];
+    let head = &first[..sections];
     // The head is rendered through whichever renderer produced the message it
     // must be a prefix of (CVL-FR-37): an opening message carrying image content
     // was built by `multimodal_user_message`, and one that is prose alone by
@@ -97,6 +127,20 @@ pub(super) fn stable_head_of(input: &[InputSection]) -> usize {
         .take_while(|section| {
             section.tag != TAG_DISCUSSION_HISTORY && section.tag != TAG_CURRENT_COMMENT
         })
+        .count()
+}
+
+/// AGC-FR-35, ERP-FR-ISTB: the pictures a request holds: those of its input
+/// and those of its replayed openings, which hold the material where a replay
+/// is selected.
+pub fn request_image_count(request: &AgentRequest) -> usize {
+    request
+        .replay
+        .iter()
+        .flat_map(|block| &block.opening)
+        .chain(&request.input)
+        .flat_map(|section| &section.parts)
+        .filter(|part| matches!(part, InputPart::Image(_)))
         .count()
 }
 

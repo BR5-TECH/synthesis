@@ -52,18 +52,27 @@ pub struct ContextSplit {
     pub instructions: u64,
     /// The material section as sent.
     pub document: u64,
-    /// The `discussion_history` section.
+    /// The `discussion_history` and `discussion_state` sections, and the
+    /// replayed openings and answers (ERP-FR-XTQI).
     pub history: u64,
     /// The `current_comment` section.
     pub current_comment: u64,
-    /// Every tool result the exchange holds.
+    /// Every tool result of the current turn.
     pub tool_results: u64,
+    /// ERP-FR-XTQI: the replayed rounds and stored states.
+    #[serde(default)]
+    pub replayed: u64,
 }
 
 impl ContextSplit {
-    /// AGC-FR-OBUA: the sum of the five parts.
+    /// AGC-FR-OBUA: the sum of the six parts.
     pub fn total(&self) -> u64 {
-        self.instructions + self.document + self.history + self.current_comment + self.tool_results
+        self.instructions
+            + self.document
+            + self.history
+            + self.current_comment
+            + self.tool_results
+            + self.replayed
     }
 }
 
@@ -231,8 +240,36 @@ pub(super) fn tool_result_tokens(exchange: &[Message]) -> u64 {
 pub(super) fn split_of_call(request: &AgentRequest, exchange: &[Message]) -> ContextSplit {
     let instructions = instruction_tokens(&request.instructions, &request.tools);
     let mut split = split_of_sections(instructions, &request.input);
-    split.tool_results = tool_result_tokens(exchange);
+    add_replay(&mut split, request);
+    // ERP-FR-XTQI: the results of the current turn alone.
+    let opening = opening_of(request).min(exchange.len());
+    split.tool_results = tool_result_tokens(&exchange[opening..]);
     split
+}
+
+/// ERP-FR-XTQI: add the replay of `request` to `split`: the openings and the
+/// answers count as `history` (the material of the first opening as
+/// `document`), the rounds and the stored states as `replayed`.
+pub(super) fn add_replay(split: &mut ContextSplit, request: &AgentRequest) {
+    for (index, block) in request.replay.iter().enumerate() {
+        let head = if index == 0 { request.stable_head_sections } else { 0 };
+        for (at, section) in block.opening.iter().enumerate() {
+            let tokens = section_tokens(section);
+            if at < head {
+                split.document += tokens;
+            } else if section.tag == TAG_DISCUSSION_STATE {
+                split.replayed += tokens;
+            } else {
+                split.history += tokens;
+            }
+        }
+        let rounds_chars: usize =
+            block.rounds.iter().map(|m| compaction::message_text(m).chars().count()).sum();
+        split.replayed += estimate_tokens(rounds_chars as u64);
+        if let Some(answer) = &block.answer {
+            split.history += estimate_tokens(answer.chars().count() as u64);
+        }
+    }
 }
 
 /// CVL-FR-OPTI → AGC-FR-NJXW: the `report_context` seam. Completes the figures

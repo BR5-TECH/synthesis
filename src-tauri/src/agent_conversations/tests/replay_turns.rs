@@ -206,8 +206,8 @@ fn the_records_hold_counts_and_hashes_alone() {
     let prefix = wait_for_record(&second.id, "agent call prefix");
     assert_eq!(field(&prefix, "divergesFromPreviousTurnAt"), "none");
     let text = format!("{planned:?}{prefix:?}");
-    for secret in ["NOTES-V1", "FIRST-ANSWER", "and now?", SOURCE] {
-        assert!(!text.contains(secret), "a record holds {secret:?}: {text}");
+    for word in ["NOTES-V1", "FIRST-ANSWER", "and now?", SOURCE] {
+        assert!(!text.contains(word), "a record holds the exchange word {word:?}");
     }
 }
 

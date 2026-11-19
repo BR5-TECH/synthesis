@@ -40,7 +40,7 @@ pub(super) fn openrouter_request(
     // a round accumulated — the part this module could otherwise mark only by
     // reshaping a tool result into a form not every endpoint behind this one
     // accepts.
-    builder.advancing_boundary = Some(openrouter_rs::api::chat::CacheControl::ephemeral());
+    builder.advancing_boundary = Some(cache_mark());
     // CVL-FR-40: a cache belongs to the upstream that wrote it, so the call asks
     // for the one that served the last answered call of this model. Fallback
     // stays allowed: an upstream that has gone away costs this call its cache
@@ -250,15 +250,19 @@ pub(super) fn reply_from_openrouter(
             .as_ref()
             .map(|usage| usage.completion_tokens as u64)
             .filter(|tokens| *tokens > 0),
-        // CVL-FR-28: this client's usage report carries a prompt-token total and
-        // no cached/uncached split, so this provider reports neither and
-        // contributes nothing to either total. A total reported as wholly
-        // uncached would be a confident claim that caching had not landed, which
-        // is the one thing the record must not say when it does not know.
-        input_tokens: None,
-        // CVL-FR-28: this client reports no cache-write and no reasoning
-        // count, and no request identifier of its own on an answered call.
-        cache_write_tokens: None,
+        // CVL-FR-IRYL: the cached input tokens and the cache-write tokens that
+        // the provider reports in the details of its prompt tokens. Where it
+        // reports no cached count, there is no split: a total reported as
+        // wholly uncached would claim that caching had not landed.
+        input_tokens: response.usage.as_ref().and_then(input_split),
+        cache_write_tokens: response
+            .usage
+            .as_ref()
+            .and_then(|usage| usage.prompt_tokens_details.as_ref())
+            .and_then(|details| details.cache_write_tokens)
+            .map(u64::from),
+        // CVL-FR-28: this client reports no reasoning count, and no request
+        // identifier of its own on an answered call.
         reasoning_tokens: None,
         provider_request_id: None,
         response_id: Some(response.id.clone()).filter(|id| !id.is_empty()),
@@ -347,7 +351,7 @@ pub(super) mod openrouter_bridge {
     /// marks the message whole, which is the mark that would have stood at that
     /// boundary anyway.
     fn mark_at_head(message: &mut OrMessage, head: &str) -> bool {
-        use openrouter_rs::api::chat::{CacheControl, Content, ContentPart};
+        use openrouter_rs::api::chat::{Content, ContentPart};
         if head.is_empty() {
             return false;
         }
@@ -365,29 +369,27 @@ pub(super) mod openrouter_bridge {
             return false;
         }
         message.content = Content::Parts(vec![
-            ContentPart::text_with_cache_control(head.to_string(), CacheControl::ephemeral()),
+            ContentPart::text_with_cache_control(head.to_string(), super::cache_mark()),
             ContentPart::text(tail.to_string()),
         ]);
         true
     }
 
     fn mark_for_caching(message: &mut OrMessage) {
-        use openrouter_rs::api::chat::{CacheControl, Content, ContentPart};
+        use openrouter_rs::api::chat::{Content, ContentPart};
         match &mut message.content {
             Content::Text(text) => {
                 message.content = Content::Parts(vec![ContentPart::text_with_cache_control(
                     text.clone(),
-                    // The short lifetime, which is this SDK's default when no
-                    // TTL is named and which spans a whole loop by a wide margin
-                    // under the bound of CVL-FR-16.
-                    CacheControl::ephemeral(),
+                    // CVL-FR-23: the one-hour lifetime.
+                    super::cache_mark(),
                 )]);
             }
             Content::Parts(parts) => {
                 if let Some(ContentPart::Text { cache_control, .. }) =
                     parts.iter_mut().rev().find(|part| matches!(part, ContentPart::Text { .. }))
                 {
-                    *cache_control = Some(CacheControl::ephemeral());
+                    *cache_control = Some(super::cache_mark());
                 }
             }
             // A content shape this build has never heard of, the SDK's enum
@@ -647,4 +649,20 @@ pub(super) fn effort_of(effort: &str) -> openrouter_rs::types::Effort {
         "none" => Effort::None,
         other => Effort::Other(other.to_string()),
     }
+}
+
+/// CVL-FR-23: the cache mark of every OpenRouter call, with the one-hour
+/// lifetime.
+pub(super) fn cache_mark() -> openrouter_rs::api::chat::CacheControl {
+    openrouter_rs::api::chat::CacheControl::ephemeral_with_ttl("1h")
+}
+
+/// CVL-FR-IRYL: the cached and uncached split of a usage report, where the
+/// provider reports a cached count. Pure.
+pub(super) fn input_split(
+    usage: &openrouter_rs::types::completion::ResponseUsage,
+) -> Option<InputTokens> {
+    let cached = u64::from(usage.prompt_tokens_details.as_ref()?.cached_tokens?);
+    let total = u64::from(usage.prompt_tokens);
+    Some(InputTokens { cached, uncached: total.saturating_sub(cached) })
 }

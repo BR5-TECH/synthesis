@@ -157,20 +157,5 @@ fn more_changes_line(count: usize) -> String {
     format!("  …and {count} more changes.\n")
 }
 
-/// AGC-FR-TCCV: put the open proposal at the end of a section that was
-/// bounded with room for it, so a truncation cuts comments and keeps the
-/// proposal whole.
-pub(in crate::agent_conversations) fn append_open_proposal(
-    section: &mut InputSection,
-    text: String,
-) {
-    section.body.push_str(&text);
-    // A section that holds an image carries its parts; the proposal goes after
-    // the last of them, as it goes after the last line of the text form.
-    if !section.parts.is_empty() {
-        section.parts.push(InputPart::Text(text));
-    }
-}
-
 #[cfg(test)]
 mod tests;

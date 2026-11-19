@@ -161,6 +161,7 @@ fn the_assembled_request_is_the_same_shape_whichever_client_would_carry_it() {
             tools: Vec::new(),
             native_tools: Vec::new(),
             stable_head_sections,
+            ..Default::default()
         };
         let shapes: Vec<_> = ["openrouter", "anthropic", "openai", "custom"]
             .iter()

@@ -3,7 +3,9 @@
 //! MPR-FR-NXDX, MPR-FR-ZCAM).
 
 use super::*;
-use crate::agent_conversations::map_context::{focus_of, map_context_section, Focus};
+use crate::agent_conversations::map_context::{
+    focus_of, map_context_section, map_state_text, Focus,
+};
 use crate::comments::{
     Attachment, AttachmentInput, MapLens, MapNodeKind, MapNodeRef, Opening, Stamp, ThreadRef,
 };
@@ -167,17 +169,15 @@ fn the_focus_is_the_latest_node_of_a_human_comment_then_the_thread_then_the_map(
     assert_eq!(focus_of(&thread, &third), Focus::Node(&b), "the latest comment that carries one");
     assert_eq!(focus_of(&thread, "unknown trigger"), Focus::Node(&b));
 
-    let section = map_context_section(Roots::same(&root), &thread, &second);
-    let attribute =
-        |key: &str| section.attributes.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone());
-    assert_eq!(attribute("focus").as_deref(), Some("node"));
-    assert_eq!(attribute("focus_lens").as_deref(), Some("delivery"));
-    assert_eq!(attribute("focus_kind").as_deref(), Some("milestone"));
-    assert_eq!(attribute("focus_id").as_deref(), Some("b"));
-    assert!(section.body.starts_with("Focus: the delivery milestone"));
-    let whole_section = map_context_section(Roots::same(&root), &whole, &whole.comments[0].id);
-    assert!(whole_section.attributes.contains(&("focus".into(), "map".into())));
-    assert!(whole_section.body.starts_with("Focus: the whole Map."));
+    // AGC-FR-UOPJ: the focus is in the state, and `map_context` names no focus.
+    let state = map_state_text(Roots::same(&root), &thread, &second);
+    assert!(state.starts_with("Focus: the delivery milestone"), "{state}");
+    assert!(state.contains("(id b)."), "{state}");
+    let section = map_context_section(&thread);
+    assert!(!section.attributes.iter().any(|(k, _)| k.starts_with("focus")));
+    assert!(!section.body.contains("Focus:"), "{}", section.body);
+    let whole_state = map_state_text(Roots::same(&root), &whole, &whole.comments[0].id);
+    assert!(whole_state.starts_with("Focus: the whole Map."), "{whole_state}");
 }
 
 fn rows() -> Vec<MapPlanRow> {
@@ -233,8 +233,8 @@ fn the_input_holds_each_row_with_its_state() {
     let f = PlanFixture::new();
     let roots = Roots { worktree: &f.h.root(), store: &f.store() };
     let origin = f.origin();
-    let empty = map_context_section(roots, &thread_of(roots.store, &f.discussion_id), "");
-    assert!(empty.body.contains("Plan proposals of this discussion:\nnone\n"));
+    let empty = map_state_text(roots, &thread_of(roots.store, &f.discussion_id), "");
+    assert!(empty.contains("Plan proposals of this discussion:\nnone\n"), "{empty}");
 
     let comment = ProposalComment {
         body: "Rows. <spoken>Rows.</spoken>".into(),
@@ -255,10 +255,12 @@ fn the_input_holds_each_row_with_its_state() {
     // because the read of the delivery source needs the application handle.
     assert_eq!(
         input.iter().map(|s| s.tag.as_str()).collect::<Vec<_>>(),
-        vec![TAG_MAP_CONTEXT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT]
+        vec![TAG_MAP_CONTEXT, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT, TAG_DISCUSSION_STATE]
     );
-    let body = &input[0].body;
-    assert!(body.contains("Focus: the whole Map."), "{body}");
+    // AGC-FR-UOPJ: the focus and the rows are in `discussion_state`.
+    let body = &input[3].body;
+    assert!(body.starts_with("Focus: the whole Map."), "{body}");
+    assert!(!input[0].body.contains("Focus:"), "{}", input[0].body);
     for line in [
         "- proposal 1 row \"a\": new issue \"Relay auth\": rejected",
         "- proposal 1 row \"b\": new draft \"Finish relay\": accepted (draft created)",
@@ -322,10 +324,10 @@ fn an_accepted_issue_row_names_its_number() {
     let decided =
         crate::map_plan::accept_row(&f.app(), &f.discussion_id, &proposal.id, "n").unwrap();
     let number = decided.rows[0].result.as_ref().unwrap().issue_number.unwrap();
-    let section = map_context_section(roots, &thread_of(roots.store, &f.discussion_id), "");
+    let state = map_state_text(roots, &thread_of(roots.store, &f.discussion_id), "");
     let line =
         format!("- proposal 1 row \"n\": new issue \"Relay auth\": accepted (issue #{number})");
-    assert!(section.body.contains(&line), "{line} missing from {}", section.body);
+    assert!(state.contains(&line), "{line} missing from {state}");
 }
 
 // MPR-FR-NXDX, AGC-FR-UOPJ, GDP-FR-LKXA: the short summary of the plan, the

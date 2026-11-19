@@ -96,7 +96,7 @@ fn the_history_ends_with_the_decomposition_and_the_pending_body() {
     let first = d.propose("relay-auth", "FIRST-BODY", 1);
     d.reject(&first.id);
     let second = d.propose("relay-sync", "SECOND-BODY", 2);
-    let body = discussion_history_section(d.roots(), &d.thread(), "").body;
+    let body = discussion_state_text(d.roots(), &d.thread(), "");
     let named = format!("The decomposition {} of this draft, not confirmed,", first.set_id);
     let at = body.find(&named).expect("the decomposition, by its id");
     let tail = &body[at..];

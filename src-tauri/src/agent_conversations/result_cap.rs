@@ -140,6 +140,10 @@ pub(super) fn push_tool_result<R: tauri::Runtime>(
             },
         );
     }
+    // ERP-FR-NKLF: the stamp of a result that read one file.
+    if let Some(stamp) = stamp_of(plan.roots.borrowed(), call) {
+        conversation.stamps.push(stamp);
+    }
     conversation.exchange.push(rig::completion::Message::tool_result(
         call.id.clone(),
         call.function.name.clone(),

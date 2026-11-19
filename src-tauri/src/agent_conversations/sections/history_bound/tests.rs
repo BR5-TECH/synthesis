@@ -12,7 +12,7 @@ fn comments(n: usize, size: usize) -> Vec<Vec<InputPart>> {
 // whole, with no omitted line, and the section is not truncated.
 #[test]
 fn comments_within_the_room_stand_whole() {
-    let section = bounded_history(String::new(), comments(3, 100), (String::new(), false), 1_000);
+    let section = bounded_history(String::new(), comments(3, 100), (String::new(), false), 1_000).0;
     assert!(!section.truncated);
     assert!(!section.body.contains("[Earlier comments omitted"));
     assert!(section.body.starts_with("c00:"));
@@ -24,7 +24,7 @@ fn comments_within_the_room_stand_whole() {
 #[test]
 fn above_the_bound_the_oldest_comments_go_first() {
     // Ten comments of 101 characters each (with the line break), in 600.
-    let section = bounded_history(String::new(), comments(10, 100), (String::new(), false), 600);
+    let section = bounded_history(String::new(), comments(10, 100), (String::new(), false), 600).0;
     assert!(section.truncated);
     // 600 less the omitted line leaves room for five comments.
     let line = omitted_comments_line(5);
@@ -41,7 +41,7 @@ fn above_the_bound_the_oldest_comments_go_first() {
 fn the_anchor_stays_first() {
     let anchor = "This conversation is anchored to characters 1..5 of the file:\n\nquote\n\n";
     let section =
-        bounded_history(anchor.to_string(), comments(10, 100), (String::new(), false), 600);
+        bounded_history(anchor.to_string(), comments(10, 100), (String::new(), false), 600).0;
     assert!(section.body.starts_with(anchor));
     assert!(section.body[anchor.len()..].starts_with("[Earlier comments omitted:"));
     assert!(section.body.chars().count() <= 600);
@@ -53,7 +53,7 @@ fn the_anchor_stays_first() {
 fn a_newest_comment_too_long_keeps_its_end() {
     let mut list = comments(2, 100);
     list.push(comment(&format!("START{}END", "y".repeat(2_000))));
-    let section = bounded_history(String::new(), list, (String::new(), false), 500);
+    let section = bounded_history(String::new(), list, (String::new(), false), 500).0;
     assert!(section.truncated);
     assert!(section
         .body
@@ -63,24 +63,38 @@ fn a_newest_comment_too_long_keeps_its_end() {
     assert!(section.body.chars().count() <= 500);
 }
 
-// AGC-FR-YQVB: the comments fill the bound less the tail, and the tail ends
-// the section.
+// AGC-FR-YQVB, AGC-FR-06: the comments fill the bound less the state, and the
+// state is its own `discussion_state` section.
 #[test]
-fn the_tail_ends_the_section_and_takes_its_room() {
+fn the_state_is_its_own_section_and_takes_its_room() {
     let tail = format!("\nTAIL{}\n", "t".repeat(195));
-    let section = bounded_history(String::new(), comments(10, 100), (tail.clone(), false), 600);
-    assert!(section.body.ends_with(&tail));
+    let (section, state) =
+        bounded_history(String::new(), comments(10, 100), (tail.clone(), false), 600);
+    let state = state.expect("a state section");
+    assert_eq!(state.tag, TAG_DISCUSSION_STATE);
+    assert_eq!(state.body, tail);
+    assert!(!state.truncated);
+    assert!(!section.body.contains("TAIL"));
     // 600 less a 201-character tail leaves room for three comments.
     assert!(section.body.starts_with(&omitted_comments_line(7)));
     assert!(section.body.chars().count() <= 600);
 }
 
-// AGC-FR-MATQ: a tail that was cut makes the section truncated, also when
-// every comment fits.
+// AGC-FR-MATQ: a state that was cut marks the state section truncated, and
+// the history stays whole when every comment fits.
 #[test]
-fn a_cut_tail_marks_the_section_truncated() {
-    let section = bounded_history(String::new(), comments(1, 10), ("\ntail\n".into(), true), 1_000);
-    assert!(section.truncated);
+fn a_cut_state_marks_the_state_truncated() {
+    let (section, state) =
+        bounded_history(String::new(), comments(1, 10), ("\ntail\n".into(), true), 1_000);
+    assert!(state.expect("a state section").truncated);
+    assert!(!section.truncated);
+}
+
+// AGC-FR-06: an empty state gives no `discussion_state` section.
+#[test]
+fn an_empty_state_gives_no_section() {
+    let (_, state) = bounded_history(String::new(), comments(1, 10), (String::new(), false), 1_000);
+    assert!(state.is_none());
 }
 
 // AGC-FR-HOND: the bound is the greater of `history_tokens × 4` and 40,000
@@ -114,7 +128,7 @@ fn the_budget_reads_the_history_percent() {
 #[test]
 fn an_anchor_above_the_bound_is_cut() {
     let anchor = format!("ANCHOR{}", "a".repeat(50_000));
-    let section = bounded_history(anchor, Vec::new(), (String::new(), false), 40_000);
+    let section = bounded_history(anchor, Vec::new(), (String::new(), false), 40_000).0;
     assert!(section.truncated);
     assert!(section.body.starts_with("ANCHOR"));
     assert!(section.body.contains("[This material is partial: it was truncated here.]"));
@@ -126,11 +140,12 @@ fn an_anchor_above_the_bound_is_cut() {
 #[test]
 fn no_room_omits_every_comment() {
     let tail = "t".repeat(1_000);
-    let section = bounded_history(String::new(), comments(3, 100), (tail.clone(), false), 1_000);
+    let (section, state) =
+        bounded_history(String::new(), comments(3, 100), (tail.clone(), false), 1_000);
     assert!(section.truncated);
     assert!(section.body.starts_with(&omitted_comments_line(3)));
     assert!(!section.body.contains("c02:"));
-    assert!(section.body.ends_with(&tail));
+    assert_eq!(state.expect("a state section").body, tail);
 }
 
 // AGC-FR-HOND: comments that fill the room exactly stand whole.
@@ -138,9 +153,9 @@ fn no_room_omits_every_comment() {
 fn comments_that_fill_the_room_exactly_stand_whole() {
     let list = comments(3, 100);
     let exact: usize = list.iter().map(|c| text_chars(c)).sum();
-    let section = bounded_history(String::new(), list.clone(), (String::new(), false), exact);
+    let section = bounded_history(String::new(), list.clone(), (String::new(), false), exact).0;
     assert!(!section.truncated);
-    let short = bounded_history(String::new(), list, (String::new(), false), exact - 1);
+    let short = bounded_history(String::new(), list, (String::new(), false), exact - 1).0;
     assert!(short.truncated);
     assert!(short.body.starts_with("[Earlier comments omitted:"));
 }
@@ -150,9 +165,35 @@ fn comments_that_fill_the_room_exactly_stand_whole() {
 #[test]
 fn a_single_comment_too_long_says_it_is_partial() {
     let list = vec![comment(&format!("START{}END", "y".repeat(2_000)))];
-    let section = bounded_history(String::new(), list, (String::new(), false), 500);
+    let section = bounded_history(String::new(), list, (String::new(), false), 500).0;
     assert!(section.truncated);
     assert!(section.body.starts_with(PARTIAL_COMMENT_LINE));
     assert!(section.body.trim_end().ends_with("END"));
     assert!(section.body.chars().count() <= 500);
+}
+
+// ERP-FR-IICX: every comment fits; over the room the rest fits three
+// quarters of it; a hint is kept while the rest from it fits the room.
+#[test]
+fn the_first_kept_comment_follows_the_room_and_the_hint() {
+    let sizes = [100usize; 10];
+    assert_eq!(first_kept_comment(0, &sizes, 1_000, None), Some(0));
+    let line = omitted_comments_line(10).chars().count();
+    let start = first_kept_comment(0, &sizes, 800, None).expect("a start");
+    assert!(line + 100 * (10 - start) <= 600, "within three quarters: {start}");
+    assert!(line + 100 * (10 - start + 1) > 600, "and no more dropped: {start}");
+    // A hint whose rest fits the room is kept, though it is above 3/4.
+    assert_eq!(first_kept_comment(0, &sizes, 800, Some(3)), Some(3));
+    // A hint whose rest does not fit is computed again.
+    assert_eq!(first_kept_comment(0, &sizes, 800, Some(1)), Some(start));
+}
+
+// ERP-FR-QJEM: a newest comment above the room gives no start, and the
+// anchor counts against the room.
+#[test]
+fn a_newest_comment_above_the_room_gives_no_start() {
+    assert_eq!(first_kept_comment(0, &[100, 900], 500, None), None);
+    let line = omitted_comments_line(3).chars().count();
+    let start = first_kept_comment(200, &[100, 100, 100], 300 + line, None);
+    assert_eq!(start, Some(2), "the anchor takes room");
 }

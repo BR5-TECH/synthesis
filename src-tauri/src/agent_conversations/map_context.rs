@@ -129,36 +129,36 @@ pub(crate) fn proposal_rows_summary(roots: Roots<'_>, discussion_id: &str) -> Ve
     lines
 }
 
-/// AGC-FR-UOPJ: the `map_context` section of a Map thread, with the focus and
-/// the plan proposal rows.
-pub(super) fn map_context_section(
+/// AGC-FR-UOPJ: the `map_context` section of a Map thread. It holds the short
+/// summary of the delivery plan, which [`extend_map_material`] adds. The focus
+/// and the rows of the plan proposals change from turn to turn, so they are in
+/// `discussion_state` (see [`map_state_text`]).
+pub(super) fn map_context_section(discussion: &Discussion) -> InputSection {
+    let attributes = vec![("thread_id".to_string(), discussion.id.clone())];
+    section(TAG_MAP_CONTEXT, attributes, MAP_CONTEXT_LINE.to_string())
+}
+
+/// The first line of the `map_context` section.
+pub(super) const MAP_CONTEXT_LINE: &str = "This thread discusses the Map of the delivery plan.";
+
+/// AGC-FR-UOPJ, MPR-FR-PMLX, MPR-FR-NXDX: the part of `discussion_state` of a
+/// Map turn: its focus, and the state of each row of the plan proposals of the
+/// discussion.
+pub(super) fn map_state_text(
     roots: Roots<'_>,
     discussion: &Discussion,
     trigger_comment_id: &str,
-) -> InputSection {
-    let focus = focus_of(discussion, trigger_comment_id);
-    let mut attributes = vec![("thread_id".to_string(), discussion.id.clone())];
-    let mut body = String::new();
-    match focus {
-        Focus::Node(node) => {
-            attributes.push(("focus".to_string(), "node".to_string()));
-            attributes.push(("focus_lens".to_string(), node.lens.as_str().to_string()));
-            attributes.push(("focus_kind".to_string(), node.kind.as_str().to_string()));
-            attributes.push(("focus_id".to_string(), node.id.clone()));
-            attributes.push(("focus_label".to_string(), node.label.clone()));
-            body.push_str(&format!(
-                "Focus: the {} {} \"{}\" (id {}).",
-                node.lens.as_str(),
-                node.kind.as_str(),
-                node.label,
-                node.id
-            ));
-        }
-        Focus::WholeMap => {
-            attributes.push(("focus".to_string(), "map".to_string()));
-            body.push_str("Focus: the whole Map.");
-        }
-    }
+) -> String {
+    let mut body = match focus_of(discussion, trigger_comment_id) {
+        Focus::Node(node) => format!(
+            "Focus: the {} {} \"{}\" (id {}).",
+            node.lens.as_str(),
+            node.kind.as_str(),
+            node.label,
+            node.id
+        ),
+        Focus::WholeMap => "Focus: the whole Map.".to_string(),
+    };
     body.push_str("\n\nPlan proposals of this discussion:\n");
     let rows = proposal_rows_summary(roots, &discussion.id);
     if rows.is_empty() {
@@ -168,7 +168,7 @@ pub(super) fn map_context_section(
             body.push_str(&format!("- {row}\n"));
         }
     }
-    section(TAG_MAP_CONTEXT, attributes, body)
+    body
 }
 
 /// MPR-FR-NXDX: the short summary of a plan, as text. Pure.

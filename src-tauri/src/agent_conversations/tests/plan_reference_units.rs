@@ -89,10 +89,11 @@ fn a_reference_the_plan_dropped_is_listed_as_removed() {
     let now = [text_ref("docs/hld.md", "h")];
     assert_eq!(removed_ids(Some(&old), &now), vec!["docs/a.md", "docs/b.md"]);
     assert!(removed_ids(None, &now).is_empty());
-    let (section, counts) = render_section(&now, Some(&old), 10_000);
+    let (section, counts, marks) = render_section(&now, Some(&old), 10_000);
     assert_eq!(counts.removed, 2);
-    assert!(section.body.contains("- path: docs/a.md, change: removed"), "{}", section.body);
-    assert!(section.body.contains("- path: docs/b.md, change: removed"), "{}", section.body);
+    assert!(marks.contains("- path: docs/a.md, change: removed"), "{marks}");
+    assert!(marks.contains("- path: docs/b.md, change: removed"), "{marks}");
+    assert!(!section.body.contains("change: removed"), "{}", section.body);
 }
 
 // MPR-FR-HRUK, MPR-FR-SRBV: the section is `plan_references`, it names each
@@ -101,7 +102,7 @@ fn a_reference_the_plan_dropped_is_listed_as_removed() {
 #[test]
 fn the_section_holds_each_reference_with_its_text() {
     let refs = [text_ref("docs/hld.md", "# HLD\nPayments.\n"), text_ref("docs/api.md", "API")];
-    let (section, counts) = render_section(&refs, None, 10_000);
+    let (section, counts, marks) = render_section(&refs, None, 10_000);
     assert_eq!(section.tag, TAG_PLAN_REFERENCES);
     assert!(!section.truncated);
     assert!(!section.attributes.iter().any(|(k, _)| k == "truncated"));
@@ -110,9 +111,14 @@ fn the_section_holds_each_reference_with_its_text() {
     let hld = body.find("### Reference 1: \"hld.md\"").expect(body);
     let api = body.find("### Reference 2: \"api.md\"").expect(body);
     assert!(hld < api, "{body}");
-    for line in ["path: docs/hld.md", "type: doc", "change: first", "# HLD\nPayments.\n", "API\n"] {
+    for line in ["path: docs/hld.md", "type: doc", "# HLD\nPayments.\n", "API\n"] {
         assert!(body.contains(line), "{line} missing from {body}");
     }
+    // MPR-FR-EHCG: the marks are state, beside the section and not in it.
+    assert!(!body.contains("change: first"), "{body}");
+    assert!(marks.starts_with("Plan reference changes since the last turn:\n"), "{marks}");
+    assert!(marks.contains("- path: docs/hld.md, change: first\n"), "{marks}");
+    assert!(marks.contains("- path: docs/api.md, change: first\n"), "{marks}");
     assert_eq!(counts.first, 2);
     assert_eq!(section.parts.len(), 1);
 }
@@ -121,8 +127,9 @@ fn the_section_holds_each_reference_with_its_text() {
 // line, so the agent knows that no design is attached.
 #[test]
 fn no_reference_is_stated_in_one_line() {
-    let (section, counts) = render_section(&[], None, 10_000);
+    let (section, counts, marks) = render_section(&[], None, 10_000);
     assert_eq!(section.body, "The delivery plan has no plan reference.\n");
+    assert!(marks.is_empty(), "{marks}");
     assert_eq!(counts.references, 0);
     assert!(!section.truncated);
 }
@@ -137,7 +144,7 @@ fn texts_over_the_bound_are_cut_in_plan_order() {
         text_ref("docs/b.md", &"b".repeat(10)),
         text_ref("docs/c.md", &"c".repeat(4)),
     ];
-    let (section, counts) = render_section(&refs, None, 10);
+    let (section, counts, _) = render_section(&refs, None, 10);
     assert!(section.truncated);
     assert!(counts.truncated);
     assert!(section.attributes.contains(&("truncated".into(), "true".into())));
@@ -157,10 +164,10 @@ fn texts_over_the_bound_are_cut_in_plan_order() {
 #[test]
 fn the_bound_is_inclusive_and_zero_leaves_every_text_out() {
     let refs = [text_ref("docs/a.md", "abcd")];
-    let (exact, _) = render_section(&refs, None, 4);
+    let (exact, _, _) = render_section(&refs, None, 4);
     assert!(!exact.truncated);
     assert!(exact.body.contains("--- text ---\nabcd\n--- end of text ---"), "{}", exact.body);
-    let (none, _) = render_section(&refs, None, 0);
+    let (none, _, _) = render_section(&refs, None, 0);
     assert!(none.truncated);
     assert!(none.body.contains("is left out"), "{}", none.body);
     assert!(!none.body.contains("abcd"), "{}", none.body);
@@ -193,24 +200,22 @@ fn a_reference_with_no_text_says_why() {
         content: Content::Unreadable("io"),
         fingerprint: None,
     };
-    let (section, counts) = render_section(&[unresolved, pdf, blob, broken], None, 10_000);
+    let (section, counts, _) = render_section(&[unresolved, pdf, blob, broken], None, 10_000);
     let body = &section.body;
-    assert!(body.contains("path: docs/gone.md\ntype: none\nchange: first\nunresolved"), "{body}");
+    assert!(body.contains("path: docs/gone.md\ntype: none\nunresolved"), "{body}");
     assert!(
-        body.contains("path: docs/hld.pdf\ntype: doc\nchange: first\nThe file is not text. Read it with `get_document`."),
+        body.contains(
+            "path: docs/hld.pdf\ntype: doc\nThe file is not text. Read it with `get_document`."
+        ),
         "{body}"
     );
     assert!(
-        body.contains(
-            "path: bin/x\ntype: none\nchange: first\nThe file is not text. There is no text."
-        ),
+        body.contains("path: bin/x\ntype: none\nThe file is not text. There is no text."),
         "{body}"
     );
     assert_eq!(body.matches("`get_document`").count(), 1, "{body}");
     assert!(
-        body.contains(
-            "path: docs/x.md\ntype: none\nchange: first\nThe file could not be read (error io)."
-        ),
+        body.contains("path: docs/x.md\ntype: none\nThe file could not be read (error io)."),
         "{body}"
     );
     assert!(!body.contains("--- text"), "{body}");
@@ -382,7 +387,7 @@ fn the_map_prompt_describes_the_plan_references() {
         "read it with `get_document`",
         "ask the author which file holds the design",
         "reaches every later turn",
-        "`<map_context>`, `<plan_references>`, `<discussion_history>` and `<current_comment>`",
+        "`<map_context>`, `<plan_references>`, `<discussion_history>`, `<current_comment>` and `<discussion_state>`",
     ] {
         assert!(prompt.contains(text), "the Map prompt does not hold {text:?}");
     }

@@ -219,17 +219,22 @@ fn size_words(text: &str) -> String {
 }
 
 /// MPR-FR-HRUK to MPR-FR-EHCG: the `plan_references` section of `references`,
-/// with the marks against `record` and the texts bound together by
-/// `bound_chars` (MPR-FR-IIWW). Pure.
+/// with the texts bound together by `bound_chars` (MPR-FR-IIWW), and the text
+/// of the change marks against `record`, which goes into `discussion_state`
+/// (MPR-FR-EHCG). Pure.
 pub(super) fn render_section(
     references: &[ReadReference],
     record: Option<&FingerprintRecord>,
     bound_chars: usize,
-) -> (InputSection, Counts) {
+) -> (InputSection, Counts, String) {
     let removed = removed_ids(record, references);
     let mut counts =
         Counts { references: references.len(), removed: removed.len(), ..Counts::default() };
     let mut body = String::new();
+    let mut marks = String::new();
+    if !references.is_empty() || !removed.is_empty() {
+        marks.push_str("Plan reference changes since the last turn:\n");
+    }
     if references.is_empty() {
         body.push_str("The delivery plan has no plan reference.\n");
     } else {
@@ -251,7 +256,7 @@ pub(super) fn render_section(
         body.push_str(&format!("path: {}\n", reference.id));
         let type_word = reference.artifact_type.map(|t| t.as_str()).unwrap_or("none");
         body.push_str(&format!("type: {type_word}\n"));
-        body.push_str(&format!("change: {}\n", mark.as_str()));
+        marks.push_str(&format!("- path: {}, change: {}\n", reference.id, mark.as_str()));
         match &reference.content {
             Content::Unresolved => {
                 counts.unresolved += 1;
@@ -304,11 +309,8 @@ pub(super) fn render_section(
             }
         }
     }
-    if !removed.is_empty() {
-        body.push_str("\nReferences that the plan no longer holds since the last turn:\n");
-        for id in &removed {
-            body.push_str(&format!("- path: {id}, change: removed\n"));
-        }
+    for id in &removed {
+        marks.push_str(&format!("- path: {id}, change: removed\n"));
     }
     if counts.truncated {
         body.push_str("\n[This material is partial: some texts are cut or left out.]\n");
@@ -324,7 +326,7 @@ pub(super) fn render_section(
         body,
         truncated: counts.truncated,
     };
-    (section, counts)
+    (section, counts, marks)
 }
 
 /// The fingerprints that a turn's input was assembled with, for the record of
@@ -351,8 +353,11 @@ pub(super) fn extend_plan_references<R: tauri::Runtime>(
         .map(|id| read_reference(roots.worktree, id))
         .collect();
     let record = crate::map_plan::read_fingerprints(roots.store, discussion_id);
-    let (section, counts) = render_section(&references, record.as_ref(), budget.bound_chars());
+    let (section, counts, marks) =
+        render_section(&references, record.as_ref(), budget.bound_chars());
     sections.insert(at + 1, section);
+    // MPR-FR-EHCG: the marks change from turn to turn, so they are state.
+    append_state_text(sections, &marks);
     logging::log_debug(
         app,
         &logging::BUFFER,

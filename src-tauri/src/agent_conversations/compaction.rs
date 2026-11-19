@@ -94,15 +94,27 @@ pub(super) fn over_budget(estimate: u64, budget: u64) -> bool {
 /// CVL-FR-XCOY: where the latest round begins — the last reply that asked for
 /// tools. The whole exchange after the input is older history when there is
 /// no such reply.
+#[cfg(test)]
 pub(super) fn latest_round_start(exchange: &[Message]) -> usize {
+    latest_round_start_after(exchange, 0)
+}
+
+/// CVL-FR-XCOY, ERP-FR-DSAP: [`latest_round_start`] in an exchange whose input
+/// message stands at `opening`, after the replay. The latest round is a round
+/// of the current turn, never a replayed one.
+pub(super) fn latest_round_start_after(exchange: &[Message], opening: usize) -> usize {
+    let first = opening + 1;
     exchange
         .iter()
-        .rposition(|message| {
+        .enumerate()
+        .skip(first)
+        .rev()
+        .find(|(_, message)| {
             matches!(message, Message::Assistant(a)
                 if a.content.iter().any(|c| matches!(c, AssistantContent::ToolCall(_))))
         })
-        .unwrap_or(exchange.len())
-        .max(1)
+        .map_or(exchange.len(), |(at, _)| at)
+        .max(first)
         .min(exchange.len())
 }
 
@@ -113,7 +125,11 @@ fn discussion_history(request: &AgentRequest) -> Option<&InputSection> {
 
 /// CVL-FR-XCOY: whether a turn has older history to compact.
 pub(super) fn has_older_history(request: &AgentRequest, exchange: &[Message]) -> bool {
-    discussion_history(request).is_some() || latest_round_start(exchange) > 1
+    let opening = opening_of(request);
+    // ERP-FR-DSAP: the replay is older history.
+    opening > 0
+        || discussion_history(request).is_some()
+        || latest_round_start_after(exchange, opening) > opening + 1
 }
 
 /// CVL-FR-ZLSM: the text of a section, with each image replaced by its
@@ -134,7 +150,7 @@ fn section_text(section: &InputSection) -> String {
 }
 
 /// CVL-FR-ZLSM: one message of the exchange as text.
-fn message_text(message: &Message) -> String {
+pub(super) fn message_text(message: &Message) -> String {
     let mut lines = Vec::new();
     match message {
         Message::System { content } => lines.push(content.clone()),
@@ -181,15 +197,41 @@ fn message_text(message: &Message) -> String {
 /// call.
 pub(super) fn older_history_text(request: &AgentRequest, exchange: &[Message]) -> String {
     let mut out = String::new();
+    // ERP-FR-DSAP: the replayed messages, with the openings less their
+    // material sections, come first.
+    if !request.replay.is_empty() {
+        let head = request.stable_head_sections;
+        out.push_str("<earlier_turns>\n");
+        for (index, block) in request.replay.iter().enumerate() {
+            let skip = if index == 0 { head } else { 0 };
+            for section in block.opening.iter().skip(skip) {
+                out.push_str(&format!(
+                    "<{}>\n{}\n</{}>\n",
+                    section.tag,
+                    section_text(section),
+                    section.tag
+                ));
+            }
+            for message in &block.rounds {
+                out.push_str(&message_text(message));
+                out.push_str("\n\n");
+            }
+            if let Some(answer) = &block.answer {
+                out.push_str(&format!("assistant: {answer}\n\n"));
+            }
+        }
+        out.push_str("</earlier_turns>\n\n");
+    }
     if let Some(section) = discussion_history(request) {
         out.push_str("<discussion_history>\n");
         out.push_str(&section_text(section));
         out.push_str("\n</discussion_history>\n\n");
     }
-    let end = latest_round_start(exchange);
-    if end > 1 {
+    let opening = opening_of(request);
+    let end = latest_round_start_after(exchange, opening);
+    if end > opening + 1 {
         out.push_str("<earlier_in_this_turn>\n");
-        for message in &exchange[1..end] {
+        for message in &exchange[opening + 1..end] {
             out.push_str(&message_text(message));
             out.push_str("\n\n");
         }
@@ -217,6 +259,14 @@ pub(super) fn compacted_request(
     max_chars: usize,
 ) -> AgentRequest {
     let mut compacted = request.clone();
+    // ERP-FR-DSAP: a compacted request carries no replay; its input holds the
+    // material sections of the first opening first again.
+    if let Some(first) = compacted.replay.first() {
+        let head: Vec<InputSection> =
+            first.opening.iter().take(request.stable_head_sections).cloned().collect();
+        compacted.input.splice(0..0, head);
+        compacted.replay.clear();
+    }
     let (body, truncated) =
         bounded_within(format!("{SUMMARY_LEAD}\n\n{}", summary.trim()), max_chars);
     let section = InputSection {
@@ -243,13 +293,25 @@ pub(super) fn compacted_request(
 
 /// CVL-FR-BSMY: the compacted exchange — the new input message, then the
 /// latest round unchanged. Every older message is removed.
+#[cfg(test)]
 pub(super) fn compacted_exchange(
     compacted: &AgentRequest,
     with_images: bool,
     exchange: &[Message],
 ) -> Vec<Message> {
+    compacted_exchange_after(compacted, with_images, exchange, 0)
+}
+
+/// [`compacted_exchange`] of an exchange whose input message stands at
+/// `opening` (ERP-FR-DSAP).
+pub(super) fn compacted_exchange_after(
+    compacted: &AgentRequest,
+    with_images: bool,
+    exchange: &[Message],
+    opening: usize,
+) -> Vec<Message> {
     let mut out = rig_messages::opening_exchange(compacted, with_images);
-    out.extend_from_slice(&exchange[latest_round_start(exchange)..]);
+    out.extend_from_slice(&exchange[latest_round_start_after(exchange, opening)..]);
     out
 }
 
@@ -277,6 +339,11 @@ pub(super) struct Conversation {
     pub(super) compacted: Option<AgentRequest>,
     pub(super) exchange: Vec<Message>,
     pub(super) with_images: bool,
+    /// ERP-FR-NKLF: the source stamps of the results this turn appended.
+    pub(super) stamps: Vec<SourceStamp>,
+    /// ERP-FR-CRJL: false once the turn took a steering message, held a
+    /// placeholder, or recovered from a context overflow.
+    pub(super) replayable: bool,
 }
 
 impl Conversation {
@@ -325,7 +392,9 @@ pub(super) fn compact<R: tauri::Runtime>(
     if !force && !over_budget(estimate, budget) {
         return Ok(false);
     }
-    let older_messages = latest_round_start(&conversation.exchange).saturating_sub(1);
+    let opening = opening_of(request);
+    let older_messages =
+        latest_round_start_after(&conversation.exchange, opening).saturating_sub(1);
     if !has_older_history(request, &conversation.exchange) {
         log_compaction(app, turns, plan, endpoint, estimate, budget, 0, Outcome::NothingOlder);
         return Ok(false);
@@ -346,8 +415,12 @@ pub(super) fn compact<R: tauri::Runtime>(
         Ok(reply) if !reply.text.trim().is_empty() => {
             let compacted =
                 compacted_request(request, &reply.text, plan.document_budget.history_bound_chars());
-            conversation.exchange =
-                compacted_exchange(&compacted, conversation.with_images, &conversation.exchange);
+            conversation.exchange = compacted_exchange_after(
+                &compacted,
+                conversation.with_images,
+                &conversation.exchange,
+                opening,
+            );
             conversation.compacted = Some(compacted);
             log_compaction(
                 app,

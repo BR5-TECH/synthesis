@@ -92,9 +92,12 @@ impl Change {
             .expect("declined");
     }
 
+    /// AGC-FR-06: the text of `discussion_history`, then the text of
+    /// `discussion_state`, which holds the requests and the split.
     fn history(&self) -> String {
         let thread = car_thread(&self.store, &self.thread.id);
-        discussion_history_section(self.roots(), &thread, "").body
+        let history = discussion_history_section(self.roots(), &thread, "").body;
+        format!("{history}{}", discussion_state_text(self.roots(), &thread, ""))
     }
 }
 

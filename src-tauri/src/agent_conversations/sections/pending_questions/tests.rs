@@ -114,6 +114,11 @@ impl Fixture {
     fn history(&self) -> InputSection {
         discussion_history_section(self.roots(), &self.thread(), "")
     }
+
+    /// AGC-FR-06: the `discussion_state` text beside the history.
+    fn state(&self) -> String {
+        discussion_state_text(self.roots(), &self.thread(), "")
+    }
 }
 
 // AGC-FR-QSWD
@@ -139,11 +144,12 @@ fn the_rendering_names_the_agent_each_question_and_each_option() {
 #[test]
 fn the_history_ends_with_the_pending_question_set() {
     let f = fixture();
-    assert!(!f.history().body.contains("A question set from"), "no set, no listing");
+    assert!(!f.state().contains("A question set from"), "no set, no listing");
     f.reserve();
-    let body = f.history().body;
+    let body = f.state();
     let listing = render_pending_questions(&question_set(&f.thread_id));
-    assert!(body.ends_with(&listing), "the set ends the section: {body}");
+    assert!(body.ends_with(&listing), "the set ends the state: {body}");
+    assert!(!f.history().body.contains("A question set from"), "not in the history");
 }
 
 // AGC-FR-QSWD
@@ -166,7 +172,7 @@ fn a_truncation_cuts_comments_and_keeps_the_question_set_whole() {
     let section = f.history();
     assert!(section.truncated, "the comments run past the bound");
     let listing = render_pending_questions(&question_set(&f.thread_id));
-    assert!(section.body.ends_with(&listing), "the set is whole at the end");
+    assert!(f.state().ends_with(&listing), "the set is whole in the state");
 }
 
 // AGC-FR-QSWD: a record that cannot be parsed adds no set, and the history
@@ -178,17 +184,16 @@ fn a_broken_record_adds_no_set_and_reports_its_kind() {
     let thread = f.thread();
     let path = find_file(f._dir.path(), &format!("{}.json", f.thread_id)).expect("the record");
     std::fs::write(path, b"{ not json").expect("broken");
-    let (section, unreadable) =
-        discussion_history_with_status(f.roots(), &thread, "", SECTION_MAX_CHARS);
-    assert_eq!(unreadable, Some("malformed"));
-    assert!(!section.body.contains("A question set from"));
+    let parts = discussion_history_with_status(f.roots(), &thread, "", SECTION_MAX_CHARS);
+    assert_eq!(parts.unreadable, Some("malformed"));
+    assert!(!parts.history.body.contains("A question set from"));
+    assert!(parts.state.is_none_or(|s| !s.body.contains("A question set from")));
 }
 
 // AGC-FR-QSWD: an absent set is no failure.
 #[test]
 fn an_absent_set_reports_no_failure() {
     let f = fixture();
-    let (_, unreadable) =
-        discussion_history_with_status(f.roots(), &f.thread(), "", SECTION_MAX_CHARS);
-    assert_eq!(unreadable, None);
+    let parts = discussion_history_with_status(f.roots(), &f.thread(), "", SECTION_MAX_CHARS);
+    assert_eq!(parts.unreadable, None);
 }

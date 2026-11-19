@@ -196,7 +196,8 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
     // content carries every image its material holds; one whose endpoint does
     // not carries none of them. A capability the provider declares nothing about
     // counts as absent, so the fallback is what an unknown endpoint gets.
-    let carries_images = input_has_images(&plan.request.input);
+    let image_count = request_image_count(&plan.request);
+    let carries_images = image_count > 0;
     let with_images = carries_images && endpoint.accepts_image_input;
     // AGC-FR-37: recorded on the turn from the moment the decision is taken, so
     // every payload the turn appears in from here on carries it.
@@ -219,13 +220,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 "turnId" => &plan.turn_id,
                 "provider" => &endpoint.provider,
                 "model" => endpoint.model_id.as_deref().unwrap_or("<provider default>"),
-                "images" => plan
-                    .request
-                    .input
-                    .iter()
-                    .flat_map(|s| &s.parts)
-                    .filter(|p| matches!(p, InputPart::Image(_)))
-                    .count(),
+                "images" => image_count,
                 "acceptsImageInput" => endpoint.accepts_image_input,
             },
         );
@@ -253,6 +248,8 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         compacted: None,
         exchange: opening_exchange(&plan.request, with_images),
         with_images,
+        stamps: Vec::new(),
+        replayable: true,
     };
     let mut model_calls = 0usize;
     // CVL-FR-LQDM: a turn recovers from a context overflow at most once.
@@ -346,6 +343,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         let reply = match outcome {
             Err(TurnEnd::Failed(failure)) if overflowed && !recovered => {
                 recovered = true;
+                conversation.replayable = false;
                 if !overflow::recover(app, turns, plan, &endpoint, &mut conversation, model_call)? {
                     return Err(TurnEnd::Failed(failure));
                 }
@@ -533,6 +531,12 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 activity.finish_all(app, turns, &plan.turn_id);
                 // AGC-FR-WZUL: a synthesis turn still posts its Synthesis.
                 post_synthesis_after_contribution(app, turns, plan, &reply.text);
+                let ending = CaptureEnd::Contribution {
+                    calls: &reply.tool_calls,
+                    ending: index,
+                    result: &result,
+                };
+                capture_exchange(app, turns.buffer(), plan, &conversation, ending);
                 return Err(end);
             }
             // CVL-FR-EKHH: every result carries the id of its call, unchanged,
@@ -633,6 +637,7 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
     // CVL-FR-KYBE: a turn that posted its plan card ends on it. Its answer is
     // a closing comment or is discarded, and an empty answer is no failure.
     if plan.plan_card.has_card() {
+        capture_exchange(app, turns.buffer(), plan, &conversation, CaptureEnd::Card);
         return end_with_card(app, turns, plan, answer, model_calls);
     }
 
@@ -709,6 +714,11 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
         // AGC-FR-CZCU: the group keeps what the member said, for the synthesis.
         if let (Ok(_), Some(reply)) = (&appended, kept) {
             record_reply(plan, &reply);
+        }
+        // ERP-FR-FEAD: the delivered exchange is kept for the next turns.
+        if let Some(id) = appended.as_ref().ok().and_then(|d| answer_comment_of(d, &plan.agent.id))
+        {
+            capture_exchange(app, turns.buffer(), plan, &conversation, CaptureEnd::Answer(id));
         }
         appended
     };
@@ -808,6 +818,8 @@ fn hold_placeholder<R: tauri::Runtime>(
     reply: &ModelReply,
     model_calls: usize,
 ) -> Result<(), TurnEnd> {
+    // ERP-FR-CRJL: a turn that held a placeholder is not captured.
+    conversation.replayable = false;
     let held = turns.wait_for_speech(app, &plan.turn_id, HoldUntil::FinalMessage);
     // AGC-FR-NFYK: a speech with no comment cancels the turn it registered,
     // and its output goes with it.

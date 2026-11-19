@@ -75,7 +75,7 @@ pub fn estimate_impl<R: tauri::Runtime>(
         // AGC-FR-UOPJ: the dry run holds no trigger, so every comment counts.
         DiscussionTarget::Map => {
             if let Some(discussion) = &discussion {
-                sections.push(map_context::map_context_section(roots, discussion, ""));
+                sections.push(map_context::map_context_section(discussion));
                 map_context::extend_map_material(app, roots, &budget, &mut sections);
                 // AGC-FR-UOPJ: the estimate carries the plan references as a turn
                 // does, and records no fingerprint.
@@ -99,9 +99,15 @@ pub fn estimate_impl<R: tauri::Runtime>(
         // The trigger is no comment of the discussion, so every comment stands
         // in the history.
         // AGC-FR-HOND: the estimate bounds the history as a turn bounds it.
-        sections.push(
-            discussion_history_with_status(roots, discussion, "", budget.history_bound_chars()).0,
-        );
+        let parts =
+            discussion_history_with_status(roots, discussion, "", budget.history_bound_chars());
+        sections.push(parts.history);
+        // AGC-FR-06: the state follows where the current comment would stand.
+        sections.extend(parts.state);
+        if matches!(discussion.target, DiscussionTarget::Map) {
+            let focus = map_context::map_state_text(roots, discussion, "");
+            prepend_state_text(&mut sections, &format!("{focus}\n"));
+        }
     }
 
     let (instructions, title, handle, agent_key, model) = match &agent {
@@ -159,9 +165,38 @@ pub fn estimate_impl<R: tauri::Runtime>(
         ),
     );
     let definitions: Vec<_> = tools.iter().map(|tool| tool.definition()).collect();
+    // ERP-FR-GDLV: the replay a turn of this agent would carry, selected on
+    // the same terms and changing no entry.
+    let instructions = instruction_tokens(&prompt, &definitions);
+    let replay = match (&discussion, &agent) {
+        (Some(discussion), Some(agent)) => {
+            let memory = app.try_project_store::<ReplayMemory>();
+            let inputs = ReplayInputs {
+                roots,
+                thread: discussion,
+                trigger_comment_id: "",
+                key: ReplayKey { discussion_id: discussion.id.clone(), agent_id: agent.id.clone() },
+                offered: definitions.iter().map(|d| d.name.to_string()).collect(),
+                provider: provider.as_deref().unwrap_or_default(),
+                model_id: &agent.model_id,
+                window: budget.window,
+                history_bound: budget.history_bound_chars(),
+                instruction_tokens: instructions,
+                update_memory: false,
+            };
+            memory.map(|m| plan_replay(&m, &inputs, &mut sections)).unwrap_or_default()
+        }
+        _ => ReplayPlan::default(),
+    };
     // AGC-FR-OBUA: tool results are 0 before any turn, and the current comment
     // is empty (AGC-FR-JFBZ).
-    let split = split_of_sections(instruction_tokens(&prompt, &definitions), &sections);
+    let mut split = split_of_sections(instructions, &sections);
+    let replayed = AgentRequest {
+        replay: replay.blocks,
+        stable_head_sections: replay.head,
+        ..AgentRequest::default()
+    };
+    add_replay(&mut split, &replayed);
     let limit_tokens = budget.limit_tokens();
     DiscussionContext {
         window: budget.window,

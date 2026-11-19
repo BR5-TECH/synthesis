@@ -450,12 +450,18 @@ pub struct ActiveToolCall {
 }
 
 /// AGC-FR-06: the three tags every builder emits, in the order they are
-/// presented. The input carries no fourth, and the prompt names exactly these
+/// presented, and the prompt names these and [`TAG_DISCUSSION_STATE`]
 /// (CVL-FR-06) — which is what stops the instruction telling a model how to read
 /// the material and the material itself from drifting apart.
 pub const TAG_ARTIFACT: &str = "artifact";
 pub const TAG_DISCUSSION_HISTORY: &str = "discussion_history";
 pub const TAG_CURRENT_COMMENT: &str = "current_comment";
+
+/// AGC-FR-06, AGC-FR-YQVB: the section after `current_comment` that holds the
+/// state of the discussion. A builder adds it only where the state is not
+/// empty, so it is not in the vocabularies below except where it is always
+/// there (a Map turn always names its focus).
+pub const TAG_DISCUSSION_STATE: &str = "discussion_state";
 
 /// AGC-FR-06: the material tag of a **note** turn, which stands where
 /// [`TAG_ARTIFACT`] stands on the four origins whose subject is a file or a
@@ -484,9 +490,15 @@ pub const NOTE_INPUT_TAGS: [&str; 3] =
 /// (MPR-FR-HRUK, MPR-FR-CHRV).
 pub const TAG_PLAN_REFERENCES: &str = "plan_references";
 
-/// AGC-FR-UOPJ / CVL-FR-06: the tag vocabulary of a map turn.
-pub const MAP_INPUT_TAGS: [&str; 4] =
-    [TAG_MAP_CONTEXT, TAG_PLAN_REFERENCES, TAG_DISCUSSION_HISTORY, TAG_CURRENT_COMMENT];
+/// AGC-FR-UOPJ / CVL-FR-06: the tag vocabulary of a map turn. Its state is
+/// never empty, because it always names the focus of the turn.
+pub const MAP_INPUT_TAGS: [&str; 5] = [
+    TAG_MAP_CONTEXT,
+    TAG_PLAN_REFERENCES,
+    TAG_DISCUSSION_HISTORY,
+    TAG_CURRENT_COMMENT,
+    TAG_DISCUSSION_STATE,
+];
 
 /// AGC-FR-NBZN / CVL-FR-06: the tag vocabulary of a change turn.
 pub const CHANGE_INPUT_TAGS: [&str; 3] =
@@ -498,6 +510,20 @@ pub const CHANGE_INPUT_TAGS: [&str; 3] =
 /// selects, so the instruction and the material cannot drift apart across a
 /// change to either.
 pub fn input_tags(kind: OriginKind) -> &'static [&'static str] {
+    input_tags_of(kind)
+}
+
+/// CVL-FR-06: the tags the prompt of this origin kind describes, in order: the
+/// tags its builder always emits, then `discussion_state`.
+pub fn described_tags(kind: OriginKind) -> Vec<&'static str> {
+    let mut tags = input_tags_of(kind).to_vec();
+    if !tags.contains(&TAG_DISCUSSION_STATE) {
+        tags.push(TAG_DISCUSSION_STATE);
+    }
+    tags
+}
+
+fn input_tags_of(kind: OriginKind) -> &'static [&'static str] {
     match kind {
         OriginKind::NoteDiscussion => &NOTE_INPUT_TAGS,
         OriginKind::MapDiscussion => &MAP_INPUT_TAGS,

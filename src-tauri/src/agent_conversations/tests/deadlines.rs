@@ -430,6 +430,7 @@ fn openrouter_request_over(
         input,
         tools: Vec::new(),
         native_tools: Vec::new(),
+        ..Default::default()
     };
     let endpoint = AiApiCall {
         max_output_tokens: None,
@@ -476,8 +477,8 @@ fn the_openrouter_call_asks_the_client_to_advance_its_own_boundary() {
     let wire = openrouter_request_for("cache-boundary-test-model");
     assert_eq!(
         wire.get("cache_control"),
-        Some(&serde_json::json!({ "type": "ephemeral" })),
-        "the call asks for an advancing boundary at the short lifetime: {wire}",
+        Some(&serde_json::json!({ "type": "ephemeral", "ttl": "1h" })),
+        "the call asks for an advancing boundary at the long lifetime: {wire}",
     );
     // CVL-FR-39: and the two fixed marks stand where the material stops.
     let parts = wire["messages"][1]["content"].as_array().expect("the input travels as parts");
@@ -551,6 +552,7 @@ fn the_boundary_and_the_marks_stand_on_every_round() {
         input: plain_material(),
         tools: Vec::new(),
         native_tools: Vec::new(),
+        ..Default::default()
     };
     let endpoint = AiApiCall {
         max_output_tokens: None,
@@ -570,7 +572,7 @@ fn the_boundary_and_the_marks_stand_on_every_round() {
         let wire = serde_json::to_value(&built).expect("serialisable");
         assert_eq!(
             wire.get("cache_control"),
-            Some(&serde_json::json!({ "type": "ephemeral" })),
+            Some(&serde_json::json!({ "type": "ephemeral", "ttl": "1h" })),
             "round {round}: the call asks for an advancing boundary",
         );
         let parts = wire_input_parts(&wire);
@@ -771,6 +773,7 @@ fn the_openrouter_call_presents_the_search_entry_in_its_tool_array() {
         }],
         native_tools: conversation_native_tools("openrouter"),
         stable_head_sections: 0,
+        ..Default::default()
     };
     let endpoint = AiApiCall {
         max_output_tokens: None,

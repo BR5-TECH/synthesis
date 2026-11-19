@@ -99,6 +99,7 @@ fn an_attribute_value_cannot_close_its_own_tag() {
         tools: Vec::new(),
         native_tools: Vec::new(),
         stable_head_sections: 0,
+        ..Default::default()
     });
     assert!(
         rendered.starts_with(r#"<artifact draft="Spec &quot;v2&quot; &amp; notes">"#),
@@ -508,6 +509,7 @@ fn attachments_are_named_without_being_carried() {
         tools: Vec::new(),
         native_tools: Vec::new(),
         stable_head_sections: 0,
+        ..Default::default()
     };
     let rendered = render_input(&request);
     for forbidden in

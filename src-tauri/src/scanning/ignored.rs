@@ -47,41 +47,59 @@ fn in_or_above(rel: &str, folder: &str) -> bool {
 
 /// The ignore rules of one project root, read once per batch. A matcher is
 /// read only for the folders the batch's paths pass through.
-struct IgnoreRules<'a> {
-    root: &'a RootFs,
+///
+/// ASC-FR-TWVB: each path is matched by the rules of its nearest repository
+/// root alone: the `.gitignore` files from that root down, and that root's own
+/// `info/exclude`. A rule of an enclosing repository never applies below a
+/// nested repository root.
+pub(crate) struct IgnoreRules {
+    root: RootFs,
     /// Folder (root-relative, `""` for the root) to its `.gitignore`, or
     /// `None` when it has none or it holds no rule.
     per_dir: HashMap<String, Option<Gitignore>>,
-    exclude: Option<Gitignore>,
+    /// Repository root to its `info/exclude` matcher.
+    exclude: HashMap<String, Option<Gitignore>>,
+    /// Folder to whether it is a repository root.
+    is_repo: HashMap<String, bool>,
 }
 
-impl<'a> IgnoreRules<'a> {
-    fn new(root: &'a RootFs) -> Self {
-        let exclude = read_matcher(root, "", ".git/info/exclude");
-        IgnoreRules { root, per_dir: HashMap::new(), exclude }
+impl IgnoreRules {
+    pub(crate) fn new(root: &RootFs) -> Self {
+        IgnoreRules {
+            root: root.clone(),
+            per_dir: HashMap::new(),
+            exclude: HashMap::new(),
+            is_repo: HashMap::new(),
+        }
     }
 
-    /// True when `rel` or one of its ancestor folders is ignored. A file in an
-    /// ignored folder is ignored whatever a deeper `.gitignore` says, as Git
-    /// and the scan walk both treat it.
-    fn is_ignored(&mut self, rel: &str) -> bool {
+    /// True when `rel` or one of its ancestor folders below its repository
+    /// root is ignored. A file in an ignored folder is ignored whatever a
+    /// deeper `.gitignore` says, as Git and the scan walk both treat it.
+    pub(crate) fn is_ignored(&mut self, rel: &str) -> bool {
         let parts: Vec<&str> = rel.split('/').collect();
+        let mut repo = String::new();
         for end in 1..=parts.len() {
             let candidate = parts[..end].join("/");
             // An ancestor is a folder by definition. The path itself is a
             // folder only when one is there now; a deleted path has no kind
             // left to read, so it is matched as a file.
             let is_dir = end < parts.len() || self.is_dir(&candidate);
-            if self.matches(&candidate, is_dir) {
+            if self.matches(&candidate, is_dir, &repo) {
                 return true;
+            }
+            // ASC-FR-TWVB: below a nested repository root, only its rules.
+            if end < parts.len() && self.is_repo_root(&candidate) {
+                repo = candidate;
             }
         }
         false
     }
 
-    /// The deepest `.gitignore` with an opinion on `rel` decides, then
-    /// `info/exclude`. A `!` rule is a decision too: it keeps the path.
-    fn matches(&mut self, rel: &str, is_dir: bool) -> bool {
+    /// The deepest `.gitignore` with an opinion on `rel` decides, then the
+    /// `info/exclude` of `repo`. A `!` rule is a decision too: it keeps the
+    /// path. No folder above `repo` is asked.
+    fn matches(&mut self, rel: &str, is_dir: bool, repo: &str) -> bool {
         let path = self.root.join(rel);
         let mut dir = parent_of(rel);
         loop {
@@ -92,16 +110,16 @@ impl<'a> IgnoreRules<'a> {
                     Match::None => {}
                 }
             }
-            if dir.is_empty() {
+            if dir.is_empty() || dir == repo {
                 break;
             }
             dir = parent_of(dir);
         }
-        self.exclude.as_ref().is_some_and(|m| m.matched(&path, is_dir).is_ignore())
+        self.exclude_of(repo).is_some_and(|m| m.matched(&path, is_dir).is_ignore())
     }
 
     fn matcher(&mut self, dir: &str) -> Option<&Gitignore> {
-        let root = self.root;
+        let root = &self.root;
         self.per_dir
             .entry(dir.to_string())
             .or_insert_with(|| {
@@ -113,6 +131,25 @@ impl<'a> IgnoreRules<'a> {
                 read_matcher(root, dir, &file)
             })
             .as_ref()
+    }
+
+    fn exclude_of(&mut self, repo: &str) -> Option<&Gitignore> {
+        let root = &self.root;
+        self.exclude
+            .entry(repo.to_string())
+            .or_insert_with(|| {
+                let file = super::repos::exclude_file_of(root, repo)?;
+                read_matcher_at(root, repo, &file)
+            })
+            .as_ref()
+    }
+
+    fn is_repo_root(&mut self, rel: &str) -> bool {
+        let root = &self.root;
+        *self
+            .is_repo
+            .entry(rel.to_string())
+            .or_insert_with(|| super::repos::is_repo_root(root, rel))
     }
 
     fn is_dir(&self, rel: &str) -> bool {
@@ -129,6 +166,18 @@ fn parent_of(rel: &str) -> &str {
 /// is skipped, as Git skips it.
 fn read_matcher(root: &RootFs, dir: &str, file: &str) -> Option<Gitignore> {
     let text = root.read_text(file).ok()?;
+    matcher_from(root, dir, &text)
+}
+
+/// ASC-FR-TWVB: a matcher rooted at `repo` from an `info/exclude` file, which
+/// can be outside the project root (FSA-FR-19 exception, as in
+/// `repos::exclude_file_of`).
+fn read_matcher_at(root: &RootFs, repo: &str, file: &std::path::Path) -> Option<Gitignore> {
+    let text = std::fs::read_to_string(file).ok()?;
+    matcher_from(root, repo, &text)
+}
+
+fn matcher_from(root: &RootFs, dir: &str, text: &str) -> Option<Gitignore> {
     let mut builder = GitignoreBuilder::new(root.join(dir));
     for line in text.lines() {
         let _ = builder.add_line(None, line);

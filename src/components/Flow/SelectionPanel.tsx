@@ -27,8 +27,7 @@ export interface SelectionPanelProps extends ItemEditHandlers {
   state?: ItemDeliveryState;
   references: Reference[];
   artifacts: ArtifactOption[];
-  /** FLO-FR-ZEJU: every project path, and whether the tree has been read. */
-  paths: string[];
+  /** FLO-FR-ZEJU: whether the artifact list has been read. */
   treeLoaded: boolean;
   inert: boolean;
   at: PanelPlacement;
@@ -168,7 +167,6 @@ export function SelectionPanel(props: SelectionPanelProps) {
               />
               <FootprintSection
                 item={item}
-                paths={props.paths}
                 treeLoaded={props.treeLoaded}
                 inert={inert}
                 look={look}

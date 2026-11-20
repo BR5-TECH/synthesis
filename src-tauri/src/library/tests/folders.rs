@@ -224,7 +224,8 @@ fn a_folder_whose_name_the_scan_excludes_is_still_reported_as_created() {
     assert_eq!(node.artifact_type, Some(scanning::ArtifactType::Spec));
     assert_eq!(node.type_source, Some(scanning::TypeSource::Assigned));
     assert_eq!(node.has_artifacts, Some(true));
-    assert_eq!(node.children.as_deref(), Some(&[][..]));
+    assert_eq!(node.has_children, Some(false));
+    assert_eq!(node.subtree_types.as_deref(), Some(&[scanning::ArtifactType::Spec][..]));
     // And it really was excluded from the scan, which is what makes the
     // fallback the only way this node could be returned.
     assert!(find_node(&scanning::scan(root), "dist").is_none());

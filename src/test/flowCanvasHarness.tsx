@@ -29,6 +29,7 @@ import type {
 } from "../types";
 import { ID, TREE } from "./flowFixtures";
 import { invokeMock } from "./flowMocks";
+import { treeCommand } from "./treeCommands";
 
 export { emitEvent, invokeMock } from "./flowMocks";
 
@@ -93,11 +94,11 @@ export function flowBackend(
     b.calls.push({ cmd, args });
     const own = b.on[cmd];
     if (own) return own(args);
+    const read = treeCommand(cmd, args, TREE);
+    if (read) return read;
     switch (cmd) {
       case "append_log_records":
         return undefined;
-      case "load_project_tree":
-        return TREE;
       case "validate_flow_document":
         return b.validation;
       case "load_artifact_contents_by_id":
@@ -181,7 +182,7 @@ export async function renderFlow(
     <FlowCanvas binding={fileBinding(flows, ID)} onOpenArtifact={onOpenArtifact} {...props} />,
   );
   await waitFor(() =>
-    expect(invokeMock.mock.calls.some((c) => c[0] === "load_project_tree")).toBe(true),
+    expect(invokeMock.mock.calls.some((c) => c[0] === "list_project_artifacts")).toBe(true),
   );
   await act(async () => {});
   return { flows, view, onOpenArtifact };

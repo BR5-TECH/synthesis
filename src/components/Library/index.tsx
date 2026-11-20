@@ -5,13 +5,8 @@ import {
   markRevealConsumed,
   revealAlreadyConsumed,
 } from "../../state/panelReveal";
-import {
-  matchesLens,
-  matchesText,
-  presentTypes,
-  typeChip,
-  typeLensPositions,
-} from "../../artifactTypes";
+import { presentTypes, typeChip, typeLensPositions } from "../../artifactTypes";
+import { logWarn } from "../../logging";
 import type { LibraryPanel } from "../../hooks/useLibraryPanelState";
 import {
   FILTERED_BODY_CLASS,
@@ -19,7 +14,11 @@ import {
 } from "../PanelEmptyState";
 import { Icon } from "../icons";
 import { SelectorRow } from "../SelectorRow";
-import { TreeRow } from "./TreeRow";
+import { LoadingRow, TreeRow, TruncatedRow } from "./TreeRow";
+import { ancestorsOf, filtersToRelax, foldersToLoad, lensOf, visibleRows } from "./treeModel";
+import { useLazyTree } from "./useLazyTree";
+import { useTreeFilter } from "./useTreeFilter";
+import { VirtualRows } from "./VirtualRows";
 import { noteOwnerDeleted } from "../../voice/voiceController";
 import { runMainBranchWrite, WRITE_CANCELLED } from "../../state/mainBranchWrite";
 import {
@@ -58,12 +57,6 @@ interface LibraryProps {
   // starting parent.
   onNewFolder?: (folder: TreeNode) => void;
   /**
-   * NFW-FR-04 / NFI-FR-04: hand each freshly-loaded tree up to the shell. This
-   * panel is the only surface that scans, so the folder set the New Folder and New
-   * File windows offer comes from here rather than from a scan of their own.
-   */
-  onTreeLoaded?: (tree: TreeNode) => void;
-  /**
    * LIB-FR-18: a pending reveal-and-select, or null.
    *
    * Carries a nonce rather than being a bare id, because two consecutive
@@ -85,13 +78,17 @@ export function Library({
   onNewFile,
   onNewArtifact,
   onNewFolder,
-  onTreeLoaded,
   reveal,
   onViewSpecMap,
 }: LibraryProps) {
   const { expanded, toggleExpanded, expandAll, typeFilter, text } = panel;
-  const [tree, setTree] = useState<TreeNode | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // LIB-FR-EMOO: the folders this panel has loaded, one at a time.
+  const tree = useLazyTree();
+  const [opError, setError] = useState<string | null>(null);
+  const error = opError ?? tree.error;
+  // LIB-FR-PPAT: with text in the filter, the backend answers it.
+  const lens = lensOf(typeFilter);
+  const filter = useTreeFilter(text, lens);
   // Selection is session-local and deliberately not part of the persisted panel
   // state (LIB-FR-14), so it starts empty on every open of a project.
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -106,44 +103,42 @@ export function Library({
   // appears for exactly the case that cannot be undone.
   const [confirmRecursive, setConfirmRecursive] = useState<TreeNode | null>(null);
 
-  // `onTreeLoaded` is read through a ref so `loadTree` keeps a stable identity:
-  // it is the dependency of the mount effect and of the event subscription, and a
-  // new identity on each render would re-subscribe the watcher listener every
-  // time the shell re-rendered.
-  const publishTree = useRef(onTreeLoaded);
-  publishTree.current = onTreeLoaded;
-
-  const loadTree = useCallback(async () => {
-    try {
-      const next = await api.loadProjectTree();
-      setTree(next);
-      publishTree.current?.(next);
-      setError(null);
-    } catch (e) {
-      setError(String(e));
-    }
+  /**
+   * LIB-FR-19: the types the project holds, from `"list project artifacts"`.
+   * Read on mount and on every tree change, so a type gains its button the
+   * moment the project's first file of that type appears.
+   */
+  const [projectTypes, setProjectTypes] = useState<ArtifactType[]>([]);
+  const loadProjectTypes = useCallback(() => {
+    api
+      .listProjectArtifacts()
+      .then((nodes) => setProjectTypes(nodes.flatMap((n) => (n.artifactType ? [n.artifactType] : []))))
+      .catch((e: unknown) =>
+        logWarn(["frontend"], "project panel: artifact list failed", { reason: String(e) }),
+      );
   }, []);
-
-  // Initial load. The panel-state restore is issued independently, when `VPanel`
-  // mounts — not chained behind this — so the first painted tree is already in
-  // its restored shape rather than flashing the default and then re-expanding
-  // (LIB non-functional requirement).
   useEffect(() => {
-    void loadTree();
-  }, [loadTree]);
+    loadProjectTypes();
+  }, [loadProjectTypes]);
 
-  // LIB-FR-10: reload on the debounced backend `"project tree changed"` event.
-  // Expand/collapse and selection are preserved because neither is derived from
-  // the tree payload — selection is local state and the expanded set lives in
-  // the panel state above this component (LIB-FR-06).
+  // LIB-FR-10: on the debounced `"project tree changed"`, load again each
+  // loaded folder whose answer changed, run the filter again, and read the
+  // types again. Expand/collapse and selection are preserved because neither
+  // is derived from the loaded folders (LIB-FR-06).
+  const reloadFolders = tree.reloadFolders;
+  const refreshFilter = filter.refresh;
+  const loadedRef = useRef(tree.childrenOf);
+  loadedRef.current = tree.childrenOf;
   useEffect(() => {
     // Capture the unlisten fn synchronously via a cancel flag so an
     // unmount/remount (React Strict Mode double-invoke, HMR) cannot leave two
     // subscribers registered and double-reload.
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    void onProjectTreeChanged(() => {
-      void loadTree();
+    void onProjectTreeChanged((payload) => {
+      reloadFolders(payload.changedFolders ?? [...loadedRef.current.keys()]);
+      refreshFilter();
+      loadProjectTypes();
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
@@ -152,7 +147,7 @@ export function Library({
       cancelled = true;
       unlisten?.();
     };
-  }, [loadTree]);
+  }, [reloadFolders, refreshFilter, loadProjectTypes]);
 
   const revealId = reveal?.id ?? null;
   const revealNonce = reveal?.nonce;
@@ -176,23 +171,39 @@ export function Library({
    * surface switch, so a component-local guard would let a finished reveal
    * re-apply the moment the author came back to this panel (SNV-FR-68).
    */
+  // LIB-FR-18: the folders on the way to a revealed node are loaded through
+  // `"list tree path"` once per request, so a node in a folder this panel has
+  // not opened can be revealed. `pathAsked` holds the nonce asked for, and
+  // `pathMissing` the nonce the index answered "not held" for.
+  const pathAsked = useRef<number | null>(null);
+  const [pathMissing, setPathMissing] = useState<number | null>(null);
+  const loadPathTo = tree.loadPathTo;
+  useEffect(() => {
+    if (!revealId || revealNonce === undefined) return;
+    if (revealAlreadyConsumed(revealNonce)) return;
+    if (tree.nodeById.has(revealId) || pathAsked.current === revealNonce) return;
+    pathAsked.current = revealNonce;
+    loadPathTo(revealId)
+      .then((found) => {
+        if (!found) setPathMissing(revealNonce);
+      })
+      .catch(() => setPathMissing(revealNonce));
+  }, [revealId, revealNonce, tree.nodeById, loadPathTo]);
+
   useEffect(() => {
     if (!revealId || revealNonce === undefined) return;
     if (revealAlreadyConsumed(revealNonce)) return;
     const optimistic = reveal?.optimistic ?? false;
+    const node = tree.nodeById.get(revealId) ?? null;
 
-    // A tree that has not loaded yet says nothing about whether the node exists,
-    // so a follow waits for it rather than giving up. Consuming here instead
-    // would kill every reveal issued before the first tree lands — which is most
-    // of them, the panel having only just mounted.
-    if (!optimistic && !tree) return;
-
-    const node = tree ? findNode(tree, revealId) : null;
     if (!node && !optimistic) {
-      // SNV-FR-67: the tree is loaded and does not hold it. Spend the request
-      // without touching the selection, the expansion, or the filters — and
-      // without `expandAll`, which would mark the panel state touched and
-      // *persist* an expansion of ancestors that were never revealed.
+      // A tree that has not answered yet says nothing about whether the node
+      // exists, so a follow waits for the path read rather than giving up.
+      if (pathMissing !== revealNonce) return;
+      // SNV-FR-67: the index does not hold it. Spend the request without
+      // touching the selection, the expansion, or the filters — and without
+      // `expandAll`, which would mark the panel state touched and *persist*
+      // an expansion of ancestors that were never revealed.
       markRevealConsumed(revealNonce);
       return;
     }
@@ -204,56 +215,54 @@ export function Library({
     }
 
     setSelectedId(revealId);
-    const segs = revealId.split("/");
-    const ancestors: string[] = [];
-    for (let i = 1; i < segs.length; i++) {
-      ancestors.push(segs.slice(0, i).join("/"));
-    }
-    expandAll(ancestors);
+    expandAll(ancestorsOf(revealId));
     // `expandAll` and `relaxFiltersFor` close over the live filters and are
     // re-created each render; depending on them would re-run the reveal on every
-    // render, so this keys on the nonce and the tree it needs to resolve against.
+    // render, so this keys on the nonce and the nodes it needs to resolve against.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revealNonce, revealId, tree, reveal?.optimistic]);
+  }, [revealNonce, revealId, tree.nodeById, pathMissing, reveal?.optimistic]);
 
-  const toggleFolder = (node: TreeNode) => {
+  // Stable identities, so a memoised row does no work when the panel renders
+  // for a reason that is not its own (LIB-FR-BXMZ). The latest callbacks are
+  // read through a ref.
+  const latest = useRef({ toggleExpanded, onOpenArtifact });
+  latest.current = { toggleExpanded, onOpenArtifact };
+  const toggleFolder = useCallback((node: TreeNode) => {
     setSelectedId(node.id);
-    toggleExpanded(node.id);
-  };
+    latest.current.toggleExpanded(node.id);
+  }, []);
 
-  const openFile = (node: TreeNode) => {
+  const openFile = useCallback((node: TreeNode) => {
     setSelectedId(node.id);
-    onOpenArtifact({
+    latest.current.onOpenArtifact({
       id: node.id,
       name: node.name,
       artifactType: node.artifactType,
       chip: node.artifactType ? typeChip(node.artifactType) : undefined,
     });
-  };
+  }, []);
 
-  // LIB-FR-11: manual rescan affordance.
+  const openContextMenu = useCallback((e: React.MouseEvent, node: TreeNode) => {
+    setCtx({ x: e.clientX, y: e.clientY, node });
+  }, []);
+
+  // LIB-FR-11: manual rescan affordance. The expanded folders load again as
+  // their rows render (LIB-FR-EMOO).
   const rescan = async () => {
-    try {
-      const next = await api.rescanProjectTree();
-      setTree(next);
-      // Published like any other load: a rescan is exactly the case where the
-      // folder set may have changed under a watcher that missed it (NFW-FR-04).
-      publishTree.current?.(next);
-      setError(null);
-    } catch (e) {
-      setError(String(e));
-    }
+    setError(null);
+    await tree.rescan();
+    filter.refresh();
+    loadProjectTypes();
   };
 
-  // LCM-FR-04: assign / clear type. Both return the freshly-scanned tree so the
-  // affected tags update without a separate manual reload.
+  // LCM-FR-04: assign / clear type. Each returns the node, which re-tags at
+  // once; the folders whose answer changed reload on `"project tree changed"`.
   const assignType = async (node: TreeNode, type: ArtifactType) => {
     setCtx(null);
     const scope: AssignScope = node.nodeKind === "folder" ? "folder" : "file";
     try {
       const next = await api.assignArtifactType(node.path, type, scope);
-      setTree(next);
-      publishTree.current?.(next);
+      tree.replaceNode(next);
     } catch (e) {
       setError(String(e));
     }
@@ -263,8 +272,7 @@ export function Library({
     setCtx(null);
     try {
       const next = await api.clearArtifactType(node.path);
-      setTree(next);
-      publishTree.current?.(next);
+      tree.replaceNode(next);
     } catch (e) {
       setError(String(e));
     }
@@ -376,132 +384,68 @@ export function Library({
   };
 
   /**
-   * Whether a node is itself eligible under the active artifact-type and text
-   * filters, AND-combined (LIB-FR-05). The type lens has three regimes: "files"
-   * imposes no type constraint; "artifacts" requires any resolved type; otherwise
-   * the type must match exactly.
-   *
-   * A folder answers this on its own type — the folder-scope assignment it
-   * carries (ASC-FR-18), absent unless the user gave it one — which is what makes
-   * a *typed* folder visible under **All artifacts** and under its own type lens
-   * from the moment it exists, with nothing inside it yet (LIB-FR-09).
-   */
-  const nodeMatches = (node: TreeNode): boolean =>
-    matchesLens(typeFilter, node.artifactType) && matchesText(text, node.name);
-
-  /**
-   * LIB-FR-09: a folder is shown when its subtree holds at least one visible file
-   * OR the folder is itself eligible. The first half is why the default **All
-   * artifacts** lens hides folders whose subtree holds no supported artifacts; the
-   * second is why an empty folder is surfaced rather than swallowed — one carrying
-   * an artifact type under **All artifacts** and its own type lens, and one
-   * carrying none under **All files**, which constrains nothing.
-   */
-  const subtreeMatches = (node: TreeNode): boolean => {
-    if (node.nodeKind === "file") return nodeMatches(node);
-    return nodeMatches(node) || (node.children ?? []).some(subtreeMatches);
-  };
-
-  const visibleChildren = (node: TreeNode): TreeNode[] =>
-    (node.children ?? []).filter(subtreeMatches);
-
-  /** Locate a node by id (its project-relative path, ASC-FR-13). */
-  const findNode = (node: TreeNode, id: string): TreeNode | null => {
-    if (node.id === id) return node;
-    for (const child of node.children ?? []) {
-      const hit = findNode(child, id);
-      if (hit) return hit;
-    }
-    return null;
-  };
-
-  /**
-   * `subtreeMatches` with one of the two filters neutralised, which is what
-   * LIB-FR-18 needs in order to touch only the filters that would actually hide a
-   * revealed node.
-   *
-   * `admittedByText` is exactly "would this node be visible with the lens on **All
-   * files**" — because that lens constrains nothing, leaving the text filter as
-   * the only test — and `admittedByLens` is "would it be visible with the text
-   * filter cleared". So each of these answers whether relaxing the *other* filter
-   * on its own is enough.
-   */
-  const admittedByLens = (node: TreeNode): boolean =>
-    matchesLens(typeFilter, node.artifactType) ||
-    (node.nodeKind === "folder" && (node.children ?? []).some(admittedByLens));
-
-  const admittedByText = (node: TreeNode): boolean =>
-    matchesText(text, node.name) ||
-    (node.nodeKind === "folder" && (node.children ?? []).some(admittedByText));
-
-  /**
    * LIB-FR-18: a reveal always ends with the node visible, so relax whichever
    * local filter is hiding it — and no more than that, leaving the panel's
-   * filtering untouched when the active lens already admits the node. Relaxed
-   * filters persist like any other filter change (LIB-FR-17), which falls out of
-   * going through the panel's own setters.
+   * filtering untouched when the active filters already admit the node
+   * (`filtersToRelax`). Relaxed filters persist like any other filter change
+   * (LIB-FR-17).
    */
   const relaxFiltersFor = (node: TreeNode) => {
-    if (subtreeMatches(node)) return;
-    // Dropping the lens is preferred where it suffices: **All files** is the
-    // panel's documented escape hatch (LIB-FR-09), while the text filter is
-    // something the user typed and would have to type again.
-    if (admittedByText(node)) panel.setTypeFilter("files");
-    else if (admittedByLens(node)) panel.setText("");
-    else {
-      // Each filter hides the node on its own, so neither relaxation alone
-      // reveals it.
-      panel.setTypeFilter("files");
-      panel.setText("");
-    }
+    const relax = filtersToRelax(node, typeFilter, text, filter.result);
+    if (relax.lens) panel.setTypeFilter("files");
+    if (relax.text) panel.setText("");
   };
 
-  const renderNodes = (nodes: TreeNode[], depth: number): React.ReactNode[] =>
-    nodes.flatMap((node) => {
-      const isFolder = node.nodeKind === "folder";
-      // LIB-FR-15: expanded iff recorded as such — an unknown folder, including
-      // a newly-created one, renders collapsed.
-      const open = isFolder && expanded.has(node.id);
-      const rows: React.ReactNode[] = [
-        <TreeRow
-          key={node.id}
-          node={node}
-          depth={depth}
-          open={open}
-          selected={selectedId === node.id}
-          revealed={revealId === node.id}
-          onToggle={toggleFolder}
-          onOpen={openFile}
-          onContextMenu={(e, n) => setCtx({ x: e.clientX, y: e.clientY, node: n })}
-        />,
-      ];
-      if (isFolder && open) {
-        rows.push(...renderNodes(visibleChildren(node), depth + 1));
-      }
-      return rows;
-    });
+  // LIB-FR-PPAT: with text in the filter and no answer yet, the tree shows a
+  // loading row, not the unfiltered tree, so it never flashes rows the filter
+  // is about to hide.
+  const filterPending = text.trim() !== "" && filter.result === null;
 
-  const topLevel = tree ? visibleChildren(tree) : [];
+  // LIB-FR-BXMZ: the rows, flat, in tree order. Only those in view render.
+  const rows = useMemo(
+    () =>
+      filterPending
+        ? []
+        : visibleRows({
+            root: tree.root,
+            childrenOf: tree.childrenOf,
+            expanded,
+            typeFilter,
+            filtered: filter.result,
+          }),
+    [filterPending, tree.root, tree.childrenOf, expanded, typeFilter, filter.result],
+  );
+
+  // LIB-FR-EMOO: an expanded folder on a row loads its children.
+  const ensureLoaded = tree.ensureLoaded;
+  useEffect(() => {
+    if (filter.result) return;
+    const missing = foldersToLoad(rows);
+    if (missing.length > 0) ensureLoaded(missing);
+  }, [rows, filter.result, ensureLoaded]);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const revealIndex = useMemo(
+    () =>
+      revealId ? rows.findIndex((r) => r.kind === "node" && r.node.id === revealId) : -1,
+    [rows, revealId],
+  );
+  const scrollTo = useMemo(
+    () => (revealNonce === undefined ? null : { index: revealIndex, nonce: revealNonce }),
+    [revealIndex, revealNonce],
+  );
+  const nodeRows = rows.filter((r) => r.kind === "node").length;
+  const treeReady = tree.root !== null && (text.trim() === "" || filter.result !== null);
 
   /**
    * LIB-FR-19: the lens offers the types the project has rather than the ten
-   * it could have. Recomputed from every tree load (LIB-FR-10), so a type gains
-   * its button the moment the project's first file of that type appears and
-   * loses it once the author has moved off it.
-   *
-   * A folder's own folder-scope assignment counts alongside a file's resolved
-   * type (ASC-FR-18) — a folder typed `scenario` with nothing in it yet is
-   * exactly the case where the lens has somewhere to go.
+   * it could have. A folder's own folder-scope assignment counts alongside a
+   * file's resolved type (ASC-FR-18).
    */
-  const lensPositions = useMemo(() => {
-    const types: (ArtifactType | undefined)[] = [];
-    const walk = (node: TreeNode) => {
-      types.push(node.artifactType);
-      for (const child of node.children ?? []) walk(child);
-    };
-    if (tree) walk(tree);
-    return typeLensPositions(presentTypes(types), typeFilter);
-  }, [tree, typeFilter]);
+  const lensPositions = useMemo(
+    () => typeLensPositions(presentTypes(projectTypes), typeFilter),
+    [projectTypes, typeFilter],
+  );
 
   // The empty-state copy reflects the active lens so "All files" / a specific
   // type don't misreport an empty result as "No artifacts found."
@@ -554,20 +498,44 @@ export function Library({
           // This panel makes no distinction between a narrowed tree and an
           // empty project — `emptyMessage` reflects the lens either way — so
           // the one treatment covers both.
-          !error && tree && topLevel.length === 0
+          !error && treeReady && nodeRows === 0
             ? FILTERED_BODY_CLASS
             : "vpanel__body"
         }
+        ref={scrollRef}
       >
         {error && (
           <div style={{ padding: "8px 12px", fontSize: "var(--fs-ui-sm)", color: "var(--fg-3)" }}>
             {error}
           </div>
         )}
-        {!error && tree && topLevel.length === 0 && (
+        {!error && treeReady && nodeRows === 0 && (
           <PanelFilteredState>{emptyMessage}</PanelFilteredState>
         )}
-        {renderNodes(topLevel, 0)}
+        {!error && (tree.root === null || filterPending) && <LoadingRow depth={0} />}
+        <VirtualRows
+          rows={rows}
+          scrollRef={scrollRef}
+          scrollTo={scrollTo}
+          renderRow={(row) => {
+            if (row.kind === "loading") return <LoadingRow key={row.key} depth={row.depth} />;
+            if (row.kind === "truncated") return <TruncatedRow key="truncated" />;
+            const { node, depth, open } = row;
+            return (
+              <TreeRow
+                key={node.id}
+                node={node}
+                depth={depth}
+                open={open}
+                selected={selectedId === node.id}
+                revealed={revealId === node.id}
+                onToggle={toggleFolder}
+                onOpen={openFile}
+                onContextMenu={openContextMenu}
+              />
+            );
+          }}
+        />
       </div>
       {/* LIB-FR-VMAQ: pinned below the tree, outside the scroll region, so it
           stays in view while the tree scrolls. */}

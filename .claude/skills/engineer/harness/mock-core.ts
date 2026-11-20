@@ -35,6 +35,7 @@ import { FLOW_PLAN_BODY, flowPlanInvoke, validateFlowPlan } from "./mock-flow-pl
 import { deliveryInvoke } from "./mock-delivery";
 import { arrivingPlanProposal, mapDiscussionsInvoke, planProposalComments } from "./mock-map-discussions";
 import { CALM_TEMPLATES } from "../../../../src/calm/templates";
+import { treeCommand, wireNode } from "../../../../src/test/treeCommands";
 import {
   DECOMPOSITION_ORIGINAL,
   decompositionDiscussion,
@@ -229,6 +230,38 @@ function tree() {
   for (const { path, newName } of renames) applyRename(seeded, path, newName);
   applyAssignments(seeded);
   return seeded;
+}
+
+/**
+ * The tree as the project index holds it. The folder flags (`hasArtifacts`,
+ * `subtreeTypes`, `hasChildren`) are left for `treeCommand` to compute, so an
+ * assignment made this session shows in them (ASC-FR-08, ASC-FR-OGRB).
+ */
+function indexTree(): any {
+  const root = tree();
+  const strip = (n: any) => {
+    delete n.hasArtifacts;
+    delete n.subtreeTypes;
+    delete n.hasChildren;
+    for (const c of n.children ?? []) strip(c);
+  };
+  strip(root);
+  return root;
+}
+
+/**
+ * LCM-FR-04: the node an assignment returns, and the structural-change event
+ * that reloads the folders whose answer it changed: its parent, and the
+ * folder itself when it is one.
+ */
+function assignedNode(path: string): any {
+  const node = findIn(indexTree(), path);
+  if (!node) throw "path_not_in_tree";
+  const cut = path.lastIndexOf("/");
+  const changedFolders = [cut === -1 ? "" : path.slice(0, cut)];
+  if (node.nodeKind === "folder") changedFolders.push(path);
+  queueMicrotask(() => fireBus("project-tree-changed", { changeCount: 1, removedPaths: [], changedFolders }));
+  return wireNode(node);
 }
 
 /**
@@ -614,9 +647,76 @@ function seededTree(): any {
         ],
       },
       { id: "README.md", name: "README.md", path: "README.md", nodeKind: "file" },
+      ...nestedRepoSeed(),
+      ...bigTreeSeed(),
     ],
   };
 }
+
+/**
+ * LIB-FR-VCJO / LIB-FR-JZNT: with `?nestedRepos`, one folder per
+ * `nestedRepo` state, and a folder with no children. The submodule carries a
+ * folder-scope type, so its marker and type chip share one row.
+ */
+function nestedRepoSeed(): any[] {
+  if (!harnessFlag("nestedRepos")) return [];
+  return [
+    {
+      id: "payments-gateway-integration-sdk",
+      name: "payments-gateway-integration-sdk",
+      path: "payments-gateway-integration-sdk",
+      nodeKind: "folder",
+      nestedRepo: "submodule",
+      artifactType: "skill",
+      typeSource: "assigned",
+      children: [
+        {
+          id: "payments-gateway-integration-sdk/SKILL.md",
+          name: "SKILL.md",
+          path: "payments-gateway-integration-sdk/SKILL.md",
+          nodeKind: "file",
+          artifactType: "skill",
+          typeSource: "inherited",
+        },
+      ],
+    },
+    {
+      id: "tools",
+      name: "tools",
+      path: "tools",
+      nodeKind: "folder",
+      nestedRepo: "repository",
+      children: [
+        { id: "tools/review.md", name: "review.md", path: "tools/review.md", nodeKind: "file", artifactType: "prompt", typeSource: "inferred" },
+      ],
+    },
+    {
+      id: "ui-kit",
+      name: "ui-kit",
+      path: "ui-kit",
+      nodeKind: "folder",
+      nestedRepo: "uninitialised",
+      children: [],
+    },
+    { id: "empty-folder", name: "empty-folder", path: "empty-folder", nodeKind: "folder", children: [] },
+  ];
+}
+
+/**
+ * LIB-FR-BXMZ / LIB-FR-PPAT: with `?bigTree`, a folder of 3000 typed files,
+ * so the row window and a truncated filter result are answerable in a browser.
+ */
+function bigTreeSeed(): any[] {
+  if (!harnessFlag("bigTree")) return [];
+  const children = Array.from({ length: 3000 }, (_, i) => {
+    const name = `note-${String(i).padStart(4, "0")}.md`;
+    return { id: `bulk/${name}`, name, path: `bulk/${name}`, nodeKind: "file", artifactType: "doc", typeSource: "inferred" };
+  });
+  return [{ id: "bulk", name: "bulk", path: "bulk", nodeKind: "folder", children }];
+}
+
+/** LIB-FR-JZNT: `?treeDelay=<ms>` holds each tree read, so a loading row shows. */
+const treeDelayMs = Number(harnessValue("treeDelay")) || 0;
 
 /**
  * Files created through `create_typed_file` during this session, by path.
@@ -8622,16 +8722,31 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       fireBus("export-request-changed", next);
       return { request: next, commentFailed: false };
     }
+    // LCM-FR-04: an assignment returns the one node it changed. The folders
+    // whose answer it changed reload on the structural-change event, as the
+    // real backend's watcher sends it (ASC-FR-JYXO, LIB-FR-10).
     case "assign_artifact_type":
       assignedTypes[String(a.path)] = { type: String(a.artifactType), scope: a.scope };
       publishDocumentTypes();
-      return tree();
+      return assignedNode(String(a.path));
     case "clear_artifact_type":
       delete assignedTypes[String(a.path)];
       publishDocumentTypes();
-      return tree();
-    case "load_project_tree":
-    case "rescan_project_tree":
+      return assignedNode(String(a.path));
+    // ASC-FR-KVIE, ASC-FR-AGGG, ASC-FR-SKRN, ASC-FR-YNJR, ASC-FR-AVVY,
+    // ASC-FR-QKXR, ASC-FR-11: the tree reads, answered from the seeded tree
+    // as the project index answers them.
+    case "list_tree_children":
+    case "list_tree_path":
+    case "filter_project_tree":
+    case "list_project_artifacts":
+    case "search_project_paths":
+    case "existing_project_paths":
+    case "rescan_project_tree": {
+      const answer = treeCommand(cmd, a, indexTree());
+      if (!treeDelayMs) return answer;
+      return new Promise((r) => setTimeout(r, treeDelayMs)).then(() => answer);
+    }
     case "create_file":
     case "create_folder":
       return tree();

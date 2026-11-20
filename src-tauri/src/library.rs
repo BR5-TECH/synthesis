@@ -1,8 +1,10 @@
 //! Library tree commands + file operations
 //! (PST-project-storage.md / ASC-artifact-scanning.md / LIB-library.md).
 //!
-//! - Tree: `load_project_tree` (PST-FR-07) plus the mutation/rescan commands
-//!   (ASC-FR-05/07/11), all backed by the pure scanner in `scanning`.
+//! - Tree: the folder-by-folder reads of the project index (`list_tree_children`
+//!   and its siblings, ASC-FR-HPUY) plus the mutation/rescan commands
+//!   (ASC-FR-05/07/11). Every one of them runs off the main thread
+//!   (ASC-FR-TPJO).
 //! - File ops: `delete_path` / `rename_path` / `copy_path_into_folder`
 //!   (PST-FR-18/19/20) resolve a project-relative path against the open project
 //!   root and route through the `fs` structural-mutation primitives
@@ -14,63 +16,207 @@
 //! snake/camel auto-conversion); the pure `*_impl` halves are unit-tested
 //! without a Tauri runtime.
 
+use crate::project_scope::events::EmitToProject;
 use crate::project_scope::ProjectStores;
 use std::path::Path;
+use std::sync::Arc;
 
 use crate::fs;
 use crate::progress::{self, ProgressRegistry};
 use crate::project::{basename, ProjectState};
 use crate::scanning;
 
-/// PST-FR-07: return the filesystem-mirroring, type-tagged project tree.
-///
-/// The scan is one of the operations that attribute progress
-/// (`../core/PRG-progress-reporting.md` PRG-FR-11): it walks the whole project,
-/// so on a large one it is exactly the "am I wedged or working?" case the status
-/// bar exists for. It is scoped to the content root, so a worktree change
-/// terminates a scan still running against the outgoing one (PRG-FR-13).
-#[project_scope_macros::project_scoped]
-#[tauri::command]
-pub fn load_project_tree(
-    app: tauri::AppHandle,
-    project: crate::project_scope::Scoped<'_, ProjectState>,
-    progress: crate::project_scope::Scoped<'_, ProgressRegistry>,
-) -> Result<scanning::TreeNode, String> {
-    let root = project.require_root()?;
-    progress::attribute(
-        &app,
-        &progress,
+/// ASC-FR-KVIE: the typed error of a tree read for a path that the index does
+/// not hold as a folder.
+pub const ERR_PATH_NOT_IN_TREE: &str = "path_not_in_tree";
+
+/// ASC-FR-HPUY, ASC-FR-TPJO: the mounted project index, built when none is
+/// mounted. A build is one of the operations that attribute progress
+/// (`../core/PRG-progress-reporting.md` PRG-FR-11): on a large project it is the
+/// "am I wedged or working?" case the status bar exists for. It is scoped to
+/// the content root, so a worktree change ends it (PRG-FR-13).
+pub(crate) fn project_index<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    progress: &ProgressRegistry,
+    candidates: &scanning::CandidateStore,
+    root: &fs::RootFs,
+) -> Result<Arc<scanning::ProjectIndex>, String> {
+    if let Some(index) = candidates.mounted(root) {
+        return Ok(index);
+    }
+    let started = std::time::Instant::now();
+    let index = progress::attribute(
+        app,
+        progress,
         "scan",
         "Indexing project…",
         Some(root.to_path_buf()),
-        || Ok(scanning::scan(&root)),
-    )
+        || Ok::<_, String>(candidates.index(root)),
+    )?;
+    crate::logging::log_info(
+        app,
+        &crate::logging::BUFFER,
+        &[crate::logging::Domain::Backend],
+        "project index ready",
+        crate::log_fields! {
+            "files" => index.candidates().len(),
+            "elapsed_ms" => started.elapsed().as_millis() as u64,
+        },
+    );
+    Ok(index)
 }
 
-/// ASC-FR-11: force a fresh scan and return the current tree. Never throws on a
-/// transient filesystem race (the scan skips errored entries).
+/// ASC-FR-HPUY, ASC-FR-TPJO: start the build of the project index of `root` on
+/// a background thread, when the project opens or the active worktree changes,
+/// so the first tree read finds it ready or waits for it alone.
+pub(crate) fn build_index_in_background<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: fs::RootFs,
+) {
+    let app = app.clone();
+    crate::project_scope::context::thread_spawn(move || {
+        let Some(store) = app.try_project_store::<scanning::CandidateStore>() else {
+            return;
+        };
+        match app.try_project_store::<ProgressRegistry>() {
+            Some(progress) => {
+                let _ = project_index(&app, &progress, &store, &root);
+            }
+            None => {
+                let _ = store.index(&root);
+            }
+        }
+    });
+}
+
+/// PST-FR-EHVN: the typed nodes of the project, from the mounted index when
+/// one is mounted, else from a fresh one. For a caller that is not a tree
+/// command and has no progress registry to report a build to.
+pub(crate) fn project_artifacts<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &fs::RootFs,
+) -> Vec<scanning::TreeNode> {
+    match app.try_project_store::<scanning::CandidateStore>() {
+        Some(store) => store.index(root).artifacts(),
+        None => scanning::ProjectIndex::build(root).artifacts(),
+    }
+}
+
+/// ASC-FR-KVIE: the direct children of one folder of the project tree.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[tauri::command(async)]
+pub fn list_tree_children(
+    path: String,
+    app: tauri::AppHandle,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    progress: crate::project_scope::Scoped<'_, ProgressRegistry>,
+    candidates: crate::project_scope::Scoped<'_, scanning::CandidateStore>,
+) -> Result<Vec<scanning::TreeNode>, String> {
+    let root = project.require_root()?;
+    let index = project_index(&app, &progress, &candidates, &root)?;
+    index.children(path.trim_matches('/')).ok_or_else(|| ERR_PATH_NOT_IN_TREE.to_string())
+}
+
+/// ASC-FR-AGGG: the children of each folder on the way to `path`.
+#[project_scope_macros::project_scoped]
+#[tauri::command(async)]
+pub fn list_tree_path(
+    path: String,
+    app: tauri::AppHandle,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    progress: crate::project_scope::Scoped<'_, ProgressRegistry>,
+    candidates: crate::project_scope::Scoped<'_, scanning::CandidateStore>,
+) -> Result<Option<Vec<scanning::FolderChildren>>, String> {
+    let root = project.require_root()?;
+    let index = project_index(&app, &progress, &candidates, &root)?;
+    Ok(index.path(path.trim_matches('/')))
+}
+
+/// ASC-FR-SKRN: the nodes of the tree that match the panel's text filter.
+#[project_scope_macros::project_scoped]
+#[tauri::command(async)]
+pub fn filter_project_tree(
+    text: String,
+    lens: scanning::Lens,
+    limit: usize,
+    app: tauri::AppHandle,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    progress: crate::project_scope::Scoped<'_, ProgressRegistry>,
+    candidates: crate::project_scope::Scoped<'_, scanning::CandidateStore>,
+) -> Result<scanning::FilterResult, String> {
+    let root = project.require_root()?;
+    let index = project_index(&app, &progress, &candidates, &root)?;
+    Ok(index.filter(&text, lens, limit))
+}
+
+/// ASC-FR-YNJR: every typed node of the project.
+#[project_scope_macros::project_scoped]
+#[tauri::command(async)]
+pub fn list_project_artifacts(
+    app: tauri::AppHandle,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    progress: crate::project_scope::Scoped<'_, ProgressRegistry>,
+    candidates: crate::project_scope::Scoped<'_, scanning::CandidateStore>,
+) -> Result<Vec<scanning::TreeNode>, String> {
+    let root = project.require_root()?;
+    let index = project_index(&app, &progress, &candidates, &root)?;
+    Ok(index.artifacts())
+}
+
+/// ASC-FR-AVVY: the project paths of one kind that hold a text.
+#[project_scope_macros::project_scoped]
+#[tauri::command(async)]
+pub fn search_project_paths(
+    text: String,
+    kind: scanning::PathKind,
+    limit: Option<usize>,
+    app: tauri::AppHandle,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    progress: crate::project_scope::Scoped<'_, ProgressRegistry>,
+    candidates: crate::project_scope::Scoped<'_, scanning::CandidateStore>,
+) -> Result<scanning::PathSearch, String> {
+    let root = project.require_root()?;
+    let index = project_index(&app, &progress, &candidates, &root)?;
+    Ok(index.search_paths(&text, kind, limit))
+}
+
+/// ASC-FR-QKXR: the paths of a list that the project index holds.
+#[project_scope_macros::project_scoped]
+#[tauri::command(async)]
+pub fn existing_project_paths(
+    paths: Vec<String>,
+    app: tauri::AppHandle,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+    progress: crate::project_scope::Scoped<'_, ProgressRegistry>,
+    candidates: crate::project_scope::Scoped<'_, scanning::CandidateStore>,
+) -> Result<Vec<String>, String> {
+    let root = project.require_root()?;
+    let index = project_index(&app, &progress, &candidates, &root)?;
+    Ok(index.existing(&paths))
+}
+
+/// ASC-FR-11: build the project index again from a fresh scan and return the
+/// children of the project root. Never throws on a transient filesystem race
+/// (the scan skips errored entries).
+#[project_scope_macros::project_scoped]
+#[tauri::command(async)]
 pub fn rescan_project_tree(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,
     progress: crate::project_scope::Scoped<'_, ProgressRegistry>,
-) -> Result<scanning::TreeNode, String> {
+    candidates: crate::project_scope::Scoped<'_, scanning::CandidateStore>,
+) -> Result<Vec<scanning::TreeNode>, String> {
     let root = project.require_root()?;
-    progress::attribute(
-        &app,
-        &progress,
-        "scan",
-        "Indexing project…",
-        Some(root.to_path_buf()),
-        || Ok(scanning::scan(&root)),
-    )
+    candidates.clear();
+    let index = project_index(&app, &progress, &candidates, &root)?;
+    Ok(index.children("").unwrap_or_default())
 }
 
-/// ASC-FR-05: persist a user type assignment, then return the freshly-scanned
-/// tree so the UI can re-tag without a separate reload.
+/// ASC-FR-05: persist a user type assignment, then return the node of `path`
+/// so the UI can re-tag it without a reload. The folders whose answer the
+/// assignment changed reach the UI through `"project tree changed"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn assign_artifact_type(
     path: String,
     artifact_type: scanning::ArtifactType,
@@ -81,14 +227,14 @@ pub fn assign_artifact_type(
 ) -> Result<scanning::TreeNode, String> {
     let root = project.require_root()?;
     scanning::assign(&root, &path, artifact_type, scope).map_err(|e| e.to_string())?;
-    republish_classification(&app, &root, &candidates);
-    Ok(scanning::scan(&root))
+    republish_classification(&app, &root, &candidates, &path);
+    Ok(node_after_assignment(&root, &candidates, &path))
 }
 
 /// ASC-FR-07: remove a stored assignment (no-op if absent), then return the
-/// freshly-scanned tree.
+/// node of `path`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn clear_artifact_type(
     path: String,
     app: tauri::AppHandle,
@@ -97,8 +243,23 @@ pub fn clear_artifact_type(
 ) -> Result<scanning::TreeNode, String> {
     let root = project.require_root()?;
     scanning::clear(&root, &path).map_err(|e| e.to_string())?;
-    republish_classification(&app, &root, &candidates);
-    Ok(scanning::scan(&root))
+    republish_classification(&app, &root, &candidates, &path);
+    Ok(node_after_assignment(&root, &candidates, &path))
+}
+
+/// The node of `path` after an assignment: from the mounted index, else read
+/// from the disk.
+fn node_after_assignment(
+    root: &fs::RootFs,
+    candidates: &scanning::CandidateStore,
+    path: &str,
+) -> scanning::TreeNode {
+    let rel = path.trim_matches('/');
+    candidates
+        .mounted(root)
+        .and_then(|index| index.node(rel))
+        .or_else(|| scanning::node_at(root, rel))
+        .unwrap_or_else(|| scanning::TreeNode::plain_file(rel))
 }
 
 /// A stored assignment changed, so every consumer holding a resolved
@@ -109,9 +270,10 @@ pub fn clear_artifact_type(
 /// *synchronously* with the tree the command returns, so the UI never renders a
 /// type the indexes have not moved yet.
 ///
-/// - The mounted candidate list carries each file's resolved type (ASC-FR-17),
-///   which is what `../core/SCC-search.md` groups a hit by (SCC-FR-08), so it
-///   is invalidated and the next enumeration rebuilds it.
+/// - The project index carries each file's resolved type (ASC-FR-17), which is
+///   what `../core/SCC-search.md` groups a hit by (SCC-FR-08), so the path and
+///   its subtree are classified again, and the folders whose answer changed
+///   reach the Project panel through `"project tree changed"` (ASC-FR-JYXO).
 /// - The BM25 indexes hold a file under the index its type named
 ///   (`../core/BMI-bm25-indexing.md` BMI-FR-03), so a pass is requested to move
 ///   it to the index its new type names (BMI-FR-17).
@@ -128,11 +290,25 @@ pub(crate) fn republish_classification<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     root: &fs::RootFs,
     candidates: &scanning::CandidateStore,
+    path: &str,
 ) {
     if let Some(baseline) = app.try_project_store::<scanning::AttributionBaseline>() {
         baseline.record_from_disk(root);
     }
-    candidates.invalidate();
+    // ASC-FR-HPUY: the index classifies `path` and its subtree again, with the
+    // assignments just written. No index mounted: the next read builds one.
+    let rel = path.trim_matches('/').to_string();
+    let changed = candidates.update(root, |index| index.reclassify(root, &rel));
+    if let Some(changed_folders) = changed.filter(|c| !c.is_empty()) {
+        let _ = app.emit_project(
+            crate::watcher::PROJECT_TREE_CHANGED,
+            scanning::TreeChangedPayload {
+                change_count: 1,
+                removed_paths: Vec::new(),
+                changed_folders,
+            },
+        );
+    }
     crate::bm25_index::request_pass(app, crate::bm25_index::PassScope::ARTIFACTS);
     // DCL-FR-RMVT: a `doc` assignment given or cleared changes the type sources
     // of the Documents collection.
@@ -330,15 +506,6 @@ fn artifact_rel_path(location: Option<&str>, name: &str) -> String {
     }
 }
 
-/// Find the node at project-relative `rel` within a scanned tree (used to return
-/// the freshly-created artifact's node). Pure over the tree.
-fn find_node<'a>(node: &'a scanning::TreeNode, rel: &str) -> Option<&'a scanning::TreeNode> {
-    if node.path == rel {
-        return Some(node);
-    }
-    node.children.as_ref().and_then(|cs| cs.iter().find_map(|c| find_node(c, rel)))
-}
-
 /// The node a just-created plain file has in the project tree.
 ///
 /// The counterpart of `created_folder_node`, and for the same reason: the scan
@@ -354,17 +521,7 @@ fn find_node<'a>(node: &'a scanning::TreeNode, rel: &str) -> Option<&'a scanning
 /// Carries no `artifact_type`: `create_file` records no assignment, and a node
 /// this fallback produces is one the scan does not classify at all.
 fn created_file_node(rel: &str) -> scanning::TreeNode {
-    scanning::TreeNode {
-        id: rel.to_string(),
-        name: basename(rel),
-        path: rel.to_string(),
-        node_kind: scanning::NodeKind::File,
-        artifact_type: None,
-        type_source: None,
-        display_name: None,
-        has_artifacts: None,
-        children: None,
-    }
+    scanning::TreeNode::plain_file(rel)
 }
 
 /// PST-FR-26 core: create an empty file named `name` inside `location` (the
@@ -403,8 +560,7 @@ fn create_file_impl(
     // An empty body: there is nothing to apply the project's line-ending
     // convention to (PST-FR-23), so no normalisation step is involved.
     root.write_text_atomic(&target, "").map_err(|e| e.to_string())?;
-    let tree = scanning::scan(root);
-    Ok(find_node(&tree, &rel).cloned().unwrap_or_else(|| created_file_node(&rel)))
+    Ok(scanning::node_at(root, &rel).unwrap_or_else(|| created_file_node(&rel)))
 }
 
 /// PST-FR-29: the typed validation error a `create_typed_file` carrying no
@@ -479,8 +635,7 @@ fn create_typed_file_impl(
         let _ = scanning::clear(root, &rel);
         return Err(e.to_string());
     }
-    let tree = scanning::scan(root);
-    Ok(find_node(&tree, &rel).cloned().unwrap_or_else(|| {
+    Ok(scanning::node_at(root, &rel).unwrap_or_else(|| {
         // The scan honours the project's ignore rules (ASC-FR-09), so a file
         // whose path a `.gitignore` rule covers is legitimately absent from it.
         // The creation still succeeded, and the assignment still stands, so the
@@ -525,21 +680,10 @@ fn created_folder_node(
     rel: &str,
     artifact_type: Option<scanning::ArtifactType>,
 ) -> scanning::TreeNode {
-    scanning::TreeNode {
-        id: rel.to_string(),
-        name: basename(rel),
-        path: rel.to_string(),
-        node_kind: scanning::NodeKind::Folder,
-        artifact_type,
-        // A folder's type is always an assignment; there is no other route to one
-        // (ASC-FR-18).
-        type_source: artifact_type.map(|_| scanning::TypeSource::Assigned),
-        display_name: None,
-        // ASC-FR-08: a folder-scope assignment is itself enough to count as
-        // artifact-bearing; without one a brand-new folder holds nothing.
-        has_artifacts: Some(artifact_type.is_some()),
-        children: Some(Vec::new()),
-    }
+    // ASC-FR-08, ASC-FR-18: a folder's type is always an assignment, and that
+    // assignment is itself enough to count as artifact-bearing; without one a
+    // brand-new folder holds nothing.
+    scanning::TreeNode::empty_folder(rel, artifact_type)
 }
 
 /// PST-FR-25 core: create an empty folder named `name` inside `location` (the
@@ -587,8 +731,7 @@ fn create_folder_impl(
             return Err(e.to_string());
         }
     }
-    let tree = scanning::scan(root);
-    Ok(find_node(&tree, &rel).cloned().unwrap_or_else(|| created_folder_node(&rel, effective_type)))
+    Ok(scanning::node_at(root, &rel).unwrap_or_else(|| created_folder_node(&rel, effective_type)))
 }
 
 /// PST-FR-18: delete a project file or folder
@@ -682,7 +825,7 @@ pub fn create_file(
 /// node so the UI can reveal it. The structural change also reaches the Library
 /// through the ASC watcher's `"project tree changed"` event.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_folder(
     app: tauri::AppHandle,
     location: Option<String>,
@@ -710,7 +853,12 @@ pub fn create_folder(
     // always managed (`lib.rs`), and a missing one is a wiring bug worth a
     // panic rather than a silently skipped republish. The `try_state` one
     // function up guards a different caller — the watcher's notify thread.
-    republish_classification(&app, &root, &app.project_store::<scanning::CandidateStore>());
+    republish_classification(
+        &app,
+        &root,
+        &app.project_store::<scanning::CandidateStore>(),
+        &node.path,
+    );
     Ok(node)
 }
 
@@ -775,7 +923,12 @@ pub fn create_typed_file(
     // the panel renders from. Published here for the same reason
     // `assign_artifact_type` and `create_folder` publish — and so the baseline
     // adopts what we wrote, keeping the watcher from reloading a second time.
-    republish_classification(&app, &root, &app.project_store::<scanning::CandidateStore>());
+    republish_classification(
+        &app,
+        &root,
+        &app.project_store::<scanning::CandidateStore>(),
+        &node.path,
+    );
     Ok(node)
 }
 

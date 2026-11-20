@@ -17,7 +17,7 @@ import {
   renderFlow,
 } from "../test/flowCanvasHarness";
 import { itemEl, panel, selectItem } from "../test/flowFixtures";
-import { resetListeners } from "../test/flowMocks";
+import { emitEvent, resetListeners } from "../test/flowMocks";
 import { item, plan } from "../test/flowPlanFixtures";
 
 vi.mock("@tauri-apps/api/core", async () => ({
@@ -307,39 +307,122 @@ describe("Link draft (FLO-FR-RMVR)", () => {
 
 describe("the footprint (FLO-FR-ZEJU)", () => {
   it("FLO-FR-ZEJU: a selected task shows its footprint; a path that names nothing on disk is marked as missing", async () => {
-    const b = flowBackend(twoTasks(false, { footprint: ["src/main.ts", "src/gone.ts"] }));
+    const b = flowBackend(
+      twoTasks(false, { footprint: ["src/main.ts", "src/gone.ts", "src/", "gone/"] }),
+    );
     await renderFlow(b);
 
     selectItem("t1");
     const entries = [...panel().querySelectorAll(".flow-fp__path")];
-    expect(entries.map((e) => e.textContent)).toEqual(["src/main.ts", "src/gone.ts"]);
-    expect(entries[0].closest(".flow-fp")).toHaveAttribute("data-missing", "false");
-    expect(entries[1].closest(".flow-fp")).toHaveAttribute("data-missing", "true");
-    expect(within(entries[1].closest(".flow-fp") as HTMLElement).getByText("missing")).toBeInTheDocument();
+    expect(entries.map((e) => e.textContent)).toEqual(["src/main.ts", "src/gone.ts", "src/", "gone/"]);
+    const row = (i: number) => entries[i].closest(".flow-fp") as HTMLElement;
+    await waitFor(() => expect(row(1)).toHaveAttribute("data-missing", "true"));
+    expect(row(0)).toHaveAttribute("data-missing", "false");
+    expect(within(row(1)).getByText("missing")).toBeInTheDocument();
+    // A folder entry keeps its trailing `/`, and is looked up without it.
+    expect(row(2)).toHaveAttribute("data-missing", "false");
+    expect(row(3)).toHaveAttribute("data-missing", "true");
+    // ASC-FR-QKXR: one question to the project index, and no folder walk.
+    expect(callsOf(b, "existing_project_paths")).toEqual([
+      { paths: ["src/main.ts", "src/gone.ts", "src", "gone"] },
+    ]);
+    expect(callsOf(b, "list_tree_children")).toEqual([]);
   });
 
-  it("FLO-FR-ZEJU: paths are added from a picker of the tree's files and folders, and removed one at a time", async () => {
+  it("FLO-FR-ZEJU: an entry that appears on disk stops being missing on a tree change", async () => {
+    const b = flowBackend(twoTasks(false, { footprint: ["src/new.ts"] }));
+    let held: string[] = [];
+    b.on.existing_project_paths = () => Promise.resolve(held);
+    await renderFlow(b);
+
+    selectItem("t1");
+    const row = () => panel().querySelector(".flow-fp") as HTMLElement;
+    await waitFor(() => expect(row()).toHaveAttribute("data-missing", "true"));
+
+    held = ["src/new.ts"];
+    act(() => emitEvent("project-tree-changed", { changeCount: 1, changedFolders: ["src"] }));
+    await waitFor(() => expect(row()).toHaveAttribute("data-missing", "false"));
+  });
+
+  it("FLO-FR-ZEJU: when the index cannot answer, no footprint entry is marked missing", async () => {
+    const b = flowBackend(twoTasks(false, { footprint: ["src/main.ts", "src/gone.ts"] }));
+    b.on.existing_project_paths = () => Promise.reject("index_not_ready");
+    await renderFlow(b);
+
+    selectItem("t1");
+    await waitFor(() => expect(callsOf(b, "existing_project_paths")).toHaveLength(1));
+    await act(async () => {});
+    for (const entry of panel().querySelectorAll(".flow-fp")) {
+      expect(entry).toHaveAttribute("data-missing", "false");
+    }
+  });
+
+  it("FLO-FR-ZEJU: the picker searches the project paths after a rest in typing, files and folders, a folder with a trailing slash", async () => {
+    const b = flowBackend(twoTasks());
+    const { flows } = await renderFlow(b);
+    vi.useFakeTimers();
+
+    selectItem("t1");
+    const input = () => within(panel()).getByRole("combobox", { name: "Add path" });
+    const offered = () =>
+      [...panel().querySelectorAll("datalist option")].map((o) => (o as HTMLOptionElement).value);
+
+    // Nothing is searched until the rest in typing has passed.
+    expect(callsOf(b, "search_project_paths")).toEqual([]);
+    await advance(150);
+    expect(callsOf(b, "search_project_paths")).toEqual([
+      { text: "", kind: "file", limit: 50 },
+      { text: "", kind: "folder", limit: 50 },
+    ]);
+    expect(offered()).toContain("src/");
+    expect(offered()).toContain("src/main.ts");
+    expect(offered()).toContain("notes.txt");
+    expect(offered()).not.toContain("src");
+
+    // Typed text searches again, once, for that text.
+    fireEvent.change(input(), { target: { value: "s" } });
+    fireEvent.change(input(), { target: { value: "sr" } });
+    await advance(100);
+    expect(callsOf(b, "search_project_paths")).toHaveLength(2);
+    fireEvent.change(input(), { target: { value: "src" } });
+    await advance(150);
+    expect(callsOf(b, "search_project_paths").slice(2)).toEqual([
+      { text: "src", kind: "file", limit: 50 },
+      { text: "src", kind: "folder", limit: 50 },
+    ]);
+    expect(offered()).toEqual(["src/", "src/main.ts"]);
+
+    // A choice from the list is added at once, and leaves the list.
+    fireEvent.change(input(), { target: { value: "src/" } });
+    expect(findItem(planOf(flows), "t1")!.footprint).toEqual(["src/"]);
+    expect(input()).toHaveValue("");
+    expect(offered()).not.toContain("src/");
+  });
+
+  it("FLO-FR-ZEJU: typed text is added on Enter, and paths are removed one at a time", async () => {
     const b = flowBackend(twoTasks());
     const { flows } = await renderFlow(b);
 
     selectItem("t1");
-    const picker = within(panel()).getByRole("combobox", { name: "Add path" });
-    const paths = within(picker)
-      .getAllByRole("option")
-      .map((o) => (o as HTMLOptionElement).value);
-    expect(paths).toContain("src/");
-    expect(paths).toContain("src/main.ts");
-    expect(paths).toContain("notes.txt");
-    await userEvent.selectOptions(picker, "src/");
-    await userEvent.selectOptions(within(panel()).getByRole("combobox", { name: "Add path" }), "notes.txt");
-    expect(findItem(planOf(flows), "t1")!.footprint).toEqual(["src/", "notes.txt"]);
+    const input = () => within(panel()).getByRole("combobox", { name: "Add path" });
+    fireEvent.change(input(), { target: { value: "src/" } });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    fireEvent.change(input(), { target: { value: "docs/later.md" } });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    expect(findItem(planOf(flows), "t1")!.footprint).toEqual(["src/", "docs/later.md"]);
+
+    // An entry already in the footprint is not added twice.
+    fireEvent.change(input(), { target: { value: "src/" } });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    expect(findItem(planOf(flows), "t1")!.footprint).toEqual(["src/", "docs/later.md"]);
+
     await userEvent.click(within(panel()).getByRole("button", { name: "Remove path src/" }));
-    expect(findItem(planOf(flows), "t1")!.footprint).toEqual(["notes.txt"]);
+    expect(findItem(planOf(flows), "t1")!.footprint).toEqual(["docs/later.md"]);
   });
 
   it("FLO-FR-ZEJU: while the project tree is not read, no footprint entry is marked missing", async () => {
     const b = flowBackend(twoTasks(false, { footprint: ["src/main.ts", "src/gone.ts"] }));
-    b.on.load_project_tree = () => new Promise(() => {});
+    b.on.list_project_artifacts = () => new Promise(() => {});
     await renderFlow(b);
 
     selectItem("t1");

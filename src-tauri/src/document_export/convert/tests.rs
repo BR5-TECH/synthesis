@@ -92,16 +92,30 @@ pub(crate) fn document_xml(bytes: &[u8]) -> String {
     xml
 }
 
-// DXP-FR-YVIV: the four levels of a vertical break and their heights.
+// DXP-FR-YVIV, DXP-FR-SEDX: the four levels of a vertical break. V1 is a
+// page break, and V2 to V4 are spacers of 10, 6, and 3 body lines.
 #[test]
-fn vertical_breaks_become_spacers_of_each_level() {
-    assert_eq!(classify_marker_line("<!-- % -->"), Some(Marker::Break(12)));
-    assert_eq!(classify_marker_line("<!--%%-->"), Some(Marker::Break(8)));
-    assert_eq!(classify_marker_line("  <!-- %%% -->  "), Some(Marker::Break(5)));
-    assert_eq!(classify_marker_line("<!-- %%%%%% -->"), Some(Marker::Break(3)));
+fn vertical_breaks_become_blocks_of_each_level() {
+    assert_eq!(classify_marker_line("<!-- % -->"), Some(Marker::Break(1)));
+    assert_eq!(classify_marker_line("<!--%%-->"), Some(Marker::Break(2)));
+    assert_eq!(classify_marker_line("  <!-- %%% -->  "), Some(Marker::Break(3)));
+    assert_eq!(classify_marker_line("<!-- %%%%%% -->"), Some(Marker::Break(4)));
     assert_eq!(classify_marker_line("<!-- % x -->"), None);
-    let doc = parse("one\n\n<!-- %% -->\ntwo\n");
-    assert_eq!(doc.blocks[1].block, Block::Spacer { lines: 8 });
+    let doc = parse("one\n\n<!-- % -->\ntwo\n\n<!-- %% -->\nthree\n\n<!-- %%% -->\nfour\n");
+    assert_eq!(doc.blocks[1].block, Block::PageBreak);
+    assert_eq!(doc.blocks[3].block, Block::Spacer { lines: 10 });
+    assert_eq!(doc.blocks[5].block, Block::Spacer { lines: 6 });
+}
+
+// DXP-FR-RWWA: page breaks with no block before or after them go away, and
+// the ones between blocks stay.
+#[test]
+fn page_breaks_at_the_edges_are_trimmed() {
+    let doc =
+        super::document_of("<!-- % -->\na\n\n<!-- % -->\n<!-- % -->\nb\n\n<!-- % -->\n", false);
+    let kinds: Vec<bool> = doc.blocks.iter().map(|top| top.block == Block::PageBreak).collect();
+    assert_eq!(kinds, vec![false, true, true, false]);
+    assert!(super::document_of("<!-- % -->\n<!-- % -->\n", false).blocks.is_empty());
 }
 
 // DXP-FR-ERZY: a marker aligns the top-level block on the very next line only.
@@ -231,7 +245,7 @@ fn merman_renders_a_flowchart_to_png() {
 #[test]
 fn docx_carries_alignment_and_spacers() {
     let dir = tempfile::tempdir().unwrap();
-    let text = "<!-- center -->\nCentred words\n\n<!-- % -->\n<!-- right -->\nRight words\n";
+    let text = "<!-- center -->\nCentred words\n\n<!-- %% -->\n<!-- right -->\nRight words\n";
     let (converted, _) = run(text, Format::Docx, false, &render_ok, dir.path());
     let xml = document_xml(&converted.bytes);
     assert!(xml.contains("Centred words"));
@@ -239,7 +253,7 @@ fn docx_carries_alignment_and_spacers() {
         xml.contains(r#"<w:jc w:val="center" />"#) || xml.contains(r#"<w:jc w:val="center"/>"#)
     );
     assert!(xml.contains(r#"w:val="right""#));
-    assert!(xml.contains(r#"w:line="3960""#), "a V1 break is 12 body lines");
+    assert!(xml.contains(r#"w:line="3300""#), "a V2 break is 10 body lines");
 }
 
 // DXP-FR-YRVE: the constructs of the body reach the DOCX.

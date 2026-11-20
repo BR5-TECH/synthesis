@@ -234,33 +234,6 @@ pub struct ProjectHealthSignal {
 // Recently edited (PST-FR-31)
 // ---------------------------------------------------------------------------
 
-/// Flatten the scanned tree into one entry per **artifact**: a file node with a
-/// resolved artifact type (ASC-FR-08).
-///
-/// A folder node is skipped, and so is a file carrying no type — the loader
-/// enumerates artifacts, and a plain text file is not one, however recently it
-/// was written (PST-FR-23).
-///
-/// The name is the artifact's **display name**: the name the file declares for
-/// itself where its filename identifies nothing (ASC-FR-19), and the basename
-/// otherwise. The same fallback every other surface applies, so a skill reads as
-/// `analyst` here exactly as it does in the Project panel rather than as the
-/// `SKILL.md` every skill shares.
-fn collect_artifact_nodes(
-    node: &scanning::TreeNode,
-    out: &mut Vec<(String, String, scanning::ArtifactType)>,
-) {
-    if let (scanning::NodeKind::File, Some(t)) = (node.node_kind, node.artifact_type) {
-        let name = node.display_name.clone().unwrap_or_else(|| node.name.clone());
-        out.push((node.id.clone(), name, t));
-    }
-    if let Some(children) = &node.children {
-        for c in children {
-            collect_artifact_nodes(c, out);
-        }
-    }
-}
-
 /// PST-FR-31 (pure): the five most recently modified artifacts, from a list of
 /// `(id, name, kind, modified)` readings.
 ///
@@ -297,9 +270,16 @@ fn recently_edited_impl<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     root: &crate::fs::RootFs,
 ) -> Vec<RecentlyEditedItem> {
-    let tree = scanning::scan(root);
-    let mut nodes = Vec::new();
-    collect_artifact_nodes(&tree, &mut nodes);
+    // PST-FR-EHVN: the artifact set comes from the project index.
+    let nodes: Vec<(String, String, scanning::ArtifactType)> =
+        crate::library::project_artifacts(app, root)
+            .into_iter()
+            .filter(|n| n.node_kind == scanning::NodeKind::File)
+            .filter_map(|n| {
+                let name = n.display_name.clone().unwrap_or_else(|| n.name.clone());
+                Some((n.id, name, n.artifact_type?))
+            })
+            .collect();
     let (readings, omitted) = stat_artifacts(nodes, |id| {
         root.file_info(root.path().join(id)).ok().and_then(|i| i.modified)
     });
@@ -353,7 +333,7 @@ fn stat_artifacts(
 /// Answers with an empty list rather than an error when no project is open
 /// (PST-FR-12), which is what hides the widget on an empty Dashboard.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_recently_edited_artifacts(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,

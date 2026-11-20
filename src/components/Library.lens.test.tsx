@@ -3,6 +3,7 @@
  * it keeps at a narrow panel width
  * (`../../specifications/ui/LIB-library.md`, LIB-FR-19, SNV-FR-58 … SNV-FR-63).
  */
+import { resetLogBufferForTest } from "../logging";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
@@ -40,6 +41,7 @@ import {
   file,
   folder,
   makeTreeStubs,
+  waitForTree,
   panelState,
   renderLibrary,
 } from "../test/libraryFixtures";
@@ -53,9 +55,10 @@ import {
 } from "../test/selectors";
 import { resetPanelReveals } from "../state/panelReveal";
 
-const { mockInvoke, setLoadTree } = makeTreeStubs(invokeMock);
+const { mockInvoke, setTree } = makeTreeStubs(invokeMock);
 
 beforeEach(() => {
+  resetLogBufferForTest();
   // Module-level, like the preferences cache: reveal nonces are minted from
   // one counter for the app's life, so a suite that does not reset finds its
   // first request already consumed by the previous one.
@@ -77,9 +80,10 @@ afterEach(() => {
 
 describe("filter-row arrangement (SNV-FR-58)", () => {
   it("puts the text filter above the type lens, both above the tree", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
     await screen.findByText("specifications");
+    await waitForTree();
 
     const controls = document.querySelector(".panel-controls")!;
     const lens = screen.getByRole("radiogroup", { name: "Filter by type" });
@@ -126,9 +130,10 @@ describe("the lens's present-type rule (LIB-FR-19)", () => {
       ]),
       drafts,
     ]);
-    setLoadTree(tree);
+    setTree(tree);
     renderLibrary();
     await screen.findByText("drafts");
+    await waitForTree();
 
     expect(selectorValues("Filter by type")).toEqual([
       "artifacts",
@@ -159,11 +164,12 @@ describe("the lens's present-type rule (LIB-FR-19)", () => {
     ]);
     let tree = before;
     mockInvoke(
-      { load_project_tree: () => structuredClone(tree) },
+      { tree: () => structuredClone(tree) },
       expandedAll(before),
     );
     renderLibrary();
     await screen.findByText("a.md");
+    await waitForTree();
     expect(selectorValues("Filter by type")).toEqual([
       "artifacts",
       "skill",
@@ -193,11 +199,12 @@ describe("the lens's present-type rule (LIB-FR-19)", () => {
     const after = folder("", true, [file("s.md", "spec", "inferred")]);
     let tree = before;
     mockInvoke(
-      { load_project_tree: () => structuredClone(tree) },
+      { tree: () => structuredClone(tree) },
       expandedAll(before),
     );
     renderLibrary();
     await screen.findByText("a.md");
+    await waitForTree();
 
     await pickSelector("Filter by type", "skill");
     expect(screen.getByText("a.md")).toBeInTheDocument();
@@ -308,7 +315,7 @@ describe("the lens row at a narrow panel width (SNV-FR-63, SNV-FR-33)", () => {
 
   it("keeps All artifacts, All files, and the active lens at every width", async () => {
     // Four present types, so the row is All + 4 + Files = six positions.
-    setLoadTree(
+    setTree(
       folder("", true, [
         file("a.md", "skill", "inferred"),
         file("b.md", "agent", "inferred"),
@@ -318,6 +325,7 @@ describe("the lens row at a narrow panel width (SNV-FR-63, SNV-FR-33)", () => {
     );
     renderLibrary();
     await screen.findByText("a.md");
+    await waitForTree();
     expect(selectorValues("Filter by type")).toHaveLength(6);
 
     // Stand on a lens in the middle of the row, then narrow past what fits.
@@ -359,9 +367,10 @@ describe("what the present-type rule reads (LIB-FR-19)", () => {
       folder(".claude", true, [file(".claude/a.md", "skill", "inferred")]),
       file("AGENTS.md", "agent", "inferred"),
     ]);
-    setLoadTree(tree, panelState({ expandedPaths: [] }));
+    setTree(tree, panelState({ expandedPaths: [] }));
     renderLibrary();
     await screen.findByText("AGENTS.md");
+    await waitForTree();
 
     // The Skill file itself is not rendered — its folder is collapsed.
     expect(screen.queryByText("a.md")).not.toBeInTheDocument();
@@ -374,9 +383,10 @@ describe("what the present-type rule reads (LIB-FR-19)", () => {
   });
 
   it("offers the two sentinels alone when nothing is classified", async () => {
-    setLoadTree(folder("", false, [file("notes.txt"), file("package.json")]));
+    setTree(folder("", false, [file("notes.txt"), file("package.json")]));
     renderLibrary();
     await screen.findByText("No artifacts found.");
+    await waitForTree();
 
     // No type button can narrow this tree to anything, so the row offers the
     // default and the escape hatch and nothing between them.

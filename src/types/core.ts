@@ -47,9 +47,12 @@ export interface LibraryNode {
 }
 
 // Filesystem-derived Library tree (ASC-artifact-scanning.md / LIB-FR-02).
-// Mirrors the Rust `scanning::TreeNode` wire shape (camelCase) produced by
-// `load_project_tree`. Folders carry `hasArtifacts` + `children`; files carry
-// `artifactType` + `typeSource` when classified.
+// Mirrors the Rust `scanning::TreeNode` wire shape (camelCase) produced by the
+// tree reads of ASC-artifact-scanning.md. Folders carry `hasArtifacts`,
+// `subtreeTypes`, and `hasChildren`; files carry `artifactType` + `typeSource`
+// when classified. `children` is present only in a filter result.
+// ASC-FR-YLGN: the repository boundary a folder is.
+export type NestedRepo = "submodule" | "repository" | "uninitialised";
 export type NodeKind = "folder" | "file";
 export type TypeSource = "inferred" | "assigned" | "inherited";
 export type AssignScope = "file" | "folder";
@@ -68,8 +71,35 @@ export interface TreeNode {
    */
   displayName?: string;
   hasArtifacts?: boolean;
+  /** ASC-FR-OGRB: the types present in the folder's subtree. */
+  subtreeTypes?: ArtifactType[];
+  /** ASC-FR-YSWU: whether the folder holds any node, whatever the lens. */
+  hasChildren?: boolean;
+  /** ASC-FR-YLGN: set only on a folder that is a repository boundary. */
+  nestedRepo?: NestedRepo;
   children?: TreeNode[];
 }
+
+/** ASC-FR-AGGG: one folder of a `list_tree_path` answer and its children. */
+export interface FolderChildren {
+  folder: string;
+  children: TreeNode[];
+}
+
+/** ASC-FR-SKRN: the answer of `filter_project_tree`. */
+export interface FilterResult {
+  root: TreeNode[];
+  truncated: boolean;
+}
+
+/** ASC-FR-AVVY: the answer of `search_project_paths`. */
+export interface PathSearch {
+  paths: string[];
+  truncated: boolean;
+}
+
+/** LIB-FR-04: the lens a tree read takes, in the backend's spelling. */
+export type TreeLens = "all_artifacts" | "all_files" | ArtifactType;
 
 // Payload of the backend `"project tree changed"` event (ASC-FR-10 / ASC-FR-22).
 export interface TreeChangedPayload {
@@ -87,6 +117,11 @@ export interface TreeChangedPayload {
    * consumer that reads it.
    */
   removedPaths?: string[];
+  /**
+   * ASC-FR-JYXO: the folders whose `list_tree_children` answer changed, `""`
+   * for the project root. Optional on the same terms as `removedPaths`.
+   */
+  changedFolders?: string[];
 }
 
 // Artifact contents contract (PST-FR-15 / EXC-FR-WCOM). `load_artifact_contents_by_id`

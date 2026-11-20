@@ -44,6 +44,7 @@ The modal surface for creating a new folder in the open project: the user picks 
 ## UI contract boundary
 - **Owned by the UI**: the modal layout, its centering, and its dismissal; the three inputs (Parent Folder, Name, Artifact Type) and their enablement; the **Parent Folder** single-select over the project's existing folders and the project root, and the fact that the project root is its default (NFW-FR-04); the **Artifact Type** single-select over an unset state plus the ten built-in artifact types, and the fact that unset is its default (NFW-FR-05); client-side **Name** validation; the two invocation points (File menu `SNV-shell-navigation.md` SNV-FR-24, Project context menu `LCM-library-context-menu.md` LCM-FR-09) and the parent seeding each performs (NFW-FR-06, NFW-FR-07); the reveal-and-select request issued to the Project panel after a successful creation (NFW-FR-11); and inline display of a creation error. The window reads the project's folder set from the tree the Project panel already holds; it never scans the filesystem itself and never decides artifact types.
 - **Delegated to backend (abstract)**:
+  - `"search project paths (text, kind, limit)"` — lists every folder of the project, with `kind = folder` and no limit, for the **Parent Folder** select; owned by `../core/ASC-artifact-scanning.md` (ASC-FR-AVVY).
   - `"create folder (location, name, artifact type)"` — creates the folder and, when a type is supplied, records it as that folder's folder-scope assignment; owned by `../core/PST-project-storage.md` (PST-FR-24). Returns the new folder node so the UI can reveal it.
   - The new node also reaches the Project panel through the `"project tree changed"` event (`../core/ASC-artifact-scanning.md` ASC-FR-10); the window does not push the node into the tree itself.
 
@@ -65,5 +66,5 @@ The modal surface for creating a new folder in the open project: the user picks 
 ## Non-functional requirements
 - The window opens with keyboard focus on the **Name** input, because it is the only value the user must always supply.
 - The single-overlay rule of NFW-FR-01 is enforced by opening logic, not by listener coordination: the window assumes no other overlay is mounted while it is open.
-- The **Parent Folder** select is populated from the tree already in memory, so opening the window issues no backend call and costs no filesystem walk.
+- The **Parent Folder** select is populated from the project index through one `"search project paths (text, kind, limit)"` call, so opening the window costs no filesystem walk, and a list already read and not stale is reused with no call.
 - The window carries no expandable region and no optional block, so its height is fixed and it never reflows while the user fills it in.

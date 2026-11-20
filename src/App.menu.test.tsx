@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { listen } from "@tauri-apps/api/event";
 
 import App from "./App";
+import { treeCommand } from "./test/treeCommands";
+import type { TreeNode } from "./types";
 import { resetAppPreferencesCache } from "./state/appPreferences";
 import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
 import { letWriteLand } from "./test/autosave";
@@ -110,7 +112,33 @@ vi.mock("@tauri-apps/api/window", () => {
   };
 });
 
-function defaultInvoke(cmd: string) {
+/** The project tree every tree read is answered from (`test/treeCommands.ts`). */
+const TREE: TreeNode = {
+  id: "",
+  name: "acme",
+  path: "",
+  nodeKind: "folder",
+  children: [
+    {
+      id: "a.md",
+      name: "a.md",
+      path: "a.md",
+      nodeKind: "file",
+      artifactType: "spec",
+    },
+    {
+      id: "b.md",
+      name: "b.md",
+      path: "b.md",
+      nodeKind: "file",
+      artifactType: "spec",
+    },
+  ],
+};
+
+function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
+  const read = treeCommand(cmd, args, TREE);
+  if (read) return read;
   switch (cmd) {
     case "list_recent_projects":
       return [
@@ -123,29 +151,6 @@ function defaultInvoke(cmd: string) {
       return null;
     case "load_app_preferences":
       return { theme: "dark" };
-    case "load_project_tree":
-      return {
-        id: "",
-        name: "acme",
-        path: "",
-        nodeKind: "folder",
-        children: [
-          {
-            id: "a.md",
-            name: "a.md",
-            path: "a.md",
-            nodeKind: "file",
-            artifactType: "spec",
-          },
-          {
-            id: "b.md",
-            name: "b.md",
-            path: "b.md",
-            nodeKind: "file",
-            artifactType: "spec",
-          },
-        ],
-      };
     case "validate_flow_document":
       // FGV-FR-02 / FLO-FR-46: the backend judges a Flow body before the canvas
       // renders it. The rules themselves are covered by the Rust suite.
@@ -203,7 +208,7 @@ beforeEach(() => {
   refreshListeners();
   listenMock.mockClear();
   invokeMock.mockReset();
-  invokeMock.mockImplementation(async (cmd: string) => defaultInvoke(cmd));
+  invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => defaultInvoke(cmd, args));
   // Both records are cached at module scope; reset them so one test's
   // persisted state is not served to the next.
   resetAppPreferencesCache();
@@ -373,7 +378,7 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
   // NFI-FR-09, NFI-FR-10 / NFI-FR-11, ESH-FR-ATDS, LIB-FR-18 / NFI-FR-12: confirming creates the file, closes the
   // window, opens the new file in an Editor tab, and reveals it in the Library.
   it("NFI-FR-09, NFI-FR-10/10: creating an untyped file opens it in an Editor tab and closes the window", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "create_file") {
         // An untyped plain file: the backend recorded no assignment and nothing
         // classifies `package.json` (NFI-FR-11).
@@ -384,7 +389,7 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
           nodeKind: "file",
         };
       }
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
     render(<App />);
     await enterIde();
@@ -416,9 +421,9 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
   // NFI-FR-14: a rejected creation keeps the window open with its
   // inputs intact, opens no tab, and shows the error inline.
   it("NFI-FR-14: a collision keeps the window open with its inputs intact and opens no tab", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "create_file") throw "already exists: package.json";
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
     render(<App />);
     await enterIde();
@@ -659,10 +664,10 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
   it("SNV-FR-27, SNV-FR-39: reopening after a full-screen Close project mounts full-screen again", async () => {
     // The user worked full-screen, so the preference is persisted set — that is
     // what must survive the trip through the picker (SNV-FR-27).
-    invokeMock.mockImplementation(async (cmd: string) => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "load_app_preferences")
         return { theme: "dark", mainWindowFullscreen: true };
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
     isFullscreenMock.mockResolvedValue(true);
 

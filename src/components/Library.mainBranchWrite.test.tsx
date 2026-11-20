@@ -4,6 +4,7 @@
  * `../../specifications/ui/MBW-main-branch-write.md` MBW-FR-DBGA,
  * MBW-FR-ILFN).
  */
+import { resetLogBufferForTest } from "../logging";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
@@ -16,7 +17,13 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 import { MainBranchWriteHost } from "./MainBranchWrite";
-import { baseTree, expandedAll, makeTreeStubs, renderLibrary } from "../test/libraryFixtures";
+import {
+  baseTree,
+  expandedAll,
+  makeTreeStubs,
+  renderLibrary,
+  waitForTree,
+} from "../test/libraryFixtures";
 import { resetPanelReveals } from "../state/panelReveal";
 import { currentMainBranchWrite } from "../state/mainBranchWrite";
 import { mainGuard, scriptedReads } from "../test/mainBranchWriteFixtures";
@@ -24,6 +31,7 @@ import { mainGuard, scriptedReads } from "../test/mainBranchWriteFixtures";
 const { mockInvoke } = makeTreeStubs(invokeMock);
 
 beforeEach(() => {
+  resetLogBufferForTest();
   resetPanelReveals();
   invokeMock.mockReset();
 });
@@ -44,7 +52,7 @@ describe("the Library writes on a main branch (LCM-FR-TDWE, MBW-FR-DBGA)", () =>
   it("LCM-FR-TDWE, MBW-FR-DBGA, MBW-FR-ILFN: a rename waits for the confirmation, runs after Confirm, and a later delete of the same branch asks no more", async () => {
     const reads = scriptedReads(mainGuard());
     mockInvoke(
-      { load_project_tree: () => baseTree(), rename_path: () => undefined, delete_path: () => undefined },
+      { tree: () => baseTree(), rename_path: () => undefined, delete_path: () => undefined },
       expandedAll(baseTree()),
     );
     renderLibrary();
@@ -70,7 +78,7 @@ describe("the Library writes on a main branch (LCM-FR-TDWE, MBW-FR-DBGA)", () =>
   it("LCM-FR-TDWE, MBW-FR-XBJS: a cancel of the confirmation invokes no delete", async () => {
     scriptedReads(mainGuard());
     mockInvoke(
-      { load_project_tree: () => baseTree(), delete_path: () => undefined },
+      { tree: () => baseTree(), delete_path: () => undefined },
       expandedAll(baseTree()),
     );
     renderLibrary();
@@ -89,7 +97,7 @@ describe("the Library writes on a main branch (LCM-FR-TDWE, MBW-FR-DBGA)", () =>
   it("LCM-FR-TDWE: a protected branch shows the same confirmation with the GitHub line, and Confirm runs the rename", async () => {
     scriptedReads(mainGuard({ protection: "protected" }));
     mockInvoke(
-      { load_project_tree: () => baseTree(), rename_path: () => undefined },
+      { tree: () => baseTree(), rename_path: () => undefined },
       expandedAll(baseTree()),
     );
     renderLibrary();
@@ -105,12 +113,13 @@ describe("the Library writes on a main branch (LCM-FR-TDWE, MBW-FR-DBGA)", () =>
   it("LCM-FR-TDWE, MBW-FR-DBGA, MBW-FR-XBJS: a paste waits for the confirmation, a cancel invokes no copy, and a confirm invokes it once", async () => {
     const reads = scriptedReads(mainGuard());
     mockInvoke(
-      { load_project_tree: () => baseTree(), copy_path_into_folder: () => undefined },
+      { tree: () => baseTree(), copy_path_into_folder: () => undefined },
       expandedAll(baseTree()),
     );
     renderLibrary();
     render(<MainBranchWriteHost />);
     await screen.findByText("specifications");
+    await waitForTree();
 
     fireEvent.contextMenu(screen.getByText("onboarding.md"));
     fireEvent.click(within(document.querySelector(".menu") as HTMLElement).getByText("Copy"));
@@ -137,7 +146,7 @@ describe("the Library writes on a main branch (LCM-FR-TDWE, MBW-FR-DBGA)", () =>
 
   it("MBW-FR-QKVA: a tree on a main branch that is only read asks for no confirmation", async () => {
     const reads = scriptedReads(mainGuard());
-    mockInvoke({ load_project_tree: () => baseTree() }, expandedAll(baseTree()));
+    mockInvoke({ tree: () => baseTree() }, expandedAll(baseTree()));
     const { onOpenArtifact } = renderLibrary();
     render(<MainBranchWriteHost />);
 

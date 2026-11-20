@@ -3,11 +3,11 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 
 import {
   flattenArtifacts,
-  flattenPaths,
   referenceableArtifacts,
   useProjectArtifacts,
 } from "./useProjectArtifacts";
 import type { TreeNode } from "../types";
+import { treeCommand } from "../test/treeCommands";
 
 const invokeMock = vi.fn();
 const unlistenMock = vi.fn();
@@ -63,6 +63,20 @@ beforeEach(() => {
 });
 
 afterEach(cleanup);
+
+/**
+ * Answer `"list project artifacts"` from a nested fixture, as the project
+ * index would (ASC-FR-YNJR). The log flush is answered, and any other command
+ * rejects.
+ */
+function serveTree(tree: TreeNode | (() => TreeNode)) {
+  invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+    if (cmd === "append_log_records") return undefined;
+    const read = treeCommand(cmd, args, typeof tree === "function" ? tree() : tree);
+    if (read) return read;
+    throw new Error(`unexpected invoke ${cmd}`);
+  });
+}
 
 /** Renders the hook's output as text, so a test can read it out of the DOM. */
 function Probe() {
@@ -188,24 +202,9 @@ describe("referenceableArtifacts (FLO-FR-10)", () => {
   });
 });
 
-describe("flattenPaths (FLO-FR-ZEJU)", () => {
-  it("FLO-FR-ZEJU: lists every file and folder, a folder with a trailing slash", () => {
-    expect(
-      flattenPaths(
-        root([
-          folder("src", [file("src/main.ts"), folder("src/ui", [])]),
-          file("README.md", "doc"),
-        ]),
-      ),
-    ).toEqual(["src/", "src/main.ts", "src/ui/", "README.md"]);
-  });
-});
-
 describe("useProjectArtifacts (FLO-FR-10 / FLO-FR-11)", () => {
-  it("reads the project tree on mount and reports itself loaded", async () => {
-    invokeMock.mockResolvedValue(
-      root([folder("prompts", [file("prompts/gather.md", "prompt")])]),
-    );
+  it("reads the project artifacts on mount and reports itself loaded", async () => {
+    serveTree(root([folder("prompts", [file("prompts/gather.md", "prompt")])]));
 
     render(<Probe />);
 
@@ -213,7 +212,9 @@ describe("useProjectArtifacts (FLO-FR-10 / FLO-FR-11)", () => {
       expect(screen.getByTestId("loaded")).toHaveTextContent("true"),
     );
     expect(screen.getByTestId("ids")).toHaveTextContent("prompts/gather.md");
-    expect(invokeMock).toHaveBeenCalledWith("load_project_tree");
+    expect(invokeMock).toHaveBeenCalledWith("list_project_artifacts");
+    // ASC-FR-YNJR: the flat list, and no read of the whole tree.
+    expect(invokeMock.mock.calls.map((c) => c[0])).toEqual(["list_project_artifacts"]);
   });
 
   // Load-bearing for FLO-FR-11: `loaded` is what tells an unresolved reference
@@ -232,16 +233,15 @@ describe("useProjectArtifacts (FLO-FR-10 / FLO-FR-11)", () => {
 
   // FLO-FR-11: an artifact created or deleted while a Flow tab is open changes
   // what resolves, so the list follows the structural-change channel.
-  it("re-reads the tree when the project tree changes", async () => {
-    invokeMock.mockResolvedValue(root([file("a.md", "prompt")]));
+  it("re-reads the artifacts when the project tree changes", async () => {
+    let current = root([file("a.md", "prompt")]);
+    serveTree(() => current);
     render(<Probe />);
     await waitFor(() =>
       expect(screen.getByTestId("ids")).toHaveTextContent("a.md"),
     );
 
-    invokeMock.mockResolvedValue(
-      root([file("a.md", "prompt"), file("b.flow", "flow")]),
-    );
+    current = root([file("a.md", "prompt"), file("b.flow", "flow")]);
     await act(async () => {
       treeHandlers.forEach((h) => h({ payload: { reason: "changed" } }));
     });
@@ -255,7 +255,7 @@ describe("useProjectArtifacts (FLO-FR-10 / FLO-FR-11)", () => {
   // nothing. The name comes off the node the scan produced (ASC-FR-19); the
   // canvas never opens an artifact to find out what it is called.
   it("takes a skill's display name from the tree, and falls back to the filename", async () => {
-    invokeMock.mockResolvedValue(
+    serveTree(
       root([
         folder(".claude/skills/code-review", [
           file(".claude/skills/code-review/SKILL.md", "skill", "Code review"),
@@ -295,11 +295,15 @@ describe("useProjectArtifacts (FLO-FR-10 / FLO-FR-11)", () => {
   it("ignores a tree read overtaken by a newer one", async () => {
     const first = root([file("old.md", "prompt")]);
     const second = root([file("new.md", "prompt")]);
-    let releaseFirst: (tree: TreeNode) => void = () => {};
+    let releaseFirst: () => void = () => {};
+    serveTree(second);
+    // The first read waits for the test, and then answers from `first`.
     invokeMock.mockImplementationOnce(
-      () => new Promise<TreeNode>((resolve) => (releaseFirst = resolve)),
+      (cmd: string, args?: unknown) =>
+        new Promise((resolve) => {
+          releaseFirst = () => resolve(treeCommand(cmd, args, first));
+        }),
     );
-    invokeMock.mockResolvedValue(second);
 
     render(<Probe />);
     await waitFor(() => expect(treeHandlers).toHaveLength(1));
@@ -313,7 +317,7 @@ describe("useProjectArtifacts (FLO-FR-10 / FLO-FR-11)", () => {
     );
 
     await act(async () => {
-      releaseFirst(first);
+      releaseFirst();
       await Promise.resolve();
     });
 
@@ -322,7 +326,7 @@ describe("useProjectArtifacts (FLO-FR-10 / FLO-FR-11)", () => {
   });
 
   it("detaches its subscription on unmount", async () => {
-    invokeMock.mockResolvedValue(root([]));
+    serveTree(root([]));
     const view = render(<Probe />);
     await waitFor(() => expect(treeHandlers).toHaveLength(1));
 

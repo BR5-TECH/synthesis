@@ -373,17 +373,18 @@ fn open_artifact_by_id_impl(root: &fs::RootFs, id: &str) -> Result<OpenedArtifac
 
 /// FDL-FR-BDOD: every `flow`-typed artifact of the active worktree, as its id
 /// and its body, in path order. A file that cannot be read is left out.
-pub(crate) fn flow_bodies(root: &fs::RootFs) -> Vec<(String, String)> {
-    fn collect(node: &scanning::TreeNode, out: &mut Vec<String>) {
-        if node.artifact_type == Some(scanning::ArtifactType::Flow) {
-            out.push(node.path.clone());
-        }
-        for child in node.children.iter().flatten() {
-            collect(child, out);
-        }
-    }
-    let mut paths = Vec::new();
-    collect(&scanning::scan(root), &mut paths);
+pub(crate) fn flow_bodies<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    root: &fs::RootFs,
+) -> Vec<(String, String)> {
+    let mut paths: Vec<String> = crate::library::project_artifacts(app, root)
+        .into_iter()
+        .filter(|n| {
+            n.node_kind == scanning::NodeKind::File
+                && n.artifact_type == Some(scanning::ArtifactType::Flow)
+        })
+        .map(|n| n.path)
+        .collect();
     paths.sort();
     paths
         .into_iter()
@@ -404,7 +405,7 @@ pub(crate) fn flow_bodies(root: &fs::RootFs) -> Vec<(String, String)> {
 /// through this one resolver.
 pub(crate) fn resolved_type(root: &fs::RootFs, id: &str) -> Option<scanning::ArtifactType> {
     let assignments = scanning::load_assignments(root);
-    scanning::classify_file(id, &assignments, &scanning::markdown_facts(root)).0
+    scanning::classify_path(root, id, &assignments).0
 }
 
 /// PST-FR-08 / PST-FR-24: resolve an id to its stable key and the kind hint the

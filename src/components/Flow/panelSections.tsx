@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import * as api from "../../api";
+import { onProjectTreeChanged } from "../../events";
 import type { ArtifactOption } from "../../hooks/useProjectArtifacts";
 import { errorLogCode } from "../../errorLogCode";
 import { logWarn } from "../../logging";
@@ -334,10 +335,75 @@ export function DraftSection({
   );
 }
 
+/** FLO-FR-ZEJU: the most paths one footprint search offers. */
+export const FOOTPRINT_SEARCH_LIMIT = 50;
+
+/**
+ * FLO-FR-ZEJU: the project paths that hold `text`, files and folders, from
+ * `"search project paths"`. A folder's path ends in `/`, as a footprint entry
+ * that names a folder does (FGV-FR-RQEM).
+ */
+async function searchFootprintPaths(text: string): Promise<string[]> {
+  const [files, folders] = await Promise.all([
+    api.searchProjectPaths(text, "file", FOOTPRINT_SEARCH_LIMIT),
+    api.searchProjectPaths(text, "folder", FOOTPRINT_SEARCH_LIMIT),
+  ]);
+  return [...folders.paths.map((p) => `${p}/`), ...files.paths]
+    .sort()
+    .slice(0, FOOTPRINT_SEARCH_LIMIT);
+}
+
+/**
+ * FLO-FR-ZEJU: which footprint entries the project index holds. A folder
+ * entry's trailing `/` is dropped for the lookup and kept in the answer.
+ */
+function useExistingPaths(entries: string[], ready: boolean): Set<string> | null {
+  const [existing, setExisting] = useState<Set<string> | null>(null);
+  const key = entries.join("\n");
+  // A tree change can make an entry appear or go (ASC-FR-10).
+  const [bump, setBump] = useState(0);
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void onProjectTreeChanged(() => setBump((n) => n + 1)).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+  useEffect(() => {
+    if (!ready || entries.length === 0) {
+      setExisting(new Set());
+      return;
+    }
+    let current = true;
+    const bare = entries.map((p) => p.replace(/\/$/, ""));
+    api
+      .existingProjectPaths(bare)
+      .then((found) => {
+        if (!current) return;
+        const held = new Set(found);
+        setExisting(new Set(entries.filter((_, i) => held.has(bare[i]))));
+      })
+      .catch(() => {
+        // A list that cannot be read marks nothing missing.
+        if (current) setExisting(null);
+      });
+    return () => {
+      current = false;
+    };
+    // `key` stands for `entries`, which is a new array on each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, ready, bump]);
+  return existing;
+}
+
 /** FLO-FR-ZEJU: the footprint of a task or a defect. */
 export function FootprintSection({
   item,
-  paths,
   treeLoaded,
   inert,
   look,
@@ -345,7 +411,6 @@ export function FootprintSection({
   className = "flow-panel__section",
 }: {
   item: FlowItem;
-  paths: string[];
   treeLoaded: boolean;
   inert: boolean;
   look: PanelLook;
@@ -353,12 +418,41 @@ export function FootprintSection({
   className?: string;
 }) {
   const footprint = item.footprint ?? [];
-  const pathSet = new Set(paths);
+  const existing = useExistingPaths(footprint, treeLoaded);
+  const [query, setQuery] = useState("");
+  const [options, setOptions] = useState<string[]>([]);
+  const listId = `flow-fp-paths-${item.id}`;
+
+  // FLO-FR-ZEJU: the picker searches the index after a short rest in typing.
+  useEffect(() => {
+    let current = true;
+    const timer = setTimeout(() => {
+      searchFootprintPaths(query.trim())
+        .then((paths) => {
+          if (current) setOptions(paths);
+        })
+        .catch(() => {
+          if (current) setOptions([]);
+        });
+    }, 150);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [query]);
+
+  const add = (path: string) => {
+    const value = path.trim();
+    if (!value || footprint.includes(value)) return;
+    handlers.onAddFootprint(value);
+    setQuery("");
+  };
+
   return (
     <div className={className}>
       <span className="flow-panel__label">Footprint</span>
       {footprint.map((p) => {
-        const missing = treeLoaded && !pathSet.has(p);
+        const missing = treeLoaded && existing !== null && !existing.has(p);
         return (
           <div className="flow-fp" key={p} data-missing={missing}>
             <span className="flow-fp__path">{p}</span>
@@ -375,24 +469,34 @@ export function FootprintSection({
           </div>
         );
       })}
-      <select
+      <input
         className={look.control("flow-select")}
         aria-label="Add path"
+        placeholder="+ Add path"
+        list={listId}
         disabled={inert}
-        value=""
+        value={query}
         onChange={(e) => {
-          if (e.target.value) handlers.onAddFootprint(e.target.value);
+          const value = e.target.value;
+          // A choice from the list is added at once; typed text waits for
+          // Enter.
+          if (options.includes(value)) add(value);
+          else setQuery(value);
         }}
-      >
-        <option value="">+ Add path</option>
-        {paths
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            add(query);
+          }
+        }}
+      />
+      <datalist id={listId}>
+        {options
           .filter((p) => !footprint.includes(p))
           .map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
+            <option key={p} value={p} />
           ))}
-      </select>
+      </datalist>
     </div>
   );
 }

@@ -554,10 +554,14 @@ fn a_type_assignment_invalidates_the_candidate_list_so_the_next_pass_moves_the_f
         &handle,
         &crate::fs::RootFs::for_root(&root),
         &candidates,
+        "notes/x.md",
     );
-    assert!(
-        !candidates.is_mounted(),
-        "the stale classification is dropped so the next enumeration rebuilds"
+    // ASC-FR-HPUY: the mounted index classifies the path again at once.
+    let reclassified = candidates.candidates(&crate::fs::RootFs::for_root(&root));
+    assert_eq!(
+        reclassified.iter().find(|c| c.path == "notes/x.md").and_then(|c| c.artifact_type),
+        Some(ArtifactType::Scenario),
+        "the index carries the new classification, so the next enumeration moves the file"
     );
 
     indexer.run_pass(

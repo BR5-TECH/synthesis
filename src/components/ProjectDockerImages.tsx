@@ -326,11 +326,19 @@ export function ProjectDockerImages({ contentRoot = "" }: ProjectDockerImagesPro
         // which the backend's own single-build refusal then answers rather
         // than a second build starting.
       });
-    // SET-FR-22: the Dockerfiles this project holds, for the picker.
+    // SET-FR-22: the Dockerfiles this project holds, for the picker. The
+    // index searches the paths that hold "dockerfile" (ASC-FR-AVVY), and the
+    // name rule below keeps the Dockerfiles among them.
     void api
-      .loadProjectTree()
-      .then((tree) => {
-        if (mounted.current) setCandidates(dockerfileCandidates(tree));
+      .searchProjectPaths("dockerfile", "file")
+      .then(({ paths }) => {
+        const nodes = paths.map((path) => ({
+          id: path,
+          name: path.slice(path.lastIndexOf("/") + 1),
+          path,
+          nodeKind: "file" as const,
+        }));
+        if (mounted.current) setCandidates(dockerfileCandidates(api.asTreeRoot(nodes)));
       })
       .catch(() => {
         // A tree this surface cannot read leaves the field to be typed into,

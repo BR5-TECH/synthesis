@@ -456,7 +456,12 @@ pub fn remount_content_root<R: tauri::Runtime>(
     // The watcher thread checksums files on every batch, so it takes the
     // guarded root for the same reason the index pass does.
     match project.require_root() {
-        Ok(rooted) => start_watching(app, watcher, &rooted),
+        Ok(rooted) => {
+            start_watching(app, watcher, &rooted);
+            // ASC-FR-HPUY: the index of the incoming root builds in the
+            // background, so the Project panel's first read is not a walk.
+            crate::library::build_index_in_background(app, rooted);
+        }
         // Nothing to watch that could be read safely.
         Err(_) => watcher.stop(),
     }
@@ -691,7 +696,7 @@ fn open_project_at_path_impl(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_project_at_path(
     path: String,
     app: tauri::AppHandle,
@@ -772,7 +777,7 @@ fn open_project_from_git_url_impl(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_project_from_git_url(
     url: String,
     app: tauri::AppHandle,
@@ -804,7 +809,7 @@ fn create_project_impl(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_project(
     name: String,
     mode: CreateMode,

@@ -75,11 +75,42 @@ mod architecture;
 mod assignments;
 mod change_paths;
 mod classification;
+mod content_cap;
 mod ignored;
+mod index_apply;
+mod index_query;
+mod index_store;
 mod openspec;
 mod scan_skills;
 mod scope_rules;
 mod skill_names;
 mod tree_shape;
 mod vocabulary;
+mod walk_repos;
 mod wire_shapes;
+
+/// A temporary project root with the given files. A path ending in `/` is
+/// made as an empty folder.
+fn project(files: &[(&str, &str)]) -> TempDir {
+    let tmp = TempDir::new().unwrap();
+    for (rel, body) in files {
+        let path = tmp.path().join(rel);
+        if rel.ends_with('/') {
+            fs::create_dir_all(&path).unwrap();
+        } else {
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, body).unwrap();
+        }
+    }
+    tmp
+}
+
+/// The project-relative paths of the candidate list of an index.
+fn candidate_paths(index: &ProjectIndex) -> Vec<String> {
+    index.candidates().iter().map(|c| c.path.clone()).collect()
+}
+
+/// The full tree of a fresh build, for a comparison with an updated index.
+fn fresh_tree(root: &crate::fs::RootFs) -> TreeNode {
+    ProjectIndex::build(root).full_tree("p")
+}

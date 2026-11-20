@@ -3,6 +3,7 @@
  * visible, and how the loaded tree is published to the shell
  * (`../../specifications/ui/LIB-library.md`, LIB-FR-18, NAW-FR-10, NFW-FR-04).
  */
+import { resetLogBufferForTest } from "../logging";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -44,6 +45,8 @@ import {
   folder,
   LibraryHost,
   makeTreeStubs,
+  FILTER_TIMEOUT,
+  waitForTree,
   panelState,
   renderLibrary,
 } from "../test/libraryFixtures";
@@ -53,7 +56,7 @@ import { PROJECT_TREE_CHANGED } from "../events";
 import { selectorValue } from "../test/selectors";
 import { resetPanelReveals } from "../state/panelReveal";
 
-const { mockInvoke, setLoadTree } = makeTreeStubs(invokeMock);
+const { mockInvoke, setTree } = makeTreeStubs(invokeMock);
 
 function lastSave(): LibraryPanelState | null {
   const calls = invokeMock.mock.calls.filter(
@@ -72,6 +75,7 @@ function lastSave(): LibraryPanelState | null {
 const SAVE_TIMEOUT = { timeout: PERSIST_DEBOUNCE_MS + 2500 };
 
 beforeEach(() => {
+  resetLogBufferForTest();
   // Module-level, like the preferences cache: reveal nonces are minted from
   // one counter for the app's life, so a suite that does not reset finds its
   // first request already consumed by the previous one.
@@ -92,7 +96,7 @@ describe("reveal/select a freshly-created artifact (NAW-FR-10)", () => {
   }
 
   it("selects the node whose id matches revealId", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderWithReveal("specifications/LIB-library.md");
 
     const row = (await screen.findByText("LIB-library.md")).closest(
@@ -104,10 +108,11 @@ describe("reveal/select a freshly-created artifact (NAW-FR-10)", () => {
   it("expands a collapsed ancestor folder so the revealed node is visible", async () => {
     // `specifications` is not in the persisted expanded set, so it renders
     // collapsed (LIB-FR-15) and its child is hidden.
-    setLoadTree(baseTree(), panelState());
+    setTree(baseTree(), panelState());
     const { rerender } = renderWithReveal(null);
 
     await screen.findByText("specifications");
+    await waitForTree();
     expect(screen.queryByText("LIB-library.md")).not.toBeInTheDocument();
 
     // Revealing a child expands the ancestor and surfaces the row.
@@ -125,7 +130,7 @@ describe("reveal/select a freshly-created artifact (NAW-FR-10)", () => {
       file("AGENTS.md", "agent", "inferred"),
       folder("notes-inbox", false, []),
     ]);
-    setLoadTree(
+    setTree(
       tree,
       panelState({
         expandedPaths: allFolderIds(tree),
@@ -136,6 +141,7 @@ describe("reveal/select a freshly-created artifact (NAW-FR-10)", () => {
     const { rerender } = renderWithReveal(null);
 
     await screen.findByText("AGENTS.md");
+    await waitForTree();
     // Under All artifacts + the text filter, the new empty folder is hidden.
     expect(screen.queryByText("notes-inbox")).not.toBeInTheDocument();
 
@@ -168,7 +174,7 @@ describe("reveal/select a freshly-created artifact (NAW-FR-10)", () => {
       file("AGENTS.md", "agent", "inferred"),
       folder("inbox", false, []),
     ]);
-    setLoadTree(
+    setTree(
       tree,
       panelState({
         expandedPaths: allFolderIds(tree),
@@ -194,7 +200,7 @@ describe("reveal/select a freshly-created artifact (NAW-FR-10)", () => {
     typed.artifactType = "spec";
     typed.typeSource = "assigned";
     const tree = folder("", true, [typed, file("AGENTS.md", "agent", "inferred")]);
-    setLoadTree(
+    setTree(
       tree,
       panelState({
         expandedPaths: allFolderIds(tree),
@@ -203,7 +209,11 @@ describe("reveal/select a freshly-created artifact (NAW-FR-10)", () => {
       }),
     );
     const { rerender } = renderWithReveal(null);
-    await screen.findByLabelText("Filter tree");
+    // The filter result lands after a rest in typing (LIB-FR-PPAT) and holds
+    // nothing.
+    expect(
+      await screen.findByText("No spec artifacts found.", {}, FILTER_TIMEOUT),
+    ).toBeInTheDocument();
     expect(screen.queryByText("drafts")).not.toBeInTheDocument();
 
     rerender(<LibraryHost revealId="drafts" />);
@@ -223,7 +233,7 @@ describe("reveal/select a freshly-created artifact (NAW-FR-10)", () => {
       folder("docs", true, [file("docs/s.md", "spec", "inferred")]),
       file("AGENTS.md", "agent", "inferred"),
     ]);
-    setLoadTree(
+    setTree(
       tree,
       panelState({
         expandedPaths: [],
@@ -232,7 +242,9 @@ describe("reveal/select a freshly-created artifact (NAW-FR-10)", () => {
       }),
     );
     const { rerender } = renderWithReveal(null);
-    await screen.findByLabelText("Filter tree");
+    expect(
+      await screen.findByText("No spec artifacts found.", {}, FILTER_TIMEOUT),
+    ).toBeInTheDocument();
     expect(screen.queryByText("docs")).not.toBeInTheDocument();
 
     rerender(<LibraryHost revealId="docs" />);
@@ -248,12 +260,13 @@ describe("reveal/select a freshly-created artifact (NAW-FR-10)", () => {
       folder("docs", false, [folder("docs/inbox", false, [])]),
       file("AGENTS.md", "agent", "inferred"),
     ]);
-    setLoadTree(
+    setTree(
       tree,
       panelState({ expandedPaths: [], artifactTypeFilter: "all_artifacts" }),
     );
     const { rerender } = renderWithReveal(null);
     await screen.findByText("AGENTS.md");
+    await waitForTree();
     // Neither the ancestor nor the target is visible under All artifacts.
     expect(screen.queryByText("docs")).not.toBeInTheDocument();
     expect(screen.queryByText("inbox")).not.toBeInTheDocument();
@@ -282,7 +295,7 @@ describe("reveal/select a freshly-created artifact (NAW-FR-10)", () => {
     // every reload would re-select the old target and re-expand a folder the user
     // had since collapsed — on every watcher-driven reload, forever.
     const tree = baseTree();
-    setLoadTree(tree);
+    setTree(tree);
     render(<LibraryHost revealId="specifications/LIB-library.md" />);
 
     const revealed = (await screen.findByText("LIB-library.md")).closest(
@@ -321,7 +334,7 @@ describe("reveal/select a freshly-created artifact (NAW-FR-10)", () => {
     typed.artifactType = "spec";
     typed.typeSource = "assigned";
     const tree = folder("", true, [typed, file("AGENTS.md", "agent", "inferred")]);
-    setLoadTree(
+    setTree(
       tree,
       panelState({ expandedPaths: allFolderIds(tree), artifactTypeFilter: "spec" }),
     );
@@ -340,56 +353,5 @@ describe("reveal/select a freshly-created artifact (NAW-FR-10)", () => {
     );
     // Untouched.
     expect(selectorValue("Filter by type")).toBe("spec");
-  });
-});
-
-// NFW-FR-04: the Library is the one surface that scans, so the folder set the
-// New Folder window offers as parents comes from the tree published here rather
-// than from a scan of its own.
-describe("publishing the loaded tree to the shell (NFW-FR-04)", () => {
-  it("hands each freshly-loaded tree up, including after a watcher reload", async () => {
-    const first = baseTree();
-    setLoadTree(first);
-    const { onTreeLoaded } = renderLibrary();
-
-    await screen.findByText("AGENTS.md");
-    await waitFor(() => expect(onTreeLoaded).toHaveBeenCalledTimes(1));
-    expect(onTreeLoaded.mock.calls[0][0]).toEqual(first);
-
-    // LIB-FR-10: the watcher-driven reload publishes the new tree too, so a
-    // folder created since the last look is offered as a parent.
-    const second = folder("", true, [
-      ...(first.children ?? []),
-      folder("brand-new", false, []),
-    ]);
-    setLoadTree(second);
-    listeners[PROJECT_TREE_CHANGED]?.({ payload: { changeCount: 1 } });
-
-    await waitFor(() => expect(onTreeLoaded).toHaveBeenCalledTimes(2));
-    expect(onTreeLoaded.mock.calls[1][0]).toEqual(second);
-  });
-
-  it("publishes the tree a manual rescan returns", async () => {
-    // LIB-FR-11's rescan exists precisely for the case where the watcher missed a
-    // change, so it is the last thing that should leave the shell's folder list on
-    // a stale tree.
-    const rescanned = folder("", true, [
-      file("AGENTS.md", "agent", "inferred"),
-      folder("appeared-offline", false, []),
-    ]);
-    mockInvoke(
-      {
-        load_project_tree: () => structuredClone(baseTree()),
-        rescan_project_tree: () => structuredClone(rescanned),
-      },
-      expandedAll(baseTree()),
-    );
-    const { onTreeLoaded } = renderLibrary();
-    await waitFor(() => expect(onTreeLoaded).toHaveBeenCalledTimes(1));
-
-    await userEvent.click(screen.getByLabelText("Rescan project tree"));
-
-    await waitFor(() => expect(onTreeLoaded).toHaveBeenCalledTimes(2));
-    expect(onTreeLoaded.mock.calls[1][0]).toEqual(rescanned);
   });
 });

@@ -40,8 +40,6 @@ export interface ProjectArtifacts {
   artifacts: ArtifactOption[];
   /** FLO-FR-10: the subset the picker offers. */
   referenceable: ArtifactOption[];
-  /** FLO-FR-ZEJU: every file and folder path, which the footprint picker offers. */
-  paths: string[];
   /**
    * Whether a tree has actually been read. Load-bearing for FLO-FR-11: before
    * one has, EVERY stored reference would compare as unresolved, so the canvas
@@ -76,27 +74,6 @@ export function referenceableArtifacts(
   );
 }
 
-/**
- * FLO-FR-ZEJU: every file and folder of the tree as a project path, in tree
- * order. A folder's path ends in `/`, as a footprint entry that names a folder
- * does (FGV-FR-RQEM). The root is not listed.
- */
-export function flattenPaths(root: TreeNode): string[] {
-  const out: string[] = [];
-  const walk = (node: TreeNode) => {
-    for (const c of node.children ?? []) {
-      if (c.nodeKind === "folder") {
-        out.push(`${c.path}/`);
-        walk(c);
-      } else {
-        out.push(c.path);
-      }
-    }
-  };
-  walk(root);
-  return out;
-}
-
 /** Every classified file in the tree, depth-first in tree order. */
 export function flattenArtifacts(root: TreeNode): ArtifactOption[] {
   const out: ArtifactOption[] = [];
@@ -120,7 +97,6 @@ export function flattenArtifacts(root: TreeNode): ArtifactOption[] {
 
 export function useProjectArtifacts(): ProjectArtifacts {
   const [artifacts, setArtifacts] = useState<ArtifactOption[]>([]);
-  const [paths, setPaths] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -134,14 +110,13 @@ export function useProjectArtifacts(): ProjectArtifacts {
       // last and leave the picker offering a tree that no longer exists.
       const generation = ++latest;
       void api
-        .loadProjectTree()
+        .loadProjectArtifactsTree()
         .then((tree) => {
           if (cancelled || generation !== latest) return;
           setArtifacts(flattenArtifacts(tree));
-          setPaths(flattenPaths(tree));
           setLoaded(true);
         })
-        // A tree that cannot be read leaves `loaded` false, so stored references
+        // A list that cannot be read leaves `loaded` false, so stored references
         // render as the ids they are rather than as warnings about artifacts
         // that may well still exist.
         .catch(() => {});
@@ -164,5 +139,5 @@ export function useProjectArtifacts(): ProjectArtifacts {
     [artifacts],
   );
 
-  return { artifacts, referenceable, paths, loaded };
+  return { artifacts, referenceable, loaded };
 }

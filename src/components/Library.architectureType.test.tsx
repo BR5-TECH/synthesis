@@ -27,6 +27,7 @@ import {
   file,
   folder,
   makeTreeStubs,
+  waitForTree,
   renderLibrary,
 } from "../test/libraryFixtures";
 import { resetPanelReveals } from "../state/panelReveal";
@@ -52,7 +53,7 @@ afterEach(cleanup);
 describe("the Architecture type in the Project panel", () => {
   it("LIB-FR-08, ASC-FR-QVCN: a calm.json file carries the ARC tag", async () => {
     const tree = architectureTree();
-    mockInvoke({ load_project_tree: () => tree }, expandedAll(tree));
+    mockInvoke({ tree: () => tree }, expandedAll(tree));
     renderLibrary();
 
     const row = (await screen.findByText("system.calm.json")).closest(
@@ -63,10 +64,11 @@ describe("the Architecture type in the Project panel", () => {
 
   it("LIB-FR-04, LIB-FR-19: the lens offers Architecture between Flow and Instructions and narrows to it", async () => {
     const tree = architectureTree();
-    mockInvoke({ load_project_tree: () => tree }, expandedAll(tree));
+    mockInvoke({ tree: () => tree }, expandedAll(tree));
     renderLibrary();
 
     await screen.findByText("system.calm.json");
+    await waitForTree();
     const radios = screen
       .getAllByRole("radio")
       .map((r) => r.getAttribute("aria-label") ?? r.textContent);

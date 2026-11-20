@@ -294,6 +294,10 @@ fn block_parts(block: &Block, align: Align, depth: i32, assets: &Assets) -> Vec<
             vec![para(p)]
         }
         Block::Spacer { lines } => vec![para(gap(body_line_twips() * (*lines as i32)))],
+        // DXP-FR-SEDX: the block after a V1 break starts on a new page.
+        Block::PageBreak => {
+            vec![para(Paragraph::new().add_run(Run::new().add_break(docx_rs::BreakType::Page)))]
+        }
         Block::Html(text) => text
             .lines()
             .map(|line| {

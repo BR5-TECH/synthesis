@@ -19,6 +19,7 @@ import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
 import { selectorValue } from "./test/selectors";
 import type { TreeNode } from "./types";
 import { resetPanelReveals } from "./state/panelReveal";
+import { TREE_COMMANDS, treeCommand } from "./test/treeCommands";
 import {
   defaultInvoke,
   enterIde,
@@ -186,11 +187,11 @@ describe("New File modal wiring (NFI-FR-09 / NFI-FR-12 / NFI-FR-01)", () => {
       path: "package.json",
       nodeKind: "file",
     };
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (TREE_COMMANDS.has(cmd)) {
         const tree = treeWithFolders();
         if (created) tree.children.push({ ...node });
-        return tree;
+        return treeCommand(cmd, args, tree);
       }
       if (cmd === "create_file") {
         created = true;
@@ -199,7 +200,7 @@ describe("New File modal wiring (NFI-FR-09 / NFI-FR-12 / NFI-FR-01)", () => {
       if (cmd === "validate_flow_document") return { valid: true, violations: [] };
       if (cmd === "load_artifact_contents_by_id")
         return { body: '{\n  "name": "acme"\n}\n', checksum: "ck-json" };
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -282,11 +283,11 @@ describe("New File modal wiring (NFI-FR-09 / NFI-FR-12 / NFI-FR-01)", () => {
       artifactType: "spec",
       typeSource: "inherited",
     };
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (TREE_COMMANDS.has(cmd)) {
         const tree = treeWithFolders();
         if (created) tree.children[0].children!.push({ ...inherited });
-        return tree;
+        return treeCommand(cmd, args, tree);
       }
       if (cmd === "create_file") {
         created = true;
@@ -299,7 +300,7 @@ describe("New File modal wiring (NFI-FR-09 / NFI-FR-12 / NFI-FR-01)", () => {
           textFilter: "",
         };
       }
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -357,7 +358,8 @@ describe("New File modal wiring (NFI-FR-09 / NFI-FR-12 / NFI-FR-01)", () => {
       typeSource: "inherited",
     };
     invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
       if (cmd === "create_file") return { ...flow };
       return defaultInvoke(cmd, args);
     });
@@ -397,9 +399,10 @@ describe("New File modal wiring (NFI-FR-09 / NFI-FR-12 / NFI-FR-01)", () => {
   // NFI-FR-07, LCM-FR-10 at the App seam: the Library context menu seeds the location from
   // the right-clicked folder and leaves it editable (NFI-FR-07).
   it("NFI-FR-07, LCM-FR-10: the Library context-menu entry seeds the location and leaves it editable", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
-      return defaultInvoke(cmd);
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -421,45 +424,57 @@ describe("New File modal wiring (NFI-FR-09 / NFI-FR-12 / NFI-FR-01)", () => {
     ).not.toBeInTheDocument();
   });
 
-  // NFI-FR-04 / NFI NFR: the location list comes from the tree the Library
-  // already published, so opening the window costs no scan of its own.
-  it("populates the location list from the Library's tree without scanning again", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
-      return defaultInvoke(cmd);
+  // NFI-FR-04 / NFI NFR: the location list comes from one search of the
+  // project index, and a list that is not stale opens the window with no call.
+  it("NFI-FR-04: populates the location list from one folder search, and reads nothing on a second open", async () => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
     await enterIde();
     await screen.findByText("specifications");
 
-    const scansBefore = invokeMock.mock.calls.filter(
-      (c) => c[0] === "load_project_tree",
-    ).length;
+    // NFW-FR-04 / NFI-FR-04: one folder search of the project index fills
+    // the list; no folder of the disk is walked.
+    const folderSearches = () =>
+      invokeMock.mock.calls.filter(
+        (c) => c[0] === "search_project_paths" && c[1]?.kind === "folder",
+      );
 
     fireBusEvent("menu:new-file");
-    const dialog = await screen.findByRole("dialog");
-
-    const location = within(dialog).getByLabelText(
-      "Location",
-    ) as HTMLSelectElement;
-    expect(Array.from(location.options).map((o) => o.value)).toEqual([
-      "",
-      "specifications",
+    let dialog = await screen.findByRole("dialog");
+    await waitFor(() => {
+      const location = within(dialog).getByLabelText("Location") as HTMLSelectElement;
+      expect(Array.from(location.options).map((o) => o.value)).toEqual(["", "specifications"]);
+    });
+    expect(folderSearches()).toEqual([
+      ["search_project_paths", { text: "", kind: "folder", limit: null }],
     ]);
-    // No further scan was issued to build that list.
+
+    // With no tree change since, a second open reads nothing.
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    fireBusEvent("menu:new-file");
+    dialog = await screen.findByRole("dialog");
     expect(
-      invokeMock.mock.calls.filter((c) => c[0] === "load_project_tree").length,
-    ).toBe(scansBefore);
+      Array.from(
+        (within(dialog).getByLabelText("Location") as HTMLSelectElement).options,
+      ).map((o) => o.value),
+    ).toEqual(["", "specifications"]);
+    expect(folderSearches()).toHaveLength(1);
   });
 
   // NTA-FR-01, NFI-FR-01 / NFW-FR-01 / NTA-FR-01: the three creation windows are one
   // floating overlay each, so opening any of them closes whichever of the other
   // two is up rather than coexisting with it.
   it("NTA-FR-01, NFI-FR-01 / NFW-FR-01 / NTA-FR-01: the three creation modals are mutually exclusive", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
-      return defaultInvoke(cmd);
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -486,9 +501,10 @@ describe("New File modal wiring (NFI-FR-09 / NFI-FR-12 / NFI-FR-01)", () => {
   });
 
   it("NTA-FR-01, NFI-FR-01: opening the search overlay closes the New File modal, and opening it closes the overlay", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
-      return defaultInvoke(cmd);
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -516,9 +532,10 @@ describe("New File modal wiring (NFI-FR-09 / NFI-FR-12 / NFI-FR-01)", () => {
     // The modal does not trap focus, so the top-chrome dropdowns stay reachable
     // by keyboard while it is up. They are floating overlays too, so the
     // invariant holds only if they close the modal on the way in.
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
-      return defaultInvoke(cmd);
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -537,9 +554,10 @@ describe("New File modal wiring (NFI-FR-09 / NFI-FR-12 / NFI-FR-01)", () => {
   // NFI-FR-02: the window is re-centered on each open, which falls out of it
   // being unmounted while closed rather than hidden.
   it("NFI-FR-02: the modal is unmounted while closed, so each open is fresh", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
-      return defaultInvoke(cmd);
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);

@@ -2,6 +2,7 @@
  * The Library context menu's file and folder actions: Notes, delete, rename,
  * copy and paste (`../../specifications/ui/LIB-library.md`, LCM-FR-04 …).
  */
+import { resetLogBufferForTest } from "../logging";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -42,6 +43,7 @@ import {
   file,
   folder,
   makeTreeStubs,
+  waitForTree,
   panelState,
   renderLibrary,
 } from "../test/libraryFixtures";
@@ -50,9 +52,10 @@ import { pressLandsOutside } from "./Library";
 import { PROJECT_TREE_CHANGED } from "../events";
 import { resetPanelReveals } from "../state/panelReveal";
 
-const { mockInvoke, setLoadTree } = makeTreeStubs(invokeMock);
+const { mockInvoke, setTree } = makeTreeStubs(invokeMock);
 
 beforeEach(() => {
+  resetLogBufferForTest();
   // Module-level, like the preferences cache: reveal nonces are minted from
   // one counter for the app's life, so a suite that does not reset finds its
   // first request already consumed by the previous one.
@@ -70,7 +73,7 @@ describe("Library filesystem tree", () => {
   // LCM-FR-04: an artifact file's context menu offers a Notes action that
   // switches the Notes panel to that artifact's scope without opening a tab.
   it("offers a Notes action that scopes Notes to the artifact, opening no tab", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     const { onShowNotes, onOpenArtifact } = renderLibrary();
 
     fireEvent.contextMenu(await screen.findByText("onboarding.md"));
@@ -87,9 +90,10 @@ describe("Library filesystem tree", () => {
   // LCM-FR-01: a folder's context menu has no Notes entry — Notes is for a file
   // the scan resolved a type for.
   it("does not offer Notes on a folder context menu", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
     await screen.findByText("specifications");
+    await waitForTree();
 
     fireEvent.contextMenu(screen.getByText("specifications"));
     const menu = document.querySelector(".menu") as HTMLElement;
@@ -112,21 +116,24 @@ describe("Library filesystem tree", () => {
       file("AGENTS.md", "agent", "inferred"),
       file("review.flow", "flow", "inferred"),
     ]);
+    let current = baseTree();
     mockInvoke(
       {
-        load_project_tree: () =>
-          invokeMock.mock.calls.filter((c) => c[0] === "load_project_tree")
-            .length === 1
-            ? baseTree()
-            : afterDelete,
-        delete_path: () => undefined,
+        tree: () => current,
+        delete_path: () => {
+          current = afterDelete;
+        },
       },
       expandedAll(baseTree()),
     );
     renderLibrary();
 
     // Collapse `.claude` first so we can prove the reload preserves expand state.
-    fireEvent.click(await screen.findByText(".claude"));
+    await screen.findByText("onboarding.md");
+    await waitForTree();
+    await screen.findByText("LIB-library.md");
+    await waitForTree();
+    fireEvent.click(screen.getByText(".claude"));
     expect(screen.queryByText("onboarding.md")).not.toBeInTheDocument();
 
     // Delete the spec file via the menu's inline confirm.
@@ -147,8 +154,11 @@ describe("Library filesystem tree", () => {
       }),
     );
 
-    // The watcher fires; the reloaded tree no longer has the deleted file…
-    listeners[PROJECT_TREE_CHANGED]?.({ payload: { changeCount: 1 } });
+    // The watcher fires for the root and the emptied folder; the reloaded tree
+    // no longer has the deleted file…
+    listeners[PROJECT_TREE_CHANGED]?.({
+      payload: { changeCount: 1, changedFolders: ["", "specifications"] },
+    });
     await waitFor(() =>
       expect(screen.queryByText("LIB-library.md")).not.toBeInTheDocument(),
     );
@@ -163,7 +173,7 @@ describe("Library filesystem tree", () => {
     const deleteCalls: unknown[] = [];
     mockInvoke(
       {
-        load_project_tree: () => baseTree(),
+        tree: () => baseTree(),
         delete_path: (args) => {
           deleteCalls.push(args);
           throw "directory not empty";
@@ -192,7 +202,7 @@ describe("Library filesystem tree", () => {
   // path separator is rejected client-side and makes no call.
   it("renames a file via rename_path with a valid basename", async () => {
     mockInvoke(
-      { load_project_tree: () => baseTree(), rename_path: () => undefined },
+      { tree: () => baseTree(), rename_path: () => undefined },
       expandedAll(baseTree()),
     );
     renderLibrary();
@@ -232,7 +242,7 @@ describe("Library filesystem tree", () => {
    */
   it("opens the rename input under a browser's flush ordering", async () => {
     mockInvoke(
-      { load_project_tree: () => baseTree(), rename_path: () => undefined },
+      { tree: () => baseTree(), rename_path: () => undefined },
       expandedAll(baseTree()),
     );
     renderLibrary();
@@ -256,7 +266,7 @@ describe("Library filesystem tree", () => {
   // entry that opened it, and closing the menu is part of what it does.
   it("submits the rename from its button under a real press", async () => {
     mockInvoke(
-      { load_project_tree: () => baseTree(), rename_path: () => undefined },
+      { tree: () => baseTree(), rename_path: () => undefined },
       expandedAll(baseTree()),
     );
     renderLibrary();
@@ -285,7 +295,7 @@ describe("Library filesystem tree", () => {
   // the other listener cannot stand in for — a keyboard-driven activation raises
   // a `click` alone.
   it("dismisses the menu on an outside click", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
 
     fireEvent.contextMenu(await screen.findByText("onboarding.md"));
@@ -300,7 +310,7 @@ describe("Library filesystem tree", () => {
   // renders its own subtree, so it carries the guard separately from the entry
   // list.
   it("dismisses rename mode on an outside press without renaming", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
 
     fireEvent.contextMenu(await screen.findByText("onboarding.md"));
@@ -355,9 +365,10 @@ describe("Library filesystem tree", () => {
   });
 
   it("rejects an invalid rename (separator, backslash, or empty) without calling the backend", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
     await screen.findByText("onboarding.md");
+    await waitForTree();
 
     // Each invalid basename is rejected client-side with an inline hint and no
     // backend call: a forward slash, a backslash, and an empty/whitespace name.
@@ -389,7 +400,7 @@ describe("Library filesystem tree", () => {
     const deleteCalls: unknown[] = [];
     mockInvoke(
       {
-        load_project_tree: () => baseTree(),
+        tree: () => baseTree(),
         delete_path: (args) => {
           deleteCalls.push(args);
           const { recursive } = args as { recursive: boolean };
@@ -401,6 +412,7 @@ describe("Library filesystem tree", () => {
     );
     renderLibrary();
     await screen.findByText("specifications");
+    await waitForTree();
 
     fireEvent.contextMenu(screen.getByText("specifications"));
     const menu = document.querySelector(".menu") as HTMLElement;
@@ -455,7 +467,7 @@ describe("Library filesystem tree", () => {
     const deleteCalls: unknown[] = [];
     mockInvoke(
       {
-        load_project_tree: () => treeWithHiddenContents,
+        tree: () => treeWithHiddenContents,
         delete_path: (args) => {
           deleteCalls.push(args);
           const { recursive } = args as { recursive: boolean };
@@ -490,9 +502,10 @@ describe("Library filesystem tree", () => {
   // — no backend call at all — and the input stays open carrying the value so
   // the user can correct it rather than retype it.
   it("refuses a rename to the unchanged name without calling the backend", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
     await screen.findByText("onboarding.md");
+    await waitForTree();
 
     fireEvent.contextMenu(screen.getByText("onboarding.md"));
     const menu = document.querySelector(".menu") as HTMLElement;
@@ -524,13 +537,17 @@ describe("Library filesystem tree", () => {
   it("greys Paste until a Copy fills the clipboard, then copies into the folder", async () => {
     mockInvoke(
       {
-        load_project_tree: () => baseTree(),
+        tree: () => baseTree(),
         copy_path_into_folder: () => undefined,
       },
       expandedAll(baseTree()),
     );
     renderLibrary();
     await screen.findByText("specifications");
+    await waitForTree();
+    // The nested file arrives with its folder's own read (LIB-FR-EMOO).
+    await screen.findByText("onboarding.md");
+    await waitForTree();
 
     // Clipboard empty -> Paste on a folder is disabled.
     fireEvent.contextMenu(screen.getByText("specifications"));
@@ -562,7 +579,7 @@ describe("Library filesystem tree", () => {
   it("surfaces a paste collision error inline and leaves the tree unchanged", async () => {
     mockInvoke(
       {
-        load_project_tree: () => baseTree(),
+        tree: () => baseTree(),
         copy_path_into_folder: () => {
           throw "destination already exists: specifications/onboarding.md";
         },
@@ -571,6 +588,7 @@ describe("Library filesystem tree", () => {
     );
     renderLibrary();
     await screen.findByText("specifications");
+    await waitForTree();
 
     // Copy a file, then paste into a folder that already holds that name.
     fireEvent.contextMenu(screen.getByText("onboarding.md"));
@@ -592,13 +610,16 @@ describe("Library filesystem tree", () => {
   it("keeps the clipboard after a paste so the source pastes into many folders", async () => {
     mockInvoke(
       {
-        load_project_tree: () => baseTree(),
+        tree: () => baseTree(),
         copy_path_into_folder: () => undefined,
       },
       expandedAll(baseTree()),
     );
     renderLibrary();
     await screen.findByText("specifications");
+    await waitForTree();
+    await screen.findByText("onboarding.md");
+    await waitForTree();
 
     // Copy a file.
     fireEvent.contextMenu(screen.getByText("onboarding.md"));

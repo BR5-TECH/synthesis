@@ -77,7 +77,12 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "list_agent_adapters",
     "install_adapter",
     // Library tree (PST-project-storage.md / ASC-artifact-scanning.md).
-    "load_project_tree",
+    "list_tree_children",
+    "list_tree_path",
+    "filter_project_tree",
+    "list_project_artifacts",
+    "search_project_paths",
+    "existing_project_paths",
     "rescan_project_tree",
     "assign_artifact_type",
     "clear_artifact_type",

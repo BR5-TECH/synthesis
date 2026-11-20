@@ -585,6 +585,14 @@ kbd, .kbd {
 .tree-row__icon  { width: 14px; flex: none; color: var(--fg-3); }
 .tree-row__name  { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tree-row__meta  { font-size: var(--fs-ui-xs); color: var(--fg-3); }
+/* LIB-FR-VCJO: the repository marker sits after the name, quiet like the
+   row's icons. A submodule that is not initialised keeps the glyph but drops
+   to half strength, as an empty folder of git's own. */
+.tree-row__repo { flex: none; display: inline-flex; align-items: center; color: var(--fg-3); }
+.tree-row__repo[data-state="uninitialised"] { opacity: 0.45; }
+/* LIB-FR-JZNT / LIB-FR-PPAT: rows that are not nodes take no pointer. */
+.tree-row--loading, .tree-row--note { cursor: default; color: var(--fg-3); }
+.tree-row--loading:hover, .tree-row--note:hover { background: none; }
 
 /* ---------- PANEL CHROME ---------- */
 .panel-header {

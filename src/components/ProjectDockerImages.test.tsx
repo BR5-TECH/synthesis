@@ -28,7 +28,9 @@ import type {
   ImageBuildFinished,
   ImageBuildProgress,
   ProjectVendorImageStatus,
+  TreeNode,
 } from "../types";
+import { treeCommand } from "../test/treeCommands";
 
 const calls = (cmd: string) => invokeMock.mock.calls.filter((c) => c[0] === cmd);
 
@@ -78,10 +80,44 @@ interface Scripted {
   inFlight?: { vendor: AgenticCliVendor; operationId: string } | null;
 }
 
+/** The project tree the tree reads answer from (`treeCommands.ts`). */
+const DOCKER_TREE: TreeNode = {
+  id: "",
+  name: "project",
+  path: "",
+  nodeKind: "folder",
+  children: [
+    {
+      id: "docker",
+      name: "docker",
+      path: "docker",
+      nodeKind: "folder",
+      children: [
+        {
+          id: "docker/agent.Dockerfile",
+          name: "agent.Dockerfile",
+          path: "docker/agent.Dockerfile",
+          nodeKind: "file",
+        },
+        // Holds "dockerfile" in its path but is no Dockerfile by name.
+        {
+          id: "docker/dockerfile-notes.md",
+          name: "dockerfile-notes.md",
+          path: "docker/dockerfile-notes.md",
+          nodeKind: "file",
+        },
+      ],
+    },
+    { id: "README.md", name: "README.md", path: "README.md", nodeKind: "file" },
+  ],
+};
+
 function backend(options: Scripted = {}) {
   const statuses =
     options.statuses ?? [unset("claude_code"), unset("codex"), unset("opencode")];
   invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+    const read = treeCommand(cmd, args, DOCKER_TREE);
+    if (read) return read;
     switch (cmd) {
       case "load_project_docker_images":
         return statuses;
@@ -99,29 +135,6 @@ function backend(options: Scripted = {}) {
           vendor: options.resolved === undefined ? "claude_code" : options.resolved,
           resolution: "inherited",
           override: null,
-        };
-      case "load_project_tree":
-        return {
-          id: "root",
-          name: "project",
-          path: "",
-          nodeKind: "folder",
-          children: [
-            {
-              id: "d",
-              name: "docker",
-              path: "docker",
-              nodeKind: "folder",
-              children: [
-                {
-                  id: "f",
-                  name: "agent.Dockerfile",
-                  path: "docker/agent.Dockerfile",
-                  nodeKind: "file",
-                },
-              ],
-            },
-          ],
         };
       case "save_project_vendor_image": {
         const { vendor, entry } = args as { vendor: string; entry: unknown };
@@ -183,6 +196,26 @@ describe("Project settings → Docker (SET-FR-21..SET-FR-27)", () => {
     expect(frame).toContainElement(screen.getByLabelText("Image name"));
     expect(frame).toContainElement(screen.getByLabelText("Tag (optional)"));
     expect(screen.getByLabelText("Tag (optional)")).toHaveClass("joined-field__part--tag");
+  });
+
+  it("SET-FR-22, ASC-FR-AVVY: the Dockerfile picker offers the Dockerfiles that a path search finds", async () => {
+    backend({});
+    render(<ProjectDockerImages />);
+
+    await waitFor(() =>
+      expect(
+        Array.from(document.querySelectorAll("#docker-dockerfile-candidates option")).map(
+          (o) => o.getAttribute("value"),
+        ),
+      ).toEqual(["docker/agent.Dockerfile"]),
+    );
+    // One search of the project index, for files, and no folder walk.
+    expect(calls("search_project_paths")[0][1]).toEqual({
+      text: "dockerfile",
+      kind: "file",
+      limit: null,
+    });
+    expect(calls("list_tree_children")).toHaveLength(0);
   });
 
   it("SET-FR-22, SET-FR-24, SET-FR-08: fields persist at once, and a refused path renders inline", async () => {

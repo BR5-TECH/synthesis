@@ -322,6 +322,73 @@ describe("Selection follows tab (SNV-FR-64 / SNV-FR-69)", () => {
     expect(screen.queryByTestId("vpanel-resizer")).toBeNull();
   });
 
+  /** Open the fixture's spec file in an Editor tab from the Project panel. */
+  async function openSpecTab() {
+    await userEvent.click(await screen.findByText("CHG-changes.md"));
+    const strip = screen.getByTestId("tabstrip");
+    await waitFor(() => expect(within(strip).getByText("CHG-changes.md")).toBeInTheDocument());
+    return strip;
+  }
+
+  const existsCalls = () =>
+    invokeMock.mock.calls.filter((c) => c[0] === "existing_project_paths");
+
+  it("SNV-FR-66, SNV-FR-67, ASC-FR-QKXR: an Editor tab whose file the index holds brings the Project panel back", async () => {
+    render(<App />);
+    await enterIde();
+    const strip = await openSpecTab();
+
+    await userEvent.click(screen.getByRole("button", { name: "Notes" }));
+    await waitFor(() => expect(panelTitle()).toBe("Notes"));
+    await userEvent.click(within(strip).getByText("Dashboard"));
+    const before = existsCalls().length;
+    await userEvent.click(within(strip).getByText("CHG-changes.md"));
+
+    await waitFor(() => expect(panelTitle()).toBe("Project"));
+    // The shell asked the project index, not a tree it holds, on this
+    // activation.
+    expect(existsCalls().slice(before).map((c) => c[1])).toContainEqual({
+      paths: ["specifications/ui/CHG-changes.md"],
+    });
+  });
+
+  it("SNV-FR-67, ASC-FR-QKXR: an Editor tab whose file the index does not hold leaves the panel alone", async () => {
+    // Once the file is gone, the index answers through a held promise, so
+    // the test knows when the answer landed.
+    let gone = false;
+    let answer: (found: string[]) => void = () => undefined;
+    const held = new Promise<string[]>((resolve) => {
+      answer = resolve;
+    });
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "existing_project_paths" && gone) return held;
+      return defaultInvoke(cmd, args);
+    });
+    render(<App />);
+    await enterIde();
+    const strip = await openSpecTab();
+
+    await userEvent.click(screen.getByRole("button", { name: "Notes" }));
+    await waitFor(() => expect(panelTitle()).toBe("Notes"));
+    await userEvent.click(within(strip).getByText("Dashboard"));
+
+    // The file left the disk while its tab stayed open.
+    gone = true;
+    const before = existsCalls().length;
+    await userEvent.click(within(strip).getByText("CHG-changes.md"));
+    await waitFor(() => expect(existsCalls().length).toBeGreaterThan(before));
+    expect(existsCalls().slice(before).map((c) => c[1])).toContainEqual({
+      paths: ["specifications/ui/CHG-changes.md"],
+    });
+    await act(async () => {
+      answer([]);
+      await held;
+    });
+
+    expect(panelTitle()).toBe("Notes");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("SNV-FR-69, SNV-FR-64, GLS-FR-28: with the preference off, no tab change touches the panel", async () => {
     // GSS-FR-33: the stored record says off, which the shell seeds at startup.
     invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {

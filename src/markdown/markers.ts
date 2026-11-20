@@ -23,9 +23,9 @@ export type BlockAlignment = MarkerAlignment | null;
 
 /** EDT-FR-CSKH: the height of each spacer, in body line heights. */
 export const BREAK_LINE_HEIGHTS: Record<BreakLevel, number> = {
-  1: 12,
-  2: 8,
-  3: 5,
+  1: 16,
+  2: 10,
+  3: 6,
   4: 3,
 };
 

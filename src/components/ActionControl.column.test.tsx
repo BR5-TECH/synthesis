@@ -77,7 +77,7 @@ const KNOWN = new Set([
   "list_ai_api_catalogs",
   "get_active_ai_api_catalog",
   "list_agent_turns",
-  "load_project_tree",
+  "list_project_artifacts",
   "save_artifact_contents",
   "load_layout_preferences",
   "save_layout_preferences",

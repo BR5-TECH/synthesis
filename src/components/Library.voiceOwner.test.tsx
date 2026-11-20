@@ -4,6 +4,7 @@
  * `CVP-conversation-presentation.md` CVP-FR-51, `LCM-library-context-menu.md`
  * LCM-FR-11).
  */
+import { resetLogBufferForTest } from "../logging";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
@@ -17,13 +18,20 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 vi.mock("../voice/voiceController", () => ({ noteOwnerDeleted: vi.fn() }));
 
-import { baseTree, expandedAll, makeTreeStubs, renderLibrary } from "../test/libraryFixtures";
+import {
+  baseTree,
+  expandedAll,
+  makeTreeStubs,
+  renderLibrary,
+  waitForTree,
+} from "../test/libraryFixtures";
 import { resetPanelReveals } from "../state/panelReveal";
 import { noteOwnerDeleted } from "../voice/voiceController";
 
 const { mockInvoke } = makeTreeStubs(invokeMock);
 
 beforeEach(() => {
+  resetLogBufferForTest();
   resetPanelReveals();
   invokeMock.mockReset();
   vi.mocked(noteOwnerDeleted).mockReset();
@@ -42,11 +50,12 @@ function deleteFrom(name: string) {
 describe("a Library delete and voice mode", () => {
   it("VOM-FR-LSBQ, CVP-FR-51: a deleted file names itself as the deleted owner", async () => {
     mockInvoke(
-      { load_project_tree: () => baseTree(), delete_path: () => undefined },
+      { tree: () => baseTree(), delete_path: () => undefined },
       expandedAll(baseTree()),
     );
     renderLibrary();
     await screen.findByText("LIB-library.md");
+    await waitForTree();
     deleteFrom("LIB-library.md");
     await waitFor(() =>
       expect(noteOwnerDeleted).toHaveBeenCalledWith({
@@ -59,7 +68,7 @@ describe("a Library delete and voice mode", () => {
   it("VOM-FR-LSBQ, LCM-FR-11: a folder deleted with its contents names itself as the deleted owner", async () => {
     mockInvoke(
       {
-        load_project_tree: () => baseTree(),
+        tree: () => baseTree(),
         delete_path: (args) => {
           if (!(args as { recursive: boolean }).recursive) {
             throw new Error("directory not empty: specifications");
@@ -71,6 +80,7 @@ describe("a Library delete and voice mode", () => {
     );
     renderLibrary();
     await screen.findByText("specifications");
+    await waitForTree();
     deleteFrom("specifications");
     const dialog = await screen.findByRole("dialog", { name: "Delete folder" });
     expect(noteOwnerDeleted).not.toHaveBeenCalled();
@@ -86,7 +96,7 @@ describe("a Library delete and voice mode", () => {
   it("VOM-FR-LSBQ: a refused delete ends nothing", async () => {
     mockInvoke(
       {
-        load_project_tree: () => baseTree(),
+        tree: () => baseTree(),
         delete_path: () => {
           throw new Error("permission denied");
         },
@@ -95,6 +105,7 @@ describe("a Library delete and voice mode", () => {
     );
     renderLibrary();
     await screen.findByText("AGENTS.md");
+    await waitForTree();
     deleteFrom("AGENTS.md");
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith("delete_path", { path: "AGENTS.md", recursive: false }),

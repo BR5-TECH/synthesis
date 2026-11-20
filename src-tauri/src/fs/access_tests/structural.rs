@@ -65,6 +65,11 @@ fn no_backend_module_reaches_the_filesystem_outside_the_helper() {
         // cache has no `FsAccess` instance of its own, as `hf-hub` and
         // `fastembed` read and write it themselves.
         ("embeddings/model.rs", "weight_files"),
+        // ASC-FR-TWVB: the `info/exclude` file of a nested repository or a
+        // linked worktree, in git's own git directory, which is often outside
+        // the active root. Two small text files are read; nothing is written.
+        ("scanning/repos.rs", "exclude_file_of"),
+        ("scanning/ignored.rs", "read_matcher_at"),
     ];
 
     /// Spellings that reach the filesystem. Path-shaped *method* calls are in

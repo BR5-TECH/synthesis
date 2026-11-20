@@ -12,7 +12,8 @@ import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { resetAppPreferencesCache } from "./state/appPreferences";
 import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
-import type { Operation } from "./types";
+import type { Operation, TreeNode } from "./types";
+import { treeCommand } from "./test/treeCommands";
 import { CHANGES_UPDATED, OPERATION_PROGRESS } from "./events";
 import { letWriteLand } from "./test/autosave";
 import { MIN_VISIBLE_MS, SHOW_DELAY_MS } from "./hooks/useSteadyProgress";
@@ -114,7 +115,36 @@ let lineEndings: "lf" | "crlf";
 let diffTotals: unknown;
 let savedConfigs: unknown[];
 
+/** The project tree every tree read is answered from (`test/treeCommands.ts`). */
+const TREE: TreeNode = {
+  id: "",
+  name: "acme",
+  path: "",
+  nodeKind: "folder",
+  hasArtifacts: true,
+  children: [
+    {
+      id: "a.md",
+      name: "a.md",
+      path: "a.md",
+      nodeKind: "file",
+      artifactType: "spec",
+      typeSource: "inferred",
+    },
+    {
+      id: "b.md",
+      name: "b.md",
+      path: "b.md",
+      nodeKind: "file",
+      artifactType: "spec",
+      typeSource: "inferred",
+    },
+  ],
+};
+
 function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
+  const read = treeCommand(cmd, args, TREE);
+  if (read) return read;
   switch (cmd) {
     case "list_recent_projects":
       return [
@@ -152,33 +182,6 @@ function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
     case "list_installed_plugins":
     case "list_agent_adapters":
       return [];
-    case "load_project_tree":
-    case "rescan_project_tree":
-      return {
-        id: "",
-        name: "acme",
-        path: "",
-        nodeKind: "folder",
-        hasArtifacts: true,
-        children: [
-          {
-            id: "a.md",
-            name: "a.md",
-            path: "a.md",
-            nodeKind: "file",
-            artifactType: "spec",
-            typeSource: "inferred",
-          },
-          {
-            id: "b.md",
-            name: "b.md",
-            path: "b.md",
-            nodeKind: "file",
-            artifactType: "spec",
-            typeSource: "inferred",
-          },
-        ],
-      };
     case "validate_flow_document":
       // FGV-FR-02 / FLO-FR-46: the backend judges a Flow body before the canvas
       // renders it. The rules themselves are covered by the Rust suite.

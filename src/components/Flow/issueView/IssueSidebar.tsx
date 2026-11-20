@@ -151,7 +151,6 @@ export function IssueSidebar(props: IssueViewProps) {
             />
             <FootprintSection
               item={item}
-              paths={props.paths}
               treeLoaded={props.treeLoaded}
               inert={inert}
               look={ISSUE_LOOK}

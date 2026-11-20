@@ -3,6 +3,7 @@
  * folder-only creation entries, and the menu's own affordances
  * (`../../specifications/ui/LIB-library.md`, LCM-FR-04 … LCM-FR-08).
  */
+import { resetLogBufferForTest } from "../logging";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -42,17 +43,19 @@ import {
   file,
   folder,
   makeTreeStubs,
+  waitForTree,
   renderLibrary,
 } from "../test/libraryFixtures";
 import type { TreeChangedPayload } from "../types";
+import { wireNode } from "../test/treeCommands";
 import { resetPanelReveals } from "../state/panelReveal";
 
-const { mockInvoke, setLoadTree } = makeTreeStubs(invokeMock);
+const { mockInvoke, setTree } = makeTreeStubs(invokeMock);
 
 /** The payload of the most recent `save_library_panel_state` call, if any. */
 /**
  * The commands invoked so far, minus the traffic that is not the panel acting on
- * the user's behalf: its own tree load and panel-state round trip, and
+ * the user's behalf: its own folder reads and type list, its panel-state round trip, and
  * `append_log_records`. The log batch is flushed off a timer (`../logging`), so
  * whether it lands inside any given test is a matter of timing rather than
  * behaviour — leaving it in makes every exhaustive assertion below flaky.
@@ -62,7 +65,8 @@ function commandsBeyondPanelTraffic(): string[] {
     .map((c) => c[0] as string)
     .filter(
       (cmd) =>
-        cmd !== "load_project_tree" &&
+        cmd !== "list_tree_children" &&
+        cmd !== "list_project_artifacts" &&
         cmd !== "load_library_panel_state" &&
         cmd !== "save_library_panel_state" &&
         cmd !== "append_log_records",
@@ -70,6 +74,7 @@ function commandsBeyondPanelTraffic(): string[] {
 }
 
 beforeEach(() => {
+  resetLogBufferForTest();
   // Module-level, like the preferences cache: reveal nonces are minted from
   // one counter for the app's life, so a suite that does not reset finds its
   // first request already consumed by the previous one.
@@ -90,9 +95,11 @@ describe("Library filesystem tree", () => {
   it("assigns a file-scoped type and clears it from the submenu", async () => {
     mockInvoke(
       {
-        load_project_tree: () => baseTree(),
-        assign_artifact_type: () => baseTree(),
-        clear_artifact_type: () => baseTree(),
+        tree: () => baseTree(),
+        assign_artifact_type: () =>
+          wireNode(file(".claude/skills/onboarding.md", "spec", "assigned")),
+        clear_artifact_type: () =>
+          wireNode(file(".claude/skills/onboarding.md", "skill", "inferred")),
       },
       expandedAll(baseTree()),
     );
@@ -128,7 +135,7 @@ describe("Library filesystem tree", () => {
   // submenu rather than at the menu's top level, with Clear Type as the very
   // last entry inside it (below a divider).
   it("nests the type choices and Clear Type under the Artifact Type submenu", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
 
     fireEvent.contextMenu(await screen.findByText("onboarding.md"));
@@ -157,8 +164,9 @@ describe("Library filesystem tree", () => {
   it("LCM-FR-04, LCM-FR-07: lists the ten types with Architecture after Flow and assigns it", async () => {
     mockInvoke(
       {
-        load_project_tree: () => baseTree(),
-        assign_artifact_type: () => baseTree(),
+        tree: () => baseTree(),
+        assign_artifact_type: (args) =>
+          wireNode(file((args as { path: string }).path, "architecture", "assigned")),
       },
       expandedAll(baseTree()),
     );
@@ -202,9 +210,10 @@ describe("Library filesystem tree", () => {
   // sets; the file ops are shared, Notes is artifact-only, and Paste and the
   // three creation entries are folder-only.
   it("composes folder and skill menus from the applicability mapping", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
     await screen.findByText("specifications");
+    await waitForTree();
 
     // Folder menu: New Artifact/Delete/Copy/Rename/Paste/Artifact Type, no
     // Notes (LCM-FR-08 adds the folder-only New Artifact entry).
@@ -249,12 +258,14 @@ describe("Library filesystem tree", () => {
   // menu omits it; and selecting New Artifact opens that modal scoped to the
   // folder (no Editor/Flow tab opens here).
   it("offers a folder-only New Artifact entry that opens the modal scoped to the folder", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     const { onOpenArtifact, onShowNotes, onNewArtifact } = renderLibrary();
 
     // Folder menu: New File leads the creation cluster and carries a leading
     // icon (LCM-FR-10)…
-    fireEvent.contextMenu(await screen.findByText("specifications"));
+    await screen.findByText("specifications");
+    await waitForTree();
+    fireEvent.contextMenu(screen.getByText("specifications"));
     let menu = document.querySelector(".menu") as HTMLElement;
     const newFile = within(menu).getByText("New File").closest(".menu-item")!;
     expect(menu.querySelector(".menu-item")).toBe(newFile);
@@ -301,10 +312,12 @@ describe("Library filesystem tree", () => {
    * sequence, which is exactly what a `fireEvent.click` test cannot see.
    */
   it("LCM-FR-08: a real mouse press on New Artifact opens the modal rather than dismissing the menu", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     const { onNewArtifact, onNewFile, onNewFolder } = renderLibrary();
 
-    fireEvent.contextMenu(await screen.findByText("specifications"));
+    await screen.findByText("specifications");
+    await waitForTree();
+    fireEvent.contextMenu(screen.getByText("specifications"));
     await userEvent.click(screen.getByText("New Artifact"));
     expect(onNewArtifact).toHaveBeenCalledTimes(1);
 
@@ -337,10 +350,12 @@ describe("Library filesystem tree", () => {
     ]);
     typed.artifactType = "spec";
     typed.typeSource = "assigned";
-    setLoadTree(folder("", true, [typed, file("AGENTS.md", "agent", "inferred")]));
+    setTree(folder("", true, [typed, file("AGENTS.md", "agent", "inferred")]));
     const { onNewFolder, onOpenArtifact, onNewArtifact } = renderLibrary();
 
-    fireEvent.contextMenu(await screen.findByText("specifications"));
+    await screen.findByText("specifications");
+    await waitForTree();
+    fireEvent.contextMenu(screen.getByText("specifications"));
     let menu = document.querySelector(".menu") as HTMLElement;
     const entry = within(menu).getByText("New Folder").closest(".menu-item")!;
     // LCM-FR-07: a leading icon like every other entry.
@@ -369,7 +384,7 @@ describe("Library filesystem tree", () => {
   it("offers a folder-only New File entry that hands the folder off as the starting location", async () => {
     // The folder is artifact-bearing so the default **All artifacts** lens shows
     // it (LIB-FR-09); the entry itself is folder-only whatever the folder holds.
-    setLoadTree(
+    setTree(
       folder("", true, [
         folder("src/hooks", true, [
           file("src/hooks/useProjectFolders.md", "spec", "inferred"),
@@ -411,7 +426,7 @@ describe("Library filesystem tree", () => {
   // every typed file offers it, an untyped one does not, and all of them offer
   // the same Delete / Copy / Rename / Artifact Type entries.
   it("offers Notes on typed files and withholds it from untyped ones", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
 
     const universal = ["Delete", "Copy", "Rename", "Artifact Type"];
@@ -443,7 +458,7 @@ describe("Library filesystem tree", () => {
 
   // LCM-FR-04: the Artifact Type submenu opens on mouse-over, without a click.
   it("opens the Artifact Type submenu on hover, without a click", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
 
     fireEvent.contextMenu(await screen.findByText("onboarding.md"));
@@ -464,7 +479,7 @@ describe("Library filesystem tree", () => {
   // LCM-FR-07: every entry and submenu carries a leading icon —
   // none renders without one.
   it("renders a leading icon on every menu entry, top-level and in the submenu", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
 
     // Open a skill menu, then expand the Artifact Type submenu so its ten type
@@ -486,10 +501,12 @@ describe("Library filesystem tree", () => {
 
   // LCM-FR-07: the folder menu's Paste entry also carries its leading icon.
   it("renders a leading icon on the folder Paste entry", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
 
-    fireEvent.contextMenu(await screen.findByText("specifications"));
+    await screen.findByText("specifications");
+    await waitForTree();
+    fireEvent.contextMenu(screen.getByText("specifications"));
     const menu = document.querySelector(".menu") as HTMLElement;
     const paste = within(menu).getByText("Paste").closest(".menu-item")!;
     expect((paste as HTMLElement).querySelector("svg.icon")).not.toBeNull();
@@ -498,7 +515,7 @@ describe("Library filesystem tree", () => {
   // LCM non-functional requirement: the menu dismisses on Escape without
   // invoking any action — including out of the inline delete-confirm mode.
   it("dismisses the menu on Escape without invoking an action", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
 
     // Open the menu and press Escape without choosing anything. (Delete is not

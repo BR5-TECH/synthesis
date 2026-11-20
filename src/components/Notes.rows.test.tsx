@@ -4,6 +4,7 @@
 // record, its timestamps and the unresolved marking belong to
 // `NTC-notes-storage.md` and are covered by its own Rust tests.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { treeCommand } from "../test/treeCommands";
 import {
   cleanup,
   fireEvent,
@@ -80,8 +81,8 @@ beforeEach(() => {
         return served.project;
       case "list_all_notes":
         return served.all;
-      case "load_project_tree":
-        return TREE;
+      case "list_project_artifacts":
+        return treeCommand(cmd, undefined, TREE);
       case "create_note":
         return {
           id: "new",
@@ -491,6 +492,30 @@ describe("moving a note (NTS-FR-22)", () => {
       fields: { scope: { kind: "entity", entityId: "specs/b.md", entityPath: "specs/b.md" } },
     });
     expect(document.querySelector(".notes-move")).toBeNull();
+  });
+
+  it("NTS-FR-22: lists the targets from list project artifacts, Flows included and folders left out", async () => {
+    render(<Harness entity={ARTIFACT_A} />);
+    await screen.findByText("misfiled");
+
+    await userEvent.click(within(await openMenu("misfiled")).getByText("Move…"));
+    const picker = document.querySelector(".notes-move") as HTMLElement;
+    // A Flow is a target like any other artifact.
+    await waitFor(() =>
+      expect(within(picker).getByText("release.flow")).toBeInTheDocument(),
+    );
+    // Two files that share a basename are both offered.
+    expect(within(picker).getAllByText("README.md")).toHaveLength(2);
+    // The typed `flows` folder is in the list the backend gives, but a note
+    // attaches to an artifact, not to a folder. An untyped file is not in it.
+    const names = Array.from(picker.querySelectorAll(".notes-move__name")).map(
+      (el) => el.textContent,
+    );
+    expect(names).not.toContain("flows");
+    expect(names).not.toContain("notes.txt");
+    // One flat read of the project index, and no folder walk.
+    expect(calls("list_project_artifacts").length).toBeGreaterThan(0);
+    expect(calls("list_tree_children")).toHaveLength(0);
   });
 
   it("moves it to project level from the picker's head entry", async () => {

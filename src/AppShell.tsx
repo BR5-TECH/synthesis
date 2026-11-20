@@ -452,9 +452,6 @@ export function AppShell(props: AppShellProps) {
               projectFolders.ensureFresh();
               s.openNewFolder({ initialParent: folder.path });
             }}
-            // NFW-FR-04: the Library is the surface that scans, so its tree is
-            // what feeds the New Folder window's parent list.
-            onTreeLoaded={projectFolders.publishTree}
             panelReveal={s.panelReveal}
             activeEntity={s.notesEntity}
             // CMP-FR-10 / NTS-FR-26: a Comments row and a note's Discuss reveal

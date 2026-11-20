@@ -133,6 +133,7 @@ pub fn document_of(text: &str, include_frontmatter: bool) -> Document {
             doc.blocks.insert(0, TopBlock { block, align: model::Align::Left });
         }
     }
+    model::trim_page_breaks(&mut doc.blocks);
     doc
 }
 

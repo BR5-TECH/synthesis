@@ -303,7 +303,7 @@ describe("rendering (EDT-FR-CSKH, EDT-FR-XKTS, EDT-FR-UYPS, EDT-FR-GVJM, EDT-FR-
     expect(spacer).toHaveAttribute("role", "separator");
     expect(spacer).toHaveAttribute("aria-label", "Vertical break V3");
     expect(spacer).toHaveAttribute("data-level", "3");
-    expect(spacer.style.getPropertyValue("--md-break-lines").trim()).toBe("5");
+    expect(spacer.style.getPropertyValue("--md-break-lines").trim()).toBe("6");
     expect(spacer.textContent).toBe("");
   });
 
@@ -534,7 +534,7 @@ describe("styles (EDT-FR-CSKH, EDT-FR-GVJM)", () => {
     const lines = [1, 2, 3, 4].map((level) =>
       decl(blocksFor(css, `.doc .md-break[data-level="${level}"]`)[0], "--md-break-lines"),
     );
-    expect(lines).toEqual(["12", "8", "5", "3"]);
+    expect(lines).toEqual(["16", "10", "6", "3"]);
   });
 
   it("EDT-FR-GVJM: text blocks align their text, and a table or a code block moves as a box", () => {

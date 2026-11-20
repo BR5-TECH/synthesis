@@ -465,6 +465,11 @@ impl Writer<'_> {
                     paragraph_end(out);
                 }
             }
+            Block::PageBreak => {
+                // DXP-FR-SEDX: `markdown2pdf` reads this comment as a page
+                // break and starts a new page for the block after it.
+                out.push(Token::HtmlBlock("<!-- pagebreak -->".to_string()));
+            }
             Block::Html(text) => {
                 out.push(Token::Code {
                     language: String::new(),

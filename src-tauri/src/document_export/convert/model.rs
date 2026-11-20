@@ -96,6 +96,8 @@ pub enum Block {
     Spacer {
         lines: u32,
     },
+    /// DXP-FR-SEDX: a V1 break, which starts a new page.
+    PageBreak,
     /// DXP-FR-YRVE: raw HTML other than a comment, shown as its text.
     Html(String),
     /// DXP-FR-RPPW: the metadata table, one `(key, value)` per row.
@@ -138,20 +140,50 @@ fn count_diagrams(block: &Block, n: &mut usize) {
 }
 
 /// EDT-FR-CSKH: the spacer of each break level, in body line heights.
-pub fn break_lines(level: usize) -> u32 {
+pub fn break_lines(level: u8) -> u32 {
     match level {
-        1 => 12,
-        2 => 8,
-        3 => 5,
+        1 => 16,
+        2 => 10,
+        3 => 6,
         _ => 3,
     }
 }
 
-/// The marker a single line holds (EDT-FR-QALB, EDT-FR-XPMC).
+/// The marker a single line holds (EDT-FR-QALB, EDT-FR-XPMC). A break carries
+/// its level, 1 to 4: five or more `%` is V4.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Marker {
-    Break(u32),
+    Break(u8),
     Align(Align),
+}
+
+/// DXP-FR-SEDX, DXP-FR-YVIV: the block of a break level. V1 starts a new page,
+/// and V2 to V4 are empty space.
+pub fn break_block(level: u8) -> Block {
+    if level == 1 {
+        Block::PageBreak
+    } else {
+        Block::Spacer { lines: break_lines(level) }
+    }
+}
+
+/// DXP-FR-RWWA: remove each page break that has no other block before it or
+/// no other block after it, so an export never starts or ends with an empty
+/// page.
+pub fn trim_page_breaks(blocks: &mut Vec<TopBlock>) {
+    let is_content = |top: &TopBlock| top.block != Block::PageBreak;
+    let first = blocks.iter().position(is_content);
+    let last = blocks.iter().rposition(is_content);
+    let (Some(first), Some(last)) = (first, last) else {
+        blocks.clear();
+        return;
+    };
+    let mut index = 0;
+    blocks.retain(|top| {
+        let keep = top.block != Block::PageBreak || (index > first && index < last);
+        index += 1;
+        keep
+    });
 }
 
 /// EDT-FR-QALB / EDT-FR-XPMC: the marker of one line, or `None`. The grammar
@@ -166,7 +198,7 @@ pub fn classify_marker_line(line: &str) -> Option<Marker> {
     let inner = line[indent..].strip_prefix("<!--")?.strip_suffix("-->")?;
     let inner = inner.trim_matches([' ', '\t']);
     if !inner.is_empty() && inner.chars().all(|c| c == '%') {
-        return Some(Marker::Break(break_lines(inner.len())));
+        return Some(Marker::Break(inner.len().min(4) as u8));
     }
     match inner {
         "center" => Some(Marker::Align(Align::Center)),
@@ -232,10 +264,9 @@ pub fn parse(body: &str) -> Document {
             let text = reader.html_block();
             let marker = single_line(&text).and_then(classify_marker_line);
             match marker {
-                Some(Marker::Break(lines)) => {
+                Some(Marker::Break(level)) => {
                     pending = None;
-                    doc.blocks
-                        .push(TopBlock { block: Block::Spacer { lines }, align: Align::Left });
+                    doc.blocks.push(TopBlock { block: break_block(level), align: Align::Left });
                 }
                 Some(Marker::Align(align)) => pending = Some((align, range.start)),
                 None => {

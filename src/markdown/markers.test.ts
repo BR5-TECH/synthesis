@@ -37,8 +37,8 @@ describe("vertical break grammar (EDT-FR-QALB)", () => {
     },
   );
 
-  it("EDT-FR-CSKH: V1 is 12, V2 is 8, V3 is 5, and V4 is 3 body line heights", () => {
-    expect(BREAK_LINE_HEIGHTS).toEqual({ 1: 12, 2: 8, 3: 5, 4: 3 });
+  it("EDT-FR-CSKH: V1 is 16, V2 is 10, V3 is 6, and V4 is 3 body line heights", () => {
+    expect(BREAK_LINE_HEIGHTS).toEqual({ 1: 16, 2: 10, 3: 6, 4: 3 });
   });
 
   it("EDT-FR-XKTS, EDT-FR-HDCZ: the accessible name gives the level", () => {

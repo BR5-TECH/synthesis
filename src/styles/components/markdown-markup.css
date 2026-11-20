@@ -12,9 +12,9 @@
   outline: 1px dashed transparent;
   outline-offset: -1px;
 }
-.doc .md-break[data-level="1"] { --md-break-lines: 12; }
-.doc .md-break[data-level="2"] { --md-break-lines: 8; }
-.doc .md-break[data-level="3"] { --md-break-lines: 5; }
+.doc .md-break[data-level="1"] { --md-break-lines: 16; }
+.doc .md-break[data-level="2"] { --md-break-lines: 10; }
+.doc .md-break[data-level="3"] { --md-break-lines: 6; }
 .doc .md-break[data-level="4"] { --md-break-lines: 3; }
 .doc[contenteditable="true"] .md-break:hover { outline-color: var(--border-2); }
 /* A selection shows only while its surface has the focus: an editable run of

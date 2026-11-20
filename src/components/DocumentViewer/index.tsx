@@ -98,7 +98,9 @@ function Viewer({ documentId }: { documentId: string }) {
         )}
         <div
           ref={regionRef}
-          className="document-viewer__text"
+          // EZM-FR-QGOU: the text of a Document tab is a zoom region.
+          className="document-viewer__text editor-zoom"
+          data-zoom-scroller=""
           role="region"
           aria-label="Document text"
           tabIndex={0}

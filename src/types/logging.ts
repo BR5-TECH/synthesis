@@ -267,6 +267,12 @@ export interface AppPreferences {
    */
   gitFilesWidthFraction?: number;
   /**
+   * GSS-FR-KKYO / EZM-FR-VPYL: the editor zoom level in percent, 100 when
+   * unset. The reader limits the range (EZM-FR-HYQD). Optional so a record from
+   * a backend that predates the field still types.
+   */
+  editorZoomPercent?: number;
+  /**
    * GSS-FR-29 / GLS-FR-17: the three typographic roles' font settings. The
    * Appearance section reads them on mount and writes them whenever the user
    * changes one of the nine controls. User-global rather than project-scoped

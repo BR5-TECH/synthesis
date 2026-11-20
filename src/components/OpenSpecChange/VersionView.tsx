@@ -191,7 +191,7 @@ export function VersionView({
           Reading the version…
         </p>
       ) : comparing ? (
-        <div className="openspec-change__reading" role="region" aria-label="Comparison" tabIndex={0}>
+        <div className="editor-zoom openspec-change__reading" data-zoom-scroller="" role="region" aria-label="Comparison" tabIndex={0}>
           {compared.map((file) => (
             <ComparedFileView key={file.path} file={file} />
           ))}
@@ -211,7 +211,7 @@ export function VersionView({
             }
           >
             <div
-              className="openspec-change__reading"
+              className="editor-zoom openspec-change__reading" data-zoom-scroller=""
               role="region"
               aria-label="Reading pane"
               tabIndex={0}

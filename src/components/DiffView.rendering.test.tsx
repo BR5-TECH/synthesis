@@ -178,6 +178,28 @@ describe("Rendering group (DFV-FR-16 .. DFV-FR-22, less FR-19's inner clause)", 
     expect(body).toHaveAttribute("data-page", "off");
   });
 
+  it("EZM-FR-QGOU, EZM-FR-OXBL: the body is a zoom region and its scroller in both renderings", async () => {
+    wireBackend({
+      prefs: { diffRenderingMode: "rich" },
+      revisions: { old: MD_OLD, new: MD_NEW, isBinary: false },
+    });
+    renderDiff(target("notes.md"));
+    await screen.findByTestId("diff-rich-unified");
+    const rich = document.querySelector(".diff-view__body") as HTMLElement;
+    expect(rich).toHaveClass("editor-zoom");
+    expect(rich).toHaveAttribute("data-zoom-scroller");
+    // The toolbar above the body is not in the region.
+    expect(screen.getByRole("radio", { name: "Source" }).closest(".editor-zoom")).toBeNull();
+
+    await userEvent.click(screen.getByRole("radio", { name: "Source" }));
+    await waitFor(() =>
+      expect(screen.queryByTestId("diff-rich-unified")).not.toBeInTheDocument(),
+    );
+    const source = document.querySelector(".diff-view__body") as HTMLElement;
+    expect(source).toHaveClass("editor-zoom");
+    expect(source).toHaveAttribute("data-zoom-scroller");
+  });
+
   it("renders heading levels the document styles do not restate", async () => {
     wireBackend({
       prefs: { diffRenderingMode: "rich" },

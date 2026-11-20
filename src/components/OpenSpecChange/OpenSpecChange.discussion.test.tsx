@@ -99,6 +99,14 @@ describe("the discussion column of a stream location", () => {
     expect(split.style.gridTemplateColumns).toContain("var(--dds-splitter-w)");
   });
 
+  it("EZM-FR-QGOU, EZM-FR-UJWE: the reading pane is a zoom region, and the discussion column is not", async () => {
+    drawChange();
+    const reading = await screen.findByTestId("openspec-reading");
+    expect(reading).toHaveClass("editor-zoom");
+    expect(reading).toHaveAttribute("data-zoom-scroller");
+    expect(screen.getByTestId("openspec-change-discussion").closest(".editor-zoom")).toBeNull();
+  });
+
   it("OCW-FR-TRLG: the column reads the discussions of the change owner and lists the whole-change and the fragment ones", async () => {
     drawChange();
     const column = await screen.findByTestId("openspec-change-discussion");

@@ -88,6 +88,8 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   // GSS-FR-MSPQ / GIT-FR-FATV: a files column the author has never sized takes
   // 30 % of the Git panel's large view.
   gitFilesWidthFraction: 0.3,
+  // GSS-FR-KKYO / EZM-FR-SOZM: the editor zoom level starts at 100%.
+  editorZoomPercent: 100,
 };
 
 /**

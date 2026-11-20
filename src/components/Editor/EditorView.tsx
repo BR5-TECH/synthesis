@@ -307,6 +307,8 @@ export function EditorView(props: EditorViewProps) {
     <textarea
       ref={sourceRef}
       className="editor__source"
+      // EZM-FR-OXBL: the reading position stays when the zoom changes.
+      data-zoom-scroller=""
       /* ESH-FR-SSDV: what the surface is called follows the shape of the file on
          it — a Markdown file's source is Markdown, and a source file's is
          whatever language it is written in. */
@@ -392,7 +394,10 @@ export function EditorView(props: EditorViewProps) {
    * review bar at its foot.
    */
   const documentColumn = (
-    <>
+    // EZM-FR-QGOU: the document column is a zoom region. The toolbar above it
+    // and the discussion column beside it are not. `display: contents`, so the
+    // region adds no box to the layout.
+    <div className="editor-zoom editor-zoom--contents" data-testid="editor-zoom-region">
       {/* EDT-FR-18: in WYSIWYG the frontmatter is carved into a visually distinct,
           editable region above the rich body (never as body content). In text
           mode it is edited inline in the source surface, so no region here.
@@ -444,6 +449,8 @@ export function EditorView(props: EditorViewProps) {
       <div
         className="editor"
         ref={bodyScrollRef}
+        // EZM-FR-OXBL: the reading position stays when the zoom changes.
+        data-zoom-scroller=""
         style={{
           flex: 1,
           overflow: "auto",
@@ -572,7 +579,7 @@ export function EditorView(props: EditorViewProps) {
           sits where the hand already is rather than standing between the
           formatting toolbar and the first line of the prompt. */}
       {review?.bar ?? props.reviewFooter}
-    </>
+    </div>
   );
 
   return (

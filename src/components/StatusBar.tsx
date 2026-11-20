@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Icon } from "./icons";
 import { StatusBarVoice } from "./StatusBarVoice";
+import { StatusBarZoom } from "./StatusBarZoom";
 import { LINE_ENDING_CHOICES } from "../hooks/useLineEndings";
 import { useSteadyProgress } from "../hooks/useSteadyProgress";
 import {
@@ -32,8 +33,9 @@ export const OVERLAY_VISIBLE_ROWS = 5;
  *  - **centre** — the most recently started in-flight operation, or nothing at
  *    all when none is running (STB-FR-05–STB-FR-09).
  *  - **trailing** — the project's line-ending convention, the active artifact's
- *    indentation, and the uncommitted diff summary, in that order with the
- *    diffstat closest to the trailing edge (STB-FR-16–STB-FR-30).
+ *    indentation, the editor zoom level, and the uncommitted diff summary, in
+ *    that order with the diffstat closest to the trailing edge
+ *    (STB-FR-16–STB-FR-30, STB-FR-VRUS).
  *
  * The strip exposes no control to hide, collapse, or resize it, and nothing
  * about it is persisted (STB-FR-02 / SNV-FR-42).
@@ -69,6 +71,12 @@ export interface StatusBarProps {
   indentation: Indentation | null;
   onSelectIndentation: (value: Indentation) => void;
 
+  /**
+   * STB-FR-VRUS / STB-FR-LBHP: whether the active tab is zoomable
+   * (`EZM-editor-zoom.md` EZM-FR-JGRP). The control reads the level itself.
+   */
+  zoomable?: boolean;
+
   /** STB-FR-25 / STB-FR-29: the totals, or null to render nothing in their place. */
   diffTotals: DiffTotals | null;
   /** STB-FR-OSOL: opens the voice discussion (CVP-FR-54). */
@@ -86,6 +94,7 @@ export function StatusBar({
   onSelectLineEndings,
   indentation,
   onSelectIndentation,
+  zoomable = false,
   diffTotals,
   onRevealVoice,
 }: StatusBarProps) {
@@ -123,6 +132,7 @@ export function StatusBar({
           value={indentation}
           onSelect={onSelectIndentation}
         />
+        <StatusBarZoom zoomable={zoomable} />
         <DiffSummary totals={diffTotals} />
       </div>
     </div>

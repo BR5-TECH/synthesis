@@ -51,6 +51,14 @@ export const setSaveMenuState = (save: boolean, saveAll: boolean) =>
 export const setFindMenuState = (enabled: boolean) =>
   invoke<void>("set_find_menu_state", { enabled });
 
+/**
+ * SNV-FR-QHMA / SNV-FR-IPCN: the editor zoom level, as a whole percent, and
+ * whether the active tab is zoomable. The menu shows the check mark of the
+ * level and enables the Zoom items from these.
+ */
+export const setZoomMenuState = (level: number, enabled: boolean) =>
+  invoke<void>("set_zoom_menu_state", { level, enabled });
+
 export const createProject = (
   name: string,
   mode: CreateMode,

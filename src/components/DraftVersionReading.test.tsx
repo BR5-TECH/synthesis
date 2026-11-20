@@ -38,6 +38,21 @@ describe("DraftVersionReading (NAW-FR-09)", () => {
     expect(splitReadingFrontmatter("# H\n\n---\n\nmore\n").frontmatter).toBeNull();
   });
 
+  it("EZM-FR-QGOU, EZM-FR-OXBL: a past version is a zoom region in both modes, with its scroller", () => {
+    const { unmount } = render(
+      <DraftVersionReading text={"---\na: 1\n---\n# T\n"} mode="wysiwyg" label={LABEL} />,
+    );
+    const rich = screen.getByTestId("draft-version-reading");
+    expect(rich.closest(".editor-zoom")).not.toBeNull();
+    expect(rich.closest("[data-zoom-scroller]")).not.toBeNull();
+    expect(document.querySelector(".editor__frontmatter")?.closest(".editor-zoom")).not.toBeNull();
+    unmount();
+    render(<DraftVersionReading text={"# T\n"} mode="text" label={LABEL} />);
+    const source = screen.getByTestId("draft-version-reading");
+    expect(source.closest(".editor-zoom")).not.toBeNull();
+    expect(source).toHaveAttribute("data-zoom-scroller");
+  });
+
   it("renders the rich surface on the Editor's own page, read-only", () => {
     render(
       <DraftVersionReading

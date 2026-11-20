@@ -279,7 +279,9 @@ export function DiffView({ target, sessions }: DiffViewProps) {
             richApplies={richApplies}
           />
           <div
-            className="diff-view__body"
+            // EZM-FR-QGOU: the body of a Diff tab is a zoom region.
+            className="diff-view__body editor-zoom"
+            data-zoom-scroller=""
             data-page="off"
             ref={scrollMemory.bodyRef}
             onScrollCapture={scrollMemory.onScrollCapture}
@@ -620,7 +622,9 @@ function DiffTargetView({
           document it is deliberately not rendering here — so the field is
           declared only for the rendering that has a page to set on it. */}
       <div
-        className="diff-view__body"
+        // EZM-FR-QGOU: the body of a Diff tab is a zoom region.
+        className="diff-view__body editor-zoom"
+        data-zoom-scroller=""
         ref={scrollMemory.bodyRef}
         data-page={richPage ? "on" : "off"}
         onScrollCapture={scrollMemory.onScrollCapture}

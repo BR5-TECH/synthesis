@@ -679,3 +679,52 @@ html, body {
 
 /* Selection */
 ::selection { background: var(--bg-selection); color: var(--fg-1); }
+
+/* ---------- EDITOR ZOOM ----------
+   EZM-FR-LRVS: inside a zoom region the editor zoom level multiplies the Rich
+   Markdown and Source code ladders and the page width. `--editor-zoom` is a
+   factor on the root (1 at 100%), written by `src/state/editorZoom.ts`. A
+   custom property resolves where it is declared, so each token is declared
+   again here: one that only inherits from `:root` keeps its root value. UI-role
+   text, the page padding, and the line-height ratios do not change. */
+:root { --editor-zoom: 1; }
+/* The diagram area declares the tokens again too, so its reset below reaches
+   them. */
+.editor-zoom,
+.editor-zoom .diagram-viewer__area {
+  --fs-doc-sm:  calc(var(--font-rich-size) * 14 / 15 * var(--editor-zoom));
+  --fs-doc-md:  calc(var(--font-rich-size) * var(--editor-zoom));
+  --fs-doc-h4:  calc(var(--font-rich-size) * 16.5 / 15 * var(--editor-zoom));
+  --fs-doc-lg:  calc(var(--font-rich-size) * 18 / 15 * var(--editor-zoom));
+  --fs-doc-xl:  calc(var(--font-rich-size) * 22 / 15 * var(--editor-zoom));
+  --fs-doc-2xl: calc(var(--font-rich-size) * 28 / 15 * var(--editor-zoom));
+  --fs-src-2xs: calc(var(--font-source-size) * 10 / 13 * var(--editor-zoom));
+  --fs-src-xs:  calc(var(--font-source-size) * 11 / 13 * var(--editor-zoom));
+  --fs-src-sm:  calc(var(--font-source-size) * 12 / 13 * var(--editor-zoom));
+  --fs-src-md:  calc(var(--font-source-size) * var(--editor-zoom));
+  --fs-src-lg:  calc(var(--font-source-size) * 14 / 13 * var(--editor-zoom));
+  /* EZM-FR-LRVS / EZM-FR-RWKC: the page grows with its text. Each surface caps
+     it at the tab width less the inset, with `min()`, so it never scrolls the
+     tab horizontally. */
+  --doc-page-width: calc(820px * var(--editor-zoom));
+  --doc-page-box: calc(820px * var(--editor-zoom) + 96px);
+  --doc-page-outer: calc(var(--doc-page-box) + 2px);
+  /* EZM-FR-VQHI: the region keeps a vertical and a horizontal pan, and a
+     two-finger pinch reaches the page as pointer events. */
+  touch-action: pan-x pan-y;
+}
+/* EZM-FR-BNFJ / EZM-FR-LRVS: a diagram has its own zoom, and its labels keep
+   their size at every editor zoom level. More specific than the rule above,
+   so it wins there. */
+.editor-zoom .diagram-viewer__area { --editor-zoom: 1; }
+/* EZM-FR-LRVS / EZM-FR-RWKC: the reading pages that are not the document
+   page grow with the zoom too. `max-width` alone caps them at the width of
+   their region, so the tab does not scroll horizontally. */
+.editor-zoom .document-viewer__rich { max-width: calc(760px * var(--editor-zoom)); }
+.editor-zoom .openspec-file__text { max-width: calc(760px * var(--editor-zoom)); }
+.editor-zoom .openspec-deltas { max-width: calc(1100px * var(--editor-zoom)); }
+/* A zoom region that only marks its children: it adds no box to the layout. */
+.editor-zoom--contents { display: contents; }
+/* touch-action does not inherit, and a `display: contents` box has none, so
+   the children of such a region carry it (EZM-FR-VQHI). */
+.editor-zoom--contents > * { touch-action: pan-x pan-y; }

@@ -68,6 +68,16 @@ describe("DTV-FR-SQNK: loading and failure", () => {
     );
   });
 
+  it("EZM-FR-QGOU, EZM-FR-OXBL: the text of a Document tab is a zoom region and its scroller", async () => {
+    readReturns(documentText("hello"));
+    render(viewer());
+    const region = await screen.findByRole("region", { name: "Document text" });
+    expect(region).toHaveClass("editor-zoom");
+    expect(region).toHaveAttribute("data-zoom-scroller");
+    // The view toggle above the text is not in the region.
+    expect(screen.getByRole("radiogroup", { name: "View" }).closest(".editor-zoom")).toBeNull();
+  });
+
   it("DTV-FR-UGVG, DTV-FR-SQNK: reads with the document id and invokes nothing else", async () => {
     readReturns(documentText("hello"));
     render(viewer());

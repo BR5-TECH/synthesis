@@ -262,6 +262,7 @@ describe("patchAppPreferences — GSS-FR-20 whole-record write", () => {
       graduationRailWidthFraction: 0.2,
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
+      editorZoomPercent: 100,
     });
   });
 
@@ -296,6 +297,7 @@ describe("patchAppPreferences — GSS-FR-20 whole-record write", () => {
       graduationRailWidthFraction: 0.2,
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
+      editorZoomPercent: 100,
     });
   });
 
@@ -323,6 +325,7 @@ describe("patchAppPreferences — GSS-FR-20 whole-record write", () => {
       graduationRailWidthFraction: 0.2,
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
+      editorZoomPercent: 100,
     });
   });
 
@@ -363,6 +366,7 @@ describe("patchAppPreferences — GSS-FR-20 whole-record write", () => {
       graduationRailWidthFraction: 0.2,
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
+      editorZoomPercent: 100,
     });
   });
 });

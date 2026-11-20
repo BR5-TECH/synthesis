@@ -308,6 +308,11 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
     expect(menuEvents).toEqual([
       // PJT-FR-PILG: the project tab layer listens for New Tab before the shell.
       "menu:new-tab",
+      // SNV-FR-LVDP: the Zoom submenu of the Window menu.
+      "menu:zoom-in",
+      "menu:zoom-out",
+      "menu:zoom-reset",
+      "menu:zoom-set",
       "menu:new-file",
       "menu:new-folder",
       "menu:new-artifact",
@@ -327,7 +332,7 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
     await waitFor(() => {
       expect(
         Object.keys(listeners).filter((e) => e.startsWith("menu:")),
-      ).toHaveLength(11);
+      ).toHaveLength(15);
     });
     unmount();
     // The effect cleanup calls each captured unlisten fn, which the mock uses to
@@ -335,6 +340,21 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
     // hook that unlistens when its subscription promise settles does so a
     // moment after the unmount, so the test waits for that state.
     await waitFor(() => expect(listeners).toEqual({}));
+  });
+
+  it("SNV-FR-IPCN, STB-FR-LBHP, EZM-FR-JGRP: on the Dashboard the Zoom items are disabled and the status bar shows the inert Zoom", async () => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    render(<App />);
+    await enterIde();
+    expect(await screen.findByTestId("zoom-inert")).toHaveTextContent("Zoom");
+    await waitFor(() => {
+      const pushes = invokeMock.mock.calls.filter((c) => c[0] === "set_zoom_menu_state");
+      expect(pushes[pushes.length - 1]?.[1]).toMatchObject({ level: 100, enabled: false });
+    });
+    // SNV-FR-IPCN: an item that comes anyway changes nothing.
+    await fireMenu("menu:zoom-in");
+    expect(document.documentElement.style.getPropertyValue("--editor-zoom")).not.toBe("1.1");
+    vi.restoreAllMocks();
   });
 
   it("NFW-FR-06, NTA-FR-07, SNV-FR-24 / NFI-FR-06: New File opens the New File modal with the location at the project root", async () => {

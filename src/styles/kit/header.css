@@ -364,6 +364,8 @@
   padding: 1px 2px; border-radius: 4px; cursor: pointer;
 }
 .status-bar__select:hover { background: var(--bg-active); color: var(--fg-1); }
+/* STB-FR-VRUS: tabular figures, so the control keeps its width as the level changes. */
+.status-bar__select--zoom { font-variant-numeric: tabular-nums; }
 /* STB-FR-22: a neutral disabled state naming no convention. */
 .status-bar__inert { color: var(--fg-3); padding: 1px 2px; }
 

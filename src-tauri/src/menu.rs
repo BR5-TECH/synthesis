@@ -73,12 +73,14 @@ mod events;
 mod exit;
 mod items;
 mod state;
+mod zoom;
 
 pub use build::*;
 pub use events::*;
 pub use exit::*;
 use items::*;
 pub use state::*;
+pub use zoom::*;
 
 #[cfg(test)]
 mod tests;

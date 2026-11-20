@@ -41,6 +41,7 @@ import { useAppOverlays } from "./hooks/useAppOverlays";
 import { useThemePreference } from "./hooks/useThemePreference";
 import { useShellSession } from "./hooks/useShellSession";
 import type { Indentation } from "./state/indentation";
+import { isZoomableTab } from "./state/editorZoom";
 import { useVerticalPanel } from "./hooks/useVerticalPanel";
 import { useBottomPanel } from "./hooks/useBottomPanel";
 import { useProjectFolders } from "./hooks/useProjectFolders";
@@ -744,6 +745,9 @@ export function AppShell(props: AppShellProps) {
           // retained edit state, so it survives the tab closing and reopening.
           if (indentTarget) s.sessions.setIndentation(indentTarget, next);
         }}
+        // STB-FR-VRUS / STB-FR-LBHP: the zoom control is enabled only on a
+        // zoomable tab (EZM-FR-JGRP).
+        zoomable={isZoomableTab(s.activeT)}
         diffTotals={diffTotals}
         onRevealVoice={revealVoiceDiscussion}
       />

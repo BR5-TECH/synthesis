@@ -30,6 +30,10 @@ import { usePublicationMetadataStartupToast } from "./hooks/usePublicationMetada
 import { NotificationToasts } from "./components/NotificationToasts";
 import { useThemePreference } from "./hooks/useThemePreference";
 import { useFontRoles } from "./hooks/useFontRoles";
+import { useEditorZoomSync } from "./hooks/useEditorZoom";
+import { useEditorZoomGestures } from "./hooks/useEditorZoomGestures";
+import { useEditorZoomMenu } from "./hooks/useEditorZoomMenu";
+import { isZoomableTab } from "./state/editorZoom";
 import { useShellSession } from "./hooks/useShellSession";
 import { useVerticalPanel } from "./hooks/useVerticalPanel";
 import { useBottomPanel } from "./hooks/useBottomPanel";
@@ -79,6 +83,10 @@ function App({ projectWindowBoot = null }: AppProps = {}) {
   // Appearance section is a child window of its own, and its writes reach this
   // window as an announcement the hook itself follows (GLS-FR-20).
   useFontRoles();
+  // EZM-FR-HYQD / EZM-FR-GMSX: the editor zoom level, read at startup and kept
+  // in step with the other windows, and the gestures that change it.
+  useEditorZoomSync();
+  useEditorZoomGestures();
   const s = useShellSession();
 
   /**
@@ -180,6 +188,10 @@ function App({ projectWindowBoot = null }: AppProps = {}) {
   const indentation = indentTarget
     ? (s.sessions.get(indentTarget)?.indentation ?? null)
     : null;
+
+  // SNV-FR-QHMA / SNV-FR-IPCN: the Zoom submenu shows the level, and its items
+  // are enabled only while the active tab is zoomable (EZM-FR-JGRP).
+  useEditorZoomMenu(isZoomableTab(s.activeT));
 
   // SNV-FR-08..13 / SNV-FR-38..40: once the main shell is mounted, restore the
   // persisted main-window dimensions/maximized state — or default to maximized

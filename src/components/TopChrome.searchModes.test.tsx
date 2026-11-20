@@ -268,6 +268,7 @@ describe("query-mode toggles (SCH-FR-12 / SCH-FR-13 / SCH-FR-14)", () => {
       graduationRailWidthFraction: 0.2,
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
+      editorZoomPercent: 100,
       });
     });
   });

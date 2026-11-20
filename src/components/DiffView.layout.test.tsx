@@ -217,7 +217,7 @@ describe("Diff viewer layout (asserted against the stylesheet)", () => {
     // role's size is just as much as a literal was (DFV-FR-37), while also
     // holding a four-digit number at any size the role carries.
     expect(gutter).toMatch(
-      /width\s*:\s*(\d+px|calc\(\s*var\(--font-source-size\))/,
+      /width\s*:\s*(\d+px|calc\(\s*var\(--fs-src-md\))/,
     );
     expect(gutter).not.toMatch(/width\s*:\s*auto/);
     expect(gutter).not.toMatch(/min-width\s*:/);

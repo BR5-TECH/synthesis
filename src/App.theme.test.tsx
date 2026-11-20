@@ -185,6 +185,7 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
       graduationRailWidthFraction: 0.2,
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
+      editorZoomPercent: 100,
       },
     });
     // Applied to the root immediately, no relaunch.
@@ -262,6 +263,7 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
       graduationRailWidthFraction: 0.2,
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
+      editorZoomPercent: 100,
         },
       }),
     );

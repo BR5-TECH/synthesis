@@ -263,6 +263,7 @@ describe("Appearance typography (GLS-FR-17, GLS-FR-18 – GLS-FR-21)", () => {
       graduationRailWidthFraction: 0.2,
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
+      editorZoomPercent: 100,
       },
       fonts: INSTALLED,
     });

@@ -47,3 +47,4 @@ fn mock_app_with_window(root: &std::path::Path) -> tauri::App<tauri::test::MockR
 
 mod items;
 mod teardown;
+mod zoom;

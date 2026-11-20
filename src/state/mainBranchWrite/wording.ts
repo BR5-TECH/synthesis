@@ -41,10 +41,13 @@ export function writeSentence(write: MainBranchWriteKind, branch: string): strin
 /** MBW-FR-RXAR: why the branch is a main branch. */
 export function reasonSentence(guard: BranchWriteGuard): string {
   const protectedByGithub = guard.protection === "protected";
+  // MBW-FR-DKOY: a guard of a submodule names the submodule the write goes to.
+  const of = guard.repository ? `the submodule ${guard.repository}` : "this repository";
+  const where = guard.repository ? ` in the submodule ${guard.repository}` : "";
   if (guard.isDefault && protectedByGithub)
-    return `${guard.branch} is the default branch of this repository, and GitHub protects it.`;
-  if (protectedByGithub) return `GitHub protects ${guard.branch}.`;
-  return `${guard.branch} is the default branch of this repository.`;
+    return `${guard.branch} is the default branch of ${of}, and GitHub protects it.`;
+  if (protectedByGithub) return `GitHub protects ${guard.branch}${where}.`;
+  return `${guard.branch} is the default branch of ${of}.`;
 }
 
 /** MBW-FR-JZME: the line for a branch that GitHub protects. */

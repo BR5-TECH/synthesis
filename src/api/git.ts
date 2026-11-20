@@ -454,9 +454,21 @@ export const refreshWorktreesAndBranches = () =>
  * GTC-FR-TTSV: whether `branch` is a main branch and whether the author
  * confirmed a write to it. `null` reads the branch of the active worktree.
  */
-export const getBranchWriteGuard = (branch: string | null, refresh: boolean) =>
-  invoke<BranchWriteGuard>("get_branch_write_guard", { branch, refresh });
+export const getBranchWriteGuard = (
+  branch: string | null,
+  refresh: boolean,
+  repository?: string,
+) =>
+  invoke<BranchWriteGuard>(
+    "get_branch_write_guard",
+    // GTC-FR-ZBAL: a submodule is named; the main repository is not.
+    repository ? { branch, refresh, repository } : { branch, refresh },
+  );
 
 /** GTC-FR-YWRZ: record the author's confirmation for the session. */
-export const confirmMainBranchWrite = (branch: string) =>
-  invoke<BranchWriteGuard>("confirm_main_branch_write", { branch });
+export const confirmMainBranchWrite = (branch: string, repository?: string) =>
+  invoke<BranchWriteGuard>(
+    "confirm_main_branch_write",
+    // GTC-FR-ZBAL, MBW-FR-DKOY: the confirmation of a submodule names it.
+    repository ? { branch, repository } : { branch },
+  );

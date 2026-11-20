@@ -33,9 +33,18 @@ fn assert_checked_before(source: &str, name: &str, call: &str, write: &str) {
 #[test]
 fn the_git_writes_run_the_check() {
     let git = include_str!("../../git.rs");
-    let active = "require_active_branch_write";
-    assert_checked_before(git, "commit_paths", active, "commit_paths_reported(");
-    assert_checked_before(git, "push_current_branch", active, "push_affected_at(");
+    assert_checked_before(
+        git,
+        "commit_paths",
+        "require_repositories_write",
+        "commit_paths_reported(",
+    );
+    assert_checked_before(
+        git,
+        "push_current_branch",
+        "require_repositories_write",
+        "push_affected_at(",
+    );
     let named = "require_branch_write(&app, &root, Some(&branch)";
     assert_checked_before(git, "push_branch", named, "push_named_branch_at(");
     let pull = include_str!("../pull.rs");
@@ -178,17 +187,20 @@ fn off_main_thread_sync(source: &str, name: &str) -> bool {
     source.contains(&format!("#[tauri::command(async)]\npub fn {name}("))
 }
 
-// GSM-FR-GHFY: the main branch write check runs once, on the branch of the
-// main repository; the commit and the push of a submodule do not run it.
+// GSM-FR-GHFY, GTC-FR-OVSD: the commit and the push check every repository
+// they write through one call, which the behaviour tests in
+// `submodule_write_guard.rs` drive.
 #[test]
-fn submodule_writes_run_no_main_branch_check() {
-    let push = include_str!("../push.rs");
-    assert!(!body_of(push, "push_affected_inner").contains("write_guard"));
-    let commit = include_str!("../commit.rs");
-    assert!(!body_of(commit, "commit_in_member").contains("write_guard"));
+fn the_commit_and_the_push_check_each_repository_they_write() {
     let git = include_str!("../../git.rs");
-    assert_eq!(
-        body_of(git, "push_current_branch").matches("require_active_branch_write").count(),
-        1
-    );
+    for (command, plan) in
+        [("commit_paths", "commit_targets("), ("push_current_branch", "push_targets(")]
+    {
+        let body = body_of(git, command);
+        let planned = body.find(plan).unwrap_or_else(|| panic!("{command} plans no targets"));
+        let checked = body
+            .find("require_repositories_write(&app, &targets")
+            .unwrap_or_else(|| panic!("{command} does not check its targets"));
+        assert!(planned < checked, "{command} checks before it plans");
+    }
 }

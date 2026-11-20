@@ -1,7 +1,7 @@
 //! The path-scoped commit (GTC-FR-19 / GTC-FR-20).
 
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use git2::Repository;
 use serde::Serialize;
@@ -217,6 +217,13 @@ fn commit_paths_with(
     let mut named: Vec<Vec<String>> = vec![Vec::new(); set.members.len()];
     let mut pointers_named: BTreeSet<usize> = BTreeSet::new();
     for path in paths {
+        // GSM-FR-GHFY: the exact commit of an application store or a work
+        // stream runs no check per submodule, so it commits in the main
+        // repository alone, as for a project with no submodule.
+        if !pair_renames {
+            named[0].push(set.members[0].to_repo(path));
+            continue;
+        }
         match set.index_of(path).filter(|i| *i != 0) {
             Some(sub) => {
                 pointers_named.insert(sub);
@@ -297,6 +304,40 @@ fn commit_paths_with(
         .unwrap_or_default();
     let committed_paths = made.iter().flat_map(|c| c.committed_paths.iter().cloned()).collect();
     Ok(CommitOutcome { commit_id, committed_paths, repositories: made })
+}
+
+/// GSM-FR-GHFY: the repositories a commit of `paths` can write, as
+/// `(project-relative root, checkout)`, so the main branch write check runs on
+/// each before the first commit. The owner of each path and every parent above
+/// it are written, because each parent records the new pointer (GSM-FR-MPWK).
+/// The main repository's checkout is the content root.
+pub fn commit_targets(root: &Path, paths: &[String]) -> Result<Vec<(String, PathBuf)>, String> {
+    let set = RepoSet::open(root)?;
+    let mut written: BTreeSet<usize> = BTreeSet::new();
+    for path in paths {
+        let mut member = match set.submodule_at(path) {
+            Some(sub) => set.parent_of(sub),
+            None => Some(set.owner(path)),
+        };
+        while let Some(current) = member {
+            if let Some(i) = set.index_of(&current.path) {
+                written.insert(i);
+            }
+            member = set.parent_of(current);
+        }
+    }
+    Ok(written
+        .into_iter()
+        .filter_map(|i| {
+            let member = &set.members[i];
+            let checkout = if member.is_main() {
+                Some(root.to_path_buf())
+            } else {
+                member.repo.workdir().map(Path::to_path_buf)
+            };
+            checkout.map(|c| (member.path.clone(), c))
+        })
+        .collect())
 }
 
 /// GSM-FR-FCOF: the pointer of the submodule at index `sub` as its parent

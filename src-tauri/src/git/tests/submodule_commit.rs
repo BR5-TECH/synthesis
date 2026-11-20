@@ -268,3 +268,20 @@ fn an_unnamed_moved_pointer_stays_out_of_the_commit() {
     assert_eq!(outcome.committed_paths, ["top.md"]);
     assert_eq!(head_entry(&p.main(), "libs/sub"), (0o160000, recorded));
 }
+
+// GSM-FR-GHFY: the exact commit of an application store commits in the main
+// repository alone, so it never writes a submodule branch with no check.
+#[test]
+fn an_exact_commit_never_writes_a_submodule() {
+    let p = Superproject::new(&[("top.md", "top\n")]);
+    let sub = p.add_submodule("", "libs/sub", &[("a.md", "a\n")]);
+    write(&sub, "a.md", "a\nmore\n");
+    write(&p.main(), "top.md", "top\n2\n");
+    let sub_head = head_of(&sub);
+    let paths = ["libs/sub/a.md".into(), "top.md".into()];
+    let outcome = commit_exact_paths(&rootfs(&p), "store", &paths).unwrap();
+    assert_eq!(outcome.repositories.len(), 1);
+    assert_eq!(outcome.repositories[0].repository, "");
+    assert_eq!(outcome.committed_paths, ["top.md"]);
+    assert_eq!(head_of(&sub), sub_head, "the submodule is not written");
+}

@@ -74,6 +74,56 @@ pub struct SkippedRepository {
     pub reason: String,
 }
 
+/// What the push of the current branch does with one member.
+enum PushDecision {
+    Push,
+    Skip(&'static str),
+}
+
+/// GSM-FR-REIT / GSM-FR-MJHC: the members to push, deepest first and the main
+/// repository last, and the members to skip with the reason. A member with
+/// nothing to publish is left out. A member whose state cannot be read stops
+/// the plan: a parent pushed past it could record a pointer that its remote
+/// does not hold (GSM-FR-GTPI).
+fn push_plan(set: &RepoSet) -> Result<Vec<(usize, PushDecision)>, String> {
+    let mut plan = Vec::new();
+    for i in set.deepest_first() {
+        let state = member_sync_state(&set.members[i])?;
+        if state.branch.is_none() {
+            plan.push((i, PushDecision::Skip(SKIP_DETACHED_HEAD)));
+        } else if !state.has_remote {
+            plan.push((i, PushDecision::Skip(SKIP_NO_REMOTE)));
+        } else if state.is_affected() {
+            plan.push((i, PushDecision::Push));
+        }
+    }
+    Ok(plan)
+}
+
+/// GSM-FR-GHFY: the repositories that the push of the current branch writes,
+/// as `(project-relative root, checkout)`, so the main branch write check runs
+/// on each before the first push. A project with no submodule pushes its main
+/// repository as it always did.
+pub fn push_targets(root: &Path) -> Result<Vec<(String, std::path::PathBuf)>, String> {
+    let set = RepoSet::open(root)?;
+    if !set.has_submodules() {
+        return Ok(vec![(String::new(), root.to_path_buf())]);
+    }
+    Ok(push_plan(&set)?
+        .into_iter()
+        .filter(|(_, decision)| matches!(decision, PushDecision::Push))
+        .filter_map(|(i, _)| {
+            let member = &set.members[i];
+            let checkout = if member.is_main() {
+                Some(root.to_path_buf())
+            } else {
+                member.repo.workdir().map(Path::to_path_buf)
+            };
+            checkout.map(|c| (member.path.clone(), c))
+        })
+        .collect())
+}
+
 /// GSM-FR-REIT: the sync state of one member of the set.
 fn member_sync_state(
     member: &crate::changes::repo_set::Member,
@@ -229,46 +279,33 @@ where
         summary.pushed.push(String::new());
         return Ok(());
     }
-    for i in set.deepest_first() {
+    for (i, decision) in push_plan(&set)? {
         let member = &set.members[i];
         let label = log_fields! { "repository" => &member.path };
-        // A member whose state cannot be read stops the run with a record
-        // that names it: a parent pushed past it could record a pointer that
-        // its remote does not hold (GSM-FR-GTPI).
-        let state = match member_sync_state(member) {
-            Ok(state) => state,
-            Err(e) => {
-                log_failure(sink, buffer, TRANSFER, MSG_PUSH_FAILED, &e, label);
-                return Err(e);
+        let root = match decision {
+            PushDecision::Skip(reason) => {
+                // GSM-FR-WPKJ: each skip is logged with the repository path.
+                logging::log_info(
+                    sink,
+                    buffer,
+                    TRANSFER,
+                    "push skipped a repository",
+                    log_fields! { "repository" => &member.path, "reason" => reason },
+                );
+                summary.skipped.push(SkippedRepository {
+                    repository: member.path.clone(),
+                    reason: reason.to_string(),
+                });
+                continue;
+            }
+            PushDecision::Push => {
+                if member.is_main() {
+                    Some(access.root)
+                } else {
+                    member.repo.workdir()
+                }
             }
         };
-        let skip = if state.branch.is_none() {
-            Some(SKIP_DETACHED_HEAD)
-        } else if !state.has_remote {
-            Some(SKIP_NO_REMOTE)
-        } else {
-            None
-        };
-        if let Some(reason) = skip {
-            // GSM-FR-WPKJ: each skip is logged with the repository path.
-            logging::log_info(
-                sink,
-                buffer,
-                TRANSFER,
-                "push skipped a repository",
-                log_fields! { "repository" => &member.path, "reason" => reason },
-            );
-            summary.skipped.push(SkippedRepository {
-                repository: member.path.clone(),
-                reason: reason.to_string(),
-            });
-            continue;
-        }
-        // GSM-FR-REIT: a repository with nothing to publish is not pushed.
-        if !state.is_affected() {
-            continue;
-        }
-        let root = if member.is_main() { Some(access.root) } else { member.repo.workdir() };
         let Some(root) = root else { continue };
         logging::log_info(sink, buffer, TRANSFER, "pushing a repository", label.clone());
         let checkout = GithubAccess { root, ..access };

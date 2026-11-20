@@ -21,9 +21,10 @@ Backend rules that let the author use a git submodule as a folder of the project
 12. **GSM-FR-MJHC** The push skips a member that has a detached `HEAD` with the reason `detached_head`, and a member that has no remote with the reason `no_remote`. A skip does not stop the push of the other members.
 13. **GSM-FR-GTPI** When the push of one member fails, the module pushes no more members. The members that it pushed before the failure stay pushed.
    - *Why:* A parent pushed after a failed submodule push records a pointer that the remote of the submodule does not hold.
-14. **GSM-FR-GHFY** The main branch write check (per `GTC-git.md` GTC-FR-JWOL) runs on the branch of the main repository only. A commit or a push in a submodule does not run it.
-15. **GSM-FR-VFJO** The module computes the repository set again for each operation. A submodule that is initialised or removed while the project is open joins or leaves the set at the next operation.
-16. **GSM-FR-WPKJ** The module logs each commit and each push that it makes in a member, and each member that it skips, with the member path.
+14. **GSM-FR-GHFY** A commit or a push of the current branch runs the main branch write check (per `GTC-git.md` GTC-FR-JWOL) on the branch of each member that it writes, before its first write. A refusal in one member writes nothing in any member.
+15. **GSM-FR-KGOP** The main branch of a submodule is its own default branch or a branch that GitHub protects for its own remote. A confirmation holds for one member and one branch (per `GTC-git.md` GTC-FR-YWRZ).
+16. **GSM-FR-VFJO** The module computes the repository set again for each operation. A submodule that is initialised or removed while the project is open joins or leaves the set at the next operation.
+17. **GSM-FR-WPKJ** The module logs each commit and each push that it makes in a member, and each member that it skips, with the member path.
 
 ## Contract surface
 This spec adds no Tauri command. `CHC-changes.md` and `GTC-git.md` compose these internal Rust primitives:

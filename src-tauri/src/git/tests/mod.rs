@@ -47,6 +47,7 @@ mod rollback;
 mod submodule_commit;
 mod submodule_push;
 mod submodule_rollback;
+mod submodule_write_guard;
 mod upstream;
 mod wire_shape;
 mod working_tree;

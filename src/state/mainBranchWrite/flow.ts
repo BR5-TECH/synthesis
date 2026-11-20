@@ -95,23 +95,33 @@ export async function runMainBranchWrite<T>(
   if (!options.ensured && !(await ensureMainBranchWrite(write, branch))) {
     return WRITE_CANCELLED;
   }
-  try {
-    return await invoke();
-  } catch (e) {
-    const refusal = parseMainBranchRefusal(e);
-    if (!refusal) throw e;
-    logWarn(["frontend"], "main branch write refused by the backend", {
-      write,
-      code: refusal.code,
-      branch: refusal.guard?.branch ?? "",
-    });
-    const answer = await requestMainBranchWrite({
-      write,
-      branch: refusal.guard?.branch ?? branch,
-      guard: refusal.guard,
-      readError: null,
-    });
-    if (!answer) return WRITE_CANCELLED;
-    return await invoke();
+  // MBW-FR-YSMC: one write can reach several repositories (GSM-FR-GHFY), and
+  // the backend refuses the first unconfirmed one. Each refusal of another
+  // repository or branch asks again; a repeat of one confirmed here ends it.
+  const confirmed = new Set<string>();
+  for (;;) {
+    try {
+      return await invoke();
+    } catch (e) {
+      const refusal = parseMainBranchRefusal(e);
+      if (!refusal) throw e;
+      const refusedBranch = refusal.guard?.branch ?? branch;
+      const key = `${refusal.guard?.repository ?? ""}|${refusedBranch ?? ""}`;
+      logWarn(["frontend"], "main branch write refused by the backend", {
+        write,
+        code: refusal.code,
+        branch: refusedBranch ?? "",
+        repository: refusal.guard?.repository ?? "",
+      });
+      if (confirmed.has(key)) throw e;
+      const answer = await requestMainBranchWrite({
+        write,
+        branch: refusedBranch,
+        guard: refusal.guard,
+        readError: null,
+      });
+      if (!answer) return WRITE_CANCELLED;
+      confirmed.add(key);
+    }
   }
 }

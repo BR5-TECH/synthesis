@@ -100,7 +100,7 @@ export function ChangeBody({
         nav={<ArtifactNav items={items} shown={shown} onChoose={onChoose} collapsed={collapsed} />}
       >
         <div
-          className="openspec-change__reading"
+          className="editor-zoom openspec-change__reading" data-zoom-scroller=""
           role="region"
           aria-label="Reading pane"
           tabIndex={0}

@@ -201,6 +201,7 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
       graduationRailWidthFraction: 0.2,
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
+      editorZoomPercent: 100,
       },
     });
   });
@@ -222,6 +223,7 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
       graduationRailWidthFraction: 0.2,
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
+      editorZoomPercent: 100,
         // GLS-FR-14, GSS-FR-20: all three roles' font settings ride the same record, and
         // a theme save must carry them through unchanged too.
         fonts: {
@@ -259,6 +261,7 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
       graduationRailWidthFraction: 0.2,
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
+      editorZoomPercent: 100,
         // GSS-FR-20 / GLS-FR-14: and all three roles, for the same reason —
         // the theme and the fonts share this record, and a theme save that
         // dropped the fonts would be discovered only on relaunch.
@@ -288,6 +291,7 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
       graduationRailWidthFraction: 0.2,
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
+      editorZoomPercent: 100,
       },
     });
     render(<GlobalSettings />);
@@ -343,6 +347,7 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
       graduationRailWidthFraction: 0.2,
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
+      editorZoomPercent: 100,
         },
       }),
     );

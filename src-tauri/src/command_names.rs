@@ -288,6 +288,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "set_save_menu_state",
     // Edit -> Find / Find & Replace enablement (SNV-FR-43).
     "set_find_menu_state",
+    // Window -> Zoom check marks and enablement (SNV-FR-QHMA / SNV-FR-IPCN).
+    "set_zoom_menu_state",
     // Dashboard widget loaders (PST-project-storage.md / DSH-dashboard.md).
     "list_recently_edited_artifacts",
     "list_active_drafts",

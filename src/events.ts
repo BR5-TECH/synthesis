@@ -58,31 +58,8 @@ import type {
   ProjectWindowsSnapshot,
 } from "./types";
 
-// Native File-menu activations (SNV-FR-24 / SNV-FR-25). The id doubles as the
-// event name; these match `menu.rs`'s MENU_* constants byte-for-byte.
-export const MENU_NEW_FILE = "menu:new-file";
-export const MENU_NEW_FOLDER = "menu:new-folder";
-export const MENU_NEW_ARTIFACT = "menu:new-artifact";
-/** SNV-FR-28 / SNV-FR-29: write the active tab's content. */
-export const MENU_SAVE = "menu:save";
-/** SNV-FR-30 / SNV-FR-31: write everything holding unsaved changes. */
-export const MENU_SAVE_ALL = "menu:save-all";
-export const MENU_CLOSE_PROJECT = "menu:close-project";
-/** PJT-FR-PILG: open the Project picker as a modal over this window. */
-export const MENU_NEW_TAB = "menu:new-tab";
-/**
- * SNV-FR-26: the application is quitting. The backend holds the exit while the
- * frontend writes pending Editor changes (EDT-FR-33) and then either releases it
- * and then answers with `finish_exit` — proceeding, or cancelling the quit when
- * a write was blocked (EDT-FR-32).
- */
-export const MENU_EXIT_REQUESTED = "menu:exit-requested";
-/** SNV-FR-43 / EFR-FR-AYNZ: open, switch to, or toggle the Editor's Find panel. */
-export const MENU_FIND = "menu:find";
-/** SNV-FR-43 / EFR-FR-BJUY: the same for the Find & Replace panel. */
-export const MENU_FIND_REPLACE = "menu:find-replace";
-/** SNV-FR-23 / ABT-FR-KMVD: open the About panel in the window that is showing. */
-export const MENU_ABOUT = "menu:about";
+// The native menu channels live in `menuEvents.ts`.
+export * from "./menuEvents";
 
 // Filesystem-watcher and progress channels.
 //
@@ -327,25 +304,6 @@ export const onProjectImageBuildFinished = (
     handler(event.payload),
   );
 
-/** A payload-less native File-menu channel (SNV-FR-23..31). */
-export type MenuEvent =
-  | typeof MENU_NEW_FILE
-  | typeof MENU_NEW_FOLDER
-  | typeof MENU_NEW_ARTIFACT
-  | typeof MENU_SAVE
-  | typeof MENU_SAVE_ALL
-  | typeof MENU_CLOSE_PROJECT
-  | typeof MENU_NEW_TAB
-  | typeof MENU_EXIT_REQUESTED
-  | typeof MENU_FIND
-  | typeof MENU_FIND_REPLACE
-  | typeof MENU_ABOUT;
-
-/** Subscribe to a payload-less native File-menu event (SNV-FR-23..31). */
-export const onMenuEvent = (
-  event: MenuEvent,
-  run: () => void,
-): Promise<UnlistenFn> => listen(event, () => run());
 
 /** EXC-FR-LKHZ / PST-FR-16: an artifact's on-disk content diverged externally. */
 export const onArtifactChangedExternally = (

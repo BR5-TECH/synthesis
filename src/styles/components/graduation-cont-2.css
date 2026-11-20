@@ -280,7 +280,9 @@
      Expressing it as a ratio keeps every row identical to every other, which is
      the property the alignment depends on, while letting the column hold what
      the role puts in it. */
-  width: calc(var(--font-source-size) * 48 / 13);
+  /* EZM-FR-LRVS / DFV-FR-37: the ladder token, so the gutter grows with the
+     editor zoom as its numbers do. */
+  width: calc(var(--fs-src-md) * 48 / 13);
   text-align: right;
   padding-right: var(--sp-2);
   font-variant-numeric: tabular-nums;
@@ -288,7 +290,7 @@
   flex: none;
   user-select: none;
 }
-.diff-line__sign { width: 12px; flex: none; user-select: none; }
+.diff-line__sign { width: calc(var(--fs-src-md) * 12 / 13); flex: none; user-select: none; }
 /* The text is what wraps; `anywhere` so an unbroken token (a URL, a minified
    line, a base64 blob) wraps too instead of forcing the row wide. */
 .diff-line__text {

@@ -90,7 +90,7 @@ export function ArchivedChange({
           <span className="openspec-change__fact">archived</span>
         </div>
       </header>
-      <div className="openspec-change__reading openspec-change__reading--alone">
+      <div className="editor-zoom openspec-change__reading openspec-change__reading--alone" data-zoom-scroller="">
         <div className="openspec-change__state" role="status" data-testid="openspec-change-archived">
           <p>The change “{name}” is archived.</p>
           <p>

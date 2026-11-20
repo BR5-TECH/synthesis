@@ -193,6 +193,7 @@ pub fn run() {
         // SNV-FR-43: handles on the Find / Find & Replace items, whose enabled
         // state the frontend drives from the active tab.
         .manage(menu::FindMenuItems::<tauri::Wry>::default())
+        .manage(menu::ZoomMenuItems::<tauri::Wry>::default())
         // SWN-FR-05 / SWN-FR-12: the save sweep the settings window is running,
         // and what it is running it for. Held in memory only — the settings
         // window survives nothing (SWN-FR-04 persists not even its position).
@@ -517,6 +518,7 @@ pub fn run() {
             project_windows::set_project_window_attention,
             menu::set_save_menu_state,
             menu::set_find_menu_state,
+            menu::set_zoom_menu_state,
             dashboard::list_recently_edited_artifacts,
             dashboard::list_active_drafts,
             dashboard::list_recent_agent_runs,

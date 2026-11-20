@@ -295,9 +295,10 @@ describe("DFV-FR-37, DFV-FR-17, DFV-FR-21: a Diff tab's two renderings", () => {
     // 1000 size differently and step their text columns apart — but derived
     // from the role rather than pinned, or a four-digit number's glyphs run
     // past the column at any size above the default and the old and new
-    // gutters read as one number.
+    // gutters read as one number. The ladder token is the Source role's size,
+    // times the editor zoom inside a zoom region (EZM-FR-LRVS).
     expect(gutter).toMatch(
-      /width\s*:\s*calc\(\s*var\(--font-source-size\)/,
+      /width\s*:\s*calc\(\s*var\(--fs-src-md\)/,
     );
     expect(gutter).not.toMatch(/min-width\s*:/);
     expect(gutter).not.toMatch(/width\s*:\s*auto/);

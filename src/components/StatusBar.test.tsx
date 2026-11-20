@@ -334,10 +334,10 @@ describe("trailing region — editing conventions (STB-FR-16–STB-FR-24)", () =
     ).toEqual(["Tabs", "Spaces: 2", "Spaces: 4", "Spaces: 8"]);
   });
 
-  it("orders the trailing controls line endings, indentation, then diffstat", () => {
+  it("STB-FR-VRUS: orders the trailing controls line endings, indentation, zoom, then diffstat", () => {
     // STB-FR-03 / wireframe layout note: the diffstat sits closest to the
-    // trailing edge.
-    renderBar();
+    // trailing edge, and the zoom control sits before it.
+    renderBar({ zoomable: true });
     const region = screen.getByTestId("status-bar").lastElementChild!;
     const order = Array.from(region.children).map((el) =>
       el.getAttribute("data-testid"),
@@ -345,6 +345,7 @@ describe("trailing region — editing conventions (STB-FR-16–STB-FR-24)", () =
     expect(order).toEqual([
       "line-ending-select",
       "indentation-select",
+      "zoom-select",
       "status-bar-diffstat",
     ]);
   });

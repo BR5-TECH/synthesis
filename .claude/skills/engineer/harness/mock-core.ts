@@ -8458,6 +8458,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     case "finish_exit":
     case "set_save_menu_state":
     case "set_find_menu_state":
+    // EZM / SNV-FR-LVDP: the Window > Zoom submenu state. The native menu
+    // does not exist in a browser, so the call only has to resolve.
+    case "set_zoom_menu_state":
     case "center_picker":
       return undefined;
 

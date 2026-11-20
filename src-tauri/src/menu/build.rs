@@ -86,19 +86,36 @@ pub(super) fn build_app_menu<R: tauri::Runtime, M: tauri::Manager<R>>(
     let edit_menu = edit_builder.build()?;
 
     // `set_menu` is a full replacement, so we re-provide the standard Window
-    // submenu (Minimize/Zoom/Close) the OS default menu would otherwise carry —
+    // submenu (Minimize/Zoom Window) the OS default menu would otherwise carry —
     // otherwise installing our Edit menu would silently drop it on macOS.
+    //
+    // SNV-FR-NZJR / SNV-FR-XRTA: the platform's window zoom item has the label
+    // "Zoom Window", and the Zoom submenu of the editor zoom follows it
+    // (SNV-FR-LVDP).
     //
     // PJT-FR-JGHF: the predefined Close item is left out. It holds Cmd+W, which
     // Close Project holds now. On macOS the system adds its tab commands (Show
     // Tab Bar, Move Tab to New Window, Merge All Windows) to the menu that is
     // set as the windows menu (PJT-FR-WZLQ).
-    let mut window_builder = SubmenuBuilder::new(manager, "Window")
-        .item(&PredefinedMenuItem::minimize(manager, Some("Minimize"))?)
-        .item(&PredefinedMenuItem::maximize(manager, Some("Zoom"))?)
-        .item(&PredefinedMenuItem::separator(manager)?);
-    for spec in WINDOW_MENU_ITEMS {
-        window_builder = window_builder.item(&item(*spec)?);
+    let (zoom_menu, zoom) = build_zoom_submenu(manager)?;
+    let mut window_builder = SubmenuBuilder::new(manager, "Window");
+    for entry in WINDOW_MENU_ORDER {
+        window_builder = match entry {
+            WindowEntry::Minimize => {
+                window_builder.item(&PredefinedMenuItem::minimize(manager, Some("Minimize"))?)
+            }
+            WindowEntry::ZoomWindow => window_builder
+                .item(&PredefinedMenuItem::maximize(manager, Some(WINDOW_ZOOM_LABEL))?),
+            WindowEntry::ZoomSubmenu => window_builder.item(&zoom_menu),
+            WindowEntry::Separator => window_builder.item(&PredefinedMenuItem::separator(manager)?),
+            WindowEntry::TabItems => {
+                let mut builder = window_builder;
+                for spec in WINDOW_MENU_ITEMS {
+                    builder = builder.item(&item(*spec)?);
+                }
+                builder
+            }
+        };
     }
     let window_menu = window_builder.build()?;
     #[cfg(target_os = "macos")]
@@ -111,7 +128,7 @@ pub(super) fn build_app_menu<R: tauri::Runtime, M: tauri::Manager<R>>(
         .item(&window_menu)
         .build()?;
 
-    Ok(BuiltMenu { menu, save, save_all, find, find_replace })
+    Ok(BuiltMenu { menu, save, save_all, find, find_replace, zoom: Some(zoom) })
 }
 
 /// Install the native Edit menu on the app (SNV-FR-14). Best-effort: a menu
@@ -122,6 +139,7 @@ pub fn install_app_menu<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Result
     // `set_save_menu_state` has something to act on (SNV-FR-28 / SNV-FR-30).
     app.state::<SaveMenuItems<R>>().store(built.save, built.save_all);
     app.state::<FindMenuItems<R>>().store(built.find, built.find_replace);
+    app.state::<ZoomMenuItems<R>>().store(built.zoom);
     app.set_menu(built.menu)?;
     Ok(())
 }

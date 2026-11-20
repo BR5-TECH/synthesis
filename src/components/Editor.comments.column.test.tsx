@@ -14,6 +14,7 @@ import { EditSessionStore } from "../state/editSessions";
 import { discussionColumnState, fileColumn } from "../state/discussionColumn";
 import { consumePendingFocus } from "../state/discussionFocus";
 import { resetLogBufferForTest } from "../logging";
+import { setEditorZoom } from "../state/editorZoom";
 import {
   BODY,
   discussionToggle,
@@ -860,5 +861,39 @@ describe("DDS-FR-MXHD: with no proposal pending, the Editor carries no review", 
     for (const id of ["review-counter", "review-standing", "hunk-chip", "hunk-gutter-map"]) {
       expect(screen.queryByTestId(id)).toBeNull();
     }
+  });
+});
+
+describe("EZM-FR-QGOU, EZM-FR-UJWE: the zoom region of an Editor tab", () => {
+  it("EZM-FR-QGOU, EZM-FR-UJWE: the document column is a zoom region, and the toolbar and the discussion column are not", async () => {
+    await mount();
+    const region = screen.getByTestId("editor-zoom-region");
+    expect(region).toHaveClass("editor-zoom", "editor-zoom--contents");
+    expect(region).toContainElement(screen.getByTestId("editor-document"));
+    expect(region).not.toContainElement(column());
+    expect(column().closest(".editor-zoom")).toBeNull();
+    expect(document.querySelector(".editor__toolbar")?.closest(".editor-zoom")).toBeNull();
+  });
+
+  it("EZM-FR-MXAB: a change of the level remounts no surface and keeps the buffer, the mode, and the selection", async () => {
+    await mount();
+    await toRaw();
+    const source = screen.getByLabelText("Markdown source") as HTMLTextAreaElement;
+    const text = source.value;
+    source.setSelectionRange(3, 9);
+    act(() => setEditorZoom(175));
+    const after = screen.getByLabelText("Markdown source") as HTMLTextAreaElement;
+    expect(after).toBe(source);
+    expect(after.value).toBe(text);
+    expect([after.selectionStart, after.selectionEnd]).toEqual([3, 9]);
+    expect(screen.getByRole("button", { name: "Edit as rich text" })).toBeInTheDocument();
+  });
+
+  it("EZM-FR-OXBL: the rich page and the source surface are the scrollers of the region", async () => {
+    await mount();
+    const page = screen.getByLabelText("artifact body").closest(".editor");
+    expect(page).toHaveAttribute("data-zoom-scroller");
+    await toRaw();
+    expect(screen.getByLabelText("Markdown source")).toHaveAttribute("data-zoom-scroller");
   });
 });

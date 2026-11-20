@@ -158,4 +158,5 @@ pub(super) struct BuiltMenu<R: tauri::Runtime> {
     pub(super) save_all: Option<tauri::menu::MenuItem<R>>,
     pub(super) find: Option<tauri::menu::MenuItem<R>>,
     pub(super) find_replace: Option<tauri::menu::MenuItem<R>>,
+    pub(super) zoom: Option<ZoomHandles<R>>,
 }

@@ -38,6 +38,12 @@ pub(super) enum MenuAction {
     /// Open the About panel in the window that is showing (SNV-FR-KXPE,
     /// ABT-FR-KMVD).
     About,
+    /// Zoom In, Zoom Out, and Actual Size of the Zoom submenu (SNV-FR-LVDP).
+    ZoomIn,
+    ZoomOut,
+    ZoomReset,
+    /// A step item of the Zoom submenu, with its step in percent (SNV-FR-LVDP).
+    ZoomTo(u32),
 }
 
 impl MenuAction {
@@ -50,6 +56,13 @@ impl MenuAction {
     /// the window's pending changes first and then goes (SWN-FR-19).
     pub(super) fn reaches_past_a_settings_window(self) -> bool {
         matches!(self, Self::Settings | Self::Exit)
+    }
+
+    /// SNV-FR-QHMA: whether the check marks of the Zoom submenu must be shown
+    /// again. The menu layer toggles a step item on its click, and the command
+    /// items have no check mark.
+    pub(super) fn resyncs_zoom_check_marks(self) -> bool {
+        matches!(self, Self::ZoomTo(_))
     }
 }
 
@@ -74,7 +87,10 @@ pub(super) fn menu_event_action(id: &str) -> Option<MenuAction> {
         // Both quit entry points — File -> Exit and the app submenu's Quit —
         // are the same action (SNV-FR-26).
         MENU_EXIT | MENU_QUIT => Some(MenuAction::Exit),
-        _ => None,
+        MENU_ZOOM_IN => Some(MenuAction::ZoomIn),
+        MENU_ZOOM_OUT => Some(MenuAction::ZoomOut),
+        MENU_ZOOM_RESET => Some(MenuAction::ZoomReset),
+        other => zoom_step_of(other).map(MenuAction::ZoomTo),
     }
 }
 
@@ -89,6 +105,11 @@ pub fn handle_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str)
     let Some(action) = menu_event_action(id) else {
         return;
     };
+    // SNV-FR-QHMA: the menu layer toggled the check mark of the clicked step
+    // item. Show the pushed state again before anything can swallow the click.
+    if action.resyncs_zoom_check_marks() {
+        reapply(app);
+    }
     // SWN-FR-02: the Settings window blocks its parent, and the
     // application menu is the parent's. Everything that would act on the parent
     // is swallowed here rather than relayed to a window that cannot show what it
@@ -99,6 +120,7 @@ pub fn handle_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str)
     {
         return;
     }
+    let mut payload = serde_json::Value::Null;
     let event = match action {
         // SWN-FR-14: the settings entry opens or focuses the window from this
         // side. It relays nothing: the Settings window is a window of the
@@ -132,6 +154,15 @@ pub fn handle_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str)
         // and relays the intent (EFR-FR-AYNZ / EFR-FR-BJUY).
         MenuAction::Find => MENU_FIND,
         MenuAction::FindReplace => MENU_FIND_REPLACE,
+        // SNV-FR-LVDP: the level lives in the frontend (EZM-FR-SOZM), so this
+        // side relays the intent. A step item carries its step.
+        MenuAction::ZoomIn => MENU_ZOOM_IN,
+        MenuAction::ZoomOut => MENU_ZOOM_OUT,
+        MenuAction::ZoomReset => MENU_ZOOM_RESET,
+        MenuAction::ZoomTo(percent) => {
+            payload = serde_json::json!({ "percent": percent });
+            MENU_ZOOM_SET
+        }
         MenuAction::Exit => {
             request_exit(app);
             return;
@@ -143,9 +174,9 @@ pub fn handle_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str)
         .try_state::<crate::project_windows::ProjectWindows>()
         .is_some_and(|windows| windows.entries().len() > 1);
     if several && app.get_webview_window(&focused).is_some() {
-        let _ = app.emit_to(focused.as_str(), event, ());
+        let _ = app.emit_to(focused.as_str(), event, payload);
     } else {
-        let _ = app.emit(event, ());
+        let _ = app.emit(event, payload);
     }
 }
 

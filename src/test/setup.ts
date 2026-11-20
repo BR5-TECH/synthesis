@@ -183,6 +183,10 @@ beforeEach(async () => {
   // read that runs or answers late in one test must not reach the next one.
   const { resetOpenPullRequestsForTest } = await import("../state/openPullRequests");
   resetOpenPullRequestsForTest();
+  // EZM-FR-SOZM: the editor zoom level is one store for the window, so a level,
+  // a pinch, or a settle timer from one test must not reach the next one.
+  const { resetEditorZoomForTest } = await import("../state/editorZoom");
+  resetEditorZoomForTest();
   // PWN-FR-WRAP: the window project id is module state. Each test starts with no
   // project in its window, and with the payload field off, so a test of one
   // feature compares the arguments of that feature alone. The tests of the

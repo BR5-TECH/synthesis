@@ -99,10 +99,11 @@ export function DraftVersionReading({
     // `<pre>` rather than a disabled textarea: there is nothing to type into,
     // and a disabled field reads as a control that has been taken away.
     return (
-      <div className="editor-tab draft-reading__tab" data-frontmatter="off">
+      <div className="editor-tab draft-reading__tab editor-zoom" data-frontmatter="off">
         <div className="editor__source-wrap draft-reading__page">
           <pre
             className="editor__source draft-reading__text"
+            data-zoom-scroller=""
             data-testid="draft-version-reading"
             role="document"
             aria-readonly="true"
@@ -118,7 +119,8 @@ export function DraftVersionReading({
 
   return (
     <div
-      className="editor-tab draft-reading__tab"
+      // EZM-FR-QGOU: a past version and a draft preview are zoom regions.
+      className="editor-tab draft-reading__tab editor-zoom"
       // EDT-FR-63: the sheet gives up its top inset and top corners to the
       // frontmatter region, so the two read as one page rather than two boxes.
       data-frontmatter={frontmatter !== null ? "on" : "off"}
@@ -134,7 +136,7 @@ export function DraftVersionReading({
         </div>
       )}
       <div className="editor__document">
-        <div className="editor" style={{ flex: 1, overflow: "auto" }}>
+        <div className="editor" style={{ flex: 1, overflow: "auto" }} data-zoom-scroller="">
           <EditorContent editor={editor} />
         </div>
       </div>

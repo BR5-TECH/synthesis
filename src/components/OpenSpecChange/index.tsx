@@ -275,7 +275,7 @@ function ChangeWorkspace({
   /** The reading pane: the loading state, the first failure, or the change. */
   const readingPane = (stream: StreamReview | null): ReactNode =>
     !detail ? (
-      <div className="openspec-change__reading openspec-change__reading--alone">
+      <div className="editor-zoom openspec-change__reading openspec-change__reading--alone" data-zoom-scroller="">
         {error ? (
           <FirstFailure failure={error} name={name} location={location} onRetry={read} />
         ) : (

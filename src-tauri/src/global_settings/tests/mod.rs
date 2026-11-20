@@ -17,6 +17,7 @@ fn entry(name: &str, ts: &str, pinned: bool, missing: bool) -> RecentProjectEntr
 }
 
 mod app_preferences;
+mod editor_zoom;
 mod font_settings;
 mod persistence;
 mod plugin_registry;

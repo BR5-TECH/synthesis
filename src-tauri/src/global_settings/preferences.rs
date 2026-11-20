@@ -238,6 +238,25 @@ fn lenient_vad_silence<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u32
     })
 }
 
+/// GSS-FR-KKYO: the editor zoom level, in percent, where nothing is stored.
+pub const EDITOR_ZOOM_PERCENT_DEFAULT: u32 = 100;
+
+/// GSS-FR-KKYO: a stored value that is not a whole number reads as nothing
+/// stored, and the other fields stay. The range is the reader's concern
+/// (`EZM-editor-zoom.md` EZM-FR-HYQD).
+fn lenient_editor_zoom<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u32, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored {
+        Whole(i64),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Stored::deserialize(deserializer)? {
+        Stored::Whole(percent) => u32::try_from(percent).unwrap_or(EDITOR_ZOOM_PERCENT_DEFAULT),
+        Stored::Other(_) => EDITOR_ZOOM_PERCENT_DEFAULT,
+    })
+}
+
 /// GSS-FR-KOAB: as `lenient_vad_silence`, for the sensitivity.
 fn lenient_vad_sensitivity<'de, D: Deserializer<'de>>(
     deserializer: D,
@@ -466,6 +485,11 @@ pub struct AppPreferences {
     /// the default width rather than as a column of no width.
     #[serde(default = "git_files_width_default")]
     pub git_files_width_fraction: f64,
+    /// GSS-FR-KKYO: the editor zoom level in percent, 100 when unset. The
+    /// frontend reads and writes it (`EZM-editor-zoom.md` EZM-FR-VPYL). This
+    /// module does not limit the range.
+    #[serde(default = "editor_zoom_default", deserialize_with = "lenient_editor_zoom")]
+    pub editor_zoom_percent: u32,
     /// GSS-FR-KOAB: the silence that ends a VAD utterance, in milliseconds.
     #[serde(default = "voice_vad_silence_default", deserialize_with = "lenient_vad_silence")]
     pub voice_vad_silence_ms: u32,
@@ -529,6 +553,10 @@ fn voice_echo_cancellation_default() -> bool {
     true
 }
 
+fn editor_zoom_default() -> u32 {
+    EDITOR_ZOOM_PERCENT_DEFAULT
+}
+
 fn voice_vad_silence_default() -> u32 {
     VOICE_VAD_SILENCE_MS_DEFAULT
 }
@@ -572,6 +600,7 @@ impl Default for AppPreferences {
             graduation_rail_width_fraction: graduation_rail_width_default(),
             graduation_paths_width_fraction: graduation_paths_width_default(),
             git_files_width_fraction: git_files_width_default(),
+            editor_zoom_percent: editor_zoom_default(),
             voice_vad_silence_ms: voice_vad_silence_default(),
             voice_vad_sensitivity: VoiceVadSensitivity::default(),
             voice_input_mode: VoiceInputMode::default(),

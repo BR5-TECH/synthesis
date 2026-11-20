@@ -158,7 +158,7 @@ export function DeliverySettingsSection() {
   /** SET-FR-WDYJ: the project's Flow files, for the picker. */
   const loadFiles = useCallback(async () => {
     try {
-      setFiles(flowFiles(await api.loadProjectTree()));
+      setFiles(flowFiles(await api.loadProjectArtifactsTree()));
     } catch (e) {
       // A tree that cannot be read leaves the picker with the stored file only.
       logWarn(["frontend"], "project tree could not be read for the delivery file picker", {

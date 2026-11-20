@@ -529,7 +529,7 @@ pub fn plan_items_for_draft(
 
 /// FDL-FR-BDOD: `"find flow items for draft"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn find_flow_items_for_draft(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -556,7 +556,7 @@ pub(crate) fn find_items_for_draft_in<R: tauri::Runtime>(
     root: &crate::fs::RootFs,
     draft_id: &str,
 ) -> Vec<FlowItemMatch> {
-    let flows = crate::artifacts::flow_bodies(root);
+    let flows = crate::artifacts::flow_bodies(app, root);
     let drafts = crate::drafts::list_drafts_impl(root).drafts;
     let delivery = delivery_flow_id(app, root);
     let mut matches = items_for_draft(&flows, &drafts, draft_id, delivery.as_deref());

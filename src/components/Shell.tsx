@@ -754,9 +754,6 @@ interface VPanelProps {
   // LCM-FR-09: open the New Folder modal with a Library folder as its starting
   // parent.
   onNewFolder: (folder: TreeNode) => void;
-  // NFW-FR-04 / NFI-FR-04: the Library publishes each tree it loads so the shell
-  // can offer the project's folder set without scanning again.
-  onTreeLoaded?: (tree: TreeNode) => void;
   /**
    * The pending reveal-and-select, or null. Named for the panel it addresses, so
    * a request for a surface that is not the one on screen is simply not passed
@@ -848,7 +845,6 @@ export function VPanel({
   onNewFile,
   onNewArtifact,
   onNewFolder,
-  onTreeLoaded,
   panelReveal,
   activeEntity,
   onRevealDiscussion,
@@ -951,7 +947,6 @@ export function VPanel({
       onNewFile={onNewFile}
       onNewArtifact={onNewArtifact}
       onNewFolder={onNewFolder}
-      onTreeLoaded={onTreeLoaded}
       reveal={panelReveal?.panel === "library" ? panelReveal : null}
       onViewSpecMap={onViewSpecMap}
     />

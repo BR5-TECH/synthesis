@@ -12,27 +12,38 @@
 //! - per-folder `has_artifacts` for empty-folder hiding (ASC-FR-08);
 //! - a debounced change summary the watcher in `lib.rs` emits (ASC-FR-10).
 //!
-//! The Tauri-facing commands (`load_project_tree`, `rescan_project_tree`,
-//! `assign_artifact_type`, `clear_artifact_type`) and the recursive filesystem
-//! watcher live in `lib.rs` (they need the Tauri runtime / `AppHandle`); this
+//! - the project index, built from a parallel walk and kept current by the
+//!   watcher, which every tree read answers from (`index`, ASC-FR-HPUY);
+//! - repository boundaries inside the project (`repos`, ASC-FR-SFCR).
+//!
+//! The Tauri-facing commands live in `library.rs` and the recursive filesystem
+//! watcher in `watcher.rs` (they need the Tauri runtime / `AppHandle`); this
 //! module keeps every classification and tree-shaping decision pure and
 //! unit-tested. All reads/writes go through `crate::fs` (FSA, ASC-FR-12).
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::path::Path;
+use std::sync::Mutex;
 
-use ignore::WalkBuilder;
 use notify_debouncer_mini::DebounceEventResult;
 use serde::{Deserialize, Serialize};
 
 use crate::fs as fsa;
 
 mod ignored;
+mod index;
+mod index_query;
 mod inference;
+pub mod repos;
+mod store;
+mod walk;
 pub use ignored::drop_gitignored;
+pub use index::{affected_folders, node_at, ProjectIndex};
+pub use index_query::{FilterResult, FolderChildren, Lens, LensName, PathKind, PathSearch};
 use inference::names_itself;
 pub use inference::{infer_from_content, infer_from_path, read_content_facts, ContentFacts};
+pub use repos::NestedRepo;
+pub use store::{candidate_files, Candidate, CandidateStore, EVERY_TYPE};
 
 // ---------------------------------------------------------------------------
 // Fixed built-in type set + node shape (ASC-FR-02, tree node shape)
@@ -164,9 +175,51 @@ pub struct TreeNode {
     /// Folders only: subtree contains at least one artifact (ASC-FR-08).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub has_artifacts: Option<bool>,
-    /// Folders only.
+    /// Folders only: the types present in the subtree (ASC-FR-OGRB).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subtree_types: Option<Vec<ArtifactType>>,
+    /// Folders only: whether the folder holds a node (ASC-FR-YSWU).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_children: Option<bool>,
+    /// Folders only: the repository boundary the folder is (ASC-FR-YLGN).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nested_repo: Option<NestedRepo>,
+    /// Folders only, and only in a full tree or a filter result.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<Vec<TreeNode>>,
+}
+
+impl TreeNode {
+    /// A file node with no classification.
+    pub fn plain_file(rel: &str) -> TreeNode {
+        TreeNode {
+            id: rel.to_string(),
+            name: rel.rsplit('/').next().unwrap_or(rel).to_string(),
+            path: rel.to_string(),
+            node_kind: NodeKind::File,
+            artifact_type: None,
+            type_source: None,
+            display_name: None,
+            has_artifacts: None,
+            subtree_types: None,
+            has_children: None,
+            nested_repo: None,
+            children: None,
+        }
+    }
+
+    /// An empty folder node with its own folder-scope type, if any.
+    pub fn empty_folder(rel: &str, artifact_type: Option<ArtifactType>) -> TreeNode {
+        TreeNode {
+            node_kind: NodeKind::Folder,
+            artifact_type,
+            type_source: artifact_type.map(|_| TypeSource::Assigned),
+            has_artifacts: Some(artifact_type.is_some()),
+            subtree_types: Some(artifact_type.into_iter().collect()),
+            has_children: Some(false),
+            ..TreeNode::plain_file(rel)
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -284,6 +337,21 @@ pub fn classify_file<F>(
 where
     F: Fn(&str) -> ContentFacts,
 {
+    classify_file_in_repo(rel, rel, assignments, content)
+}
+
+/// ASC-FR-06 with ASC-FR-LXOQ: the path conventions match `repo_rel`, the path
+/// relative to the nearest repository root, and the assignments match `rel`,
+/// the project-relative path.
+pub fn classify_file_in_repo<F>(
+    rel: &str,
+    repo_rel: &str,
+    assignments: &LibraryAssignments,
+    content: &F,
+) -> (Option<ArtifactType>, Option<TypeSource>)
+where
+    F: Fn(&str) -> ContentFacts,
+{
     // (1) Per-file assignment.
     if let Some(a) = assignments.assignments.get(rel) {
         if a.scope == Scope::File {
@@ -294,8 +362,8 @@ where
     // report `inferred` (the content read is part of inference, ASC-FR-06).
     // ASC-FR-YODA: an archived OpenSpec change is typed by an assignment alone,
     // so neither inference step runs for it.
-    if !inference::is_openspec_archive(rel) {
-        if let Some(t) = infer_from_path(rel) {
+    if !inference::is_openspec_archive(repo_rel) {
+        if let Some(t) = infer_from_path(repo_rel) {
             return (Some(t), Some(TypeSource::Inferred));
         }
         if let Some(t) = content(rel).artifact_type {
@@ -325,6 +393,18 @@ fn nearest_folder_assignment(rel: &str, assignments: &LibraryAssignments) -> Opt
         }
         dir = parent_of(&dir);
     }
+}
+
+/// ASC-FR-06, ASC-FR-LXOQ: the type of one project file, with its nearest
+/// repository root read from the disk. For a caller that holds no index.
+pub fn classify_path(
+    root: &crate::fs::RootFs,
+    rel: &str,
+    assignments: &LibraryAssignments,
+) -> (Option<ArtifactType>, Option<TypeSource>) {
+    let repo = repos::nearest_root_on_disk(root, rel);
+    let repo_rel = repos::relative_to(rel, &repo);
+    classify_file_in_repo(rel, repo_rel, assignments, &markdown_facts(root))
 }
 
 /// The folder-scope type the entry at `rel` would inherit from its nearest
@@ -444,6 +524,9 @@ where
             type_source,
             display_name,
             has_artifacts: None,
+            subtree_types: None,
+            has_children: None,
+            nested_repo: None,
             children: None,
         });
     }
@@ -465,6 +548,19 @@ where
             NodeKind::File => c.artifact_type.is_some(),
             NodeKind::Folder => c.has_artifacts == Some(true),
         });
+    // ASC-FR-OGRB: the types of the subtree, in the order of ASC-FR-02.
+    let mut bits = self_folder_type.map(index::type_bit).unwrap_or(0);
+    for c in &children {
+        match c.node_kind {
+            NodeKind::File => bits |= c.artifact_type.map(index::type_bit).unwrap_or(0),
+            NodeKind::Folder => {
+                for t in c.subtree_types.iter().flatten() {
+                    bits |= index::type_bit(*t);
+                }
+            }
+        }
+    }
+    let has_children = !children.is_empty();
 
     TreeNode {
         id: rel.to_string(),
@@ -477,6 +573,9 @@ where
         type_source: self_folder_type.map(|_| TypeSource::Assigned),
         display_name: None,
         has_artifacts: Some(has_artifacts),
+        subtree_types: Some(index::types_of(bits)),
+        has_children: Some(has_children),
+        nested_repo: None,
         children: Some(children),
     }
 }
@@ -510,29 +609,82 @@ pub fn file_display_name(
 
 /// Perform a full recursive scan of `root` and return the type-tagged tree.
 ///
-/// Walks the whole project root but skips `.git/`, honours `.gitignore`, and
-/// skips `.synthesis/cache/` + `.synthesis/drafts/` (ASC-FR-09). Never throws
-/// on a transient filesystem race: an entry that errors mid-walk is skipped,
-/// not fatal (ASC-FR-11).
+/// Builds a fresh project index (ASC-FR-HPUY) and returns it whole. A command
+/// reads the mounted index of [`CandidateStore`] instead; this is for a caller
+/// that needs one full tree once. Never throws on a transient filesystem race:
+/// an entry that errors mid-walk is skipped, not fatal (ASC-FR-11).
 pub fn scan(root: &crate::fs::RootFs) -> TreeNode {
-    let assignments = load_assignments(root);
-    let entries = walk_entries(root);
-    let content = markdown_facts(root);
-    build_tree(&root_display_name(root), &entries, &assignments, &content)
+    ProjectIndex::build(root).full_tree(&root_display_name(root))
 }
+
+/// ASC-FR-HWQJ: a content read of the classifier reads at most this many
+/// leading bytes of a file.
+pub const CONTENT_READ_CAP: usize = 64 * 1024;
 
 /// The content reader `classify_file` takes, over the files of `root`. The
 /// tiebreak only reads Markdown files, and only when path inference has already
-/// failed (gated inside `classify_file`).
+/// failed (gated inside `classify_file`). It reads at most
+/// [`CONTENT_READ_CAP`] bytes (ASC-FR-HWQJ).
 pub fn markdown_facts(root: &crate::fs::RootFs) -> impl Fn(&str) -> ContentFacts + use<> {
     let root_owned = root.clone();
     move |rel: &str| -> ContentFacts {
         if !rel.to_ascii_lowercase().ends_with(".md") {
             return ContentFacts::default();
         }
-        match root_owned.read_text(rel) {
-            Ok(text) => read_content_facts(&text),
-            Err(_) => ContentFacts::default(),
+        match read_head(&root_owned, rel) {
+            Some((text, complete)) => facts_of_head(&text, complete),
+            None => ContentFacts::default(),
+        }
+    }
+}
+
+/// ASC-FR-HWQJ: the facts of the leading bytes of a file. When the read did
+/// not reach the end of the file, frontmatter that does not close inside the
+/// bytes is absent.
+pub(crate) fn facts_of_head(text: &str, complete: bool) -> ContentFacts {
+    if complete {
+        return read_content_facts(text);
+    }
+    // The last line of a cut head can continue past the cap, so only whole
+    // lines count: a `---` that the cap cut from `-----` closes nothing.
+    let whole = match text.rfind('\n') {
+        Some(at) => &text[..at + 1],
+        None => "",
+    };
+    if !inference::frontmatter_closes(whole) {
+        return ContentFacts::default();
+    }
+    read_content_facts(whole)
+}
+
+/// Read at most [`CONTENT_READ_CAP`] leading bytes of `rel`, and whether they
+/// are the whole file.
+fn read_head(root: &crate::fs::RootFs, rel: &str) -> Option<(String, bool)> {
+    let mut handle = root.open_file(rel, crate::fs::OpenMode::ReadOnly).ok()?;
+    let mut buf = vec![0u8; CONTENT_READ_CAP];
+    let mut filled = 0;
+    while filled < buf.len() {
+        match handle.read(&mut buf[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(_) => return None,
+        }
+    }
+    let complete = filled < buf.len() || matches!(handle.read(&mut [0u8; 1]), Ok(0));
+    buf.truncate(filled);
+    // A file that is not UTF-8 has no facts, as a whole-file text read gives
+    // none. A cut head can end inside one character, which is dropped.
+    match String::from_utf8(buf) {
+        Ok(text) => Some((text, complete)),
+        Err(e) => {
+            let valid = e.utf8_error().valid_up_to();
+            let cut_char = !complete && e.utf8_error().error_len().is_none();
+            if !cut_char {
+                return None;
+            }
+            let mut bytes = e.into_bytes();
+            bytes.truncate(valid);
+            String::from_utf8(bytes).ok().map(|text| (text, complete))
         }
     }
 }
@@ -544,72 +696,11 @@ pub fn markdown_facts(root: &crate::fs::RootFs) -> impl Fn(&str) -> ContentFacts
 /// that only need the set of paths in the project should not pay for that. Used
 /// by `comments::list_all_threads_in` to invert `comments::log_id` by
 /// enumeration (CMS-FR-33).
-pub fn file_rel_paths(root: &Path) -> Vec<String> {
-    walk_entries(root).into_iter().filter(|e| !e.is_dir).map(|e| e.rel).collect()
-}
-
-/// Walk `root` into the flat entry list the pure builder consumes, applying the
-/// ASC-FR-09 scope rules.
-fn walk_entries(root: &Path) -> Vec<Entry> {
-    let root_for_filter = root.to_path_buf();
-    let walker = WalkBuilder::new(root)
-        .hidden(false) // surface dotdirs like `.claude`
-        .git_ignore(true) // honour `.gitignore`
-        .git_global(false)
-        .git_exclude(true)
-        .require_git(false) // honour `.gitignore` even outside a git repo
-        .parents(false)
-        .filter_entry(move |entry| {
-            // Prune `.git/`, `.synthesis/cache/`, `.synthesis/drafts/` so the
-            // walker never descends into them (ASC-FR-09).
-            let rel = match entry.path().strip_prefix(&root_for_filter) {
-                Ok(r) => to_forward(r),
-                Err(_) => return true,
-            };
-            // ASC-FR-23: never descend a symbolic link. `WalkBuilder` does not
-            // follow links by default, but it still *yields* the link entry, and
-            // pruning here keeps a linked directory from being opened at all.
-            if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
-                return false;
-            }
-            !is_pruned_dir(&rel)
-        })
-        .build();
-
-    let mut out = Vec::new();
-    for result in walker {
-        // ASC-FR-11: skip entries that error mid-walk instead of failing.
-        let entry = match result {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-        let rel = match entry.path().strip_prefix(root) {
-            Ok(r) => to_forward(r),
-            Err(_) => continue,
-        };
-        if rel.is_empty() {
-            continue; // the root itself is not a node
-        }
-        // ASC-FR-09: the attribution file is never surfaced as an artifact.
-        // This governs the *tree* only; the watcher's raw path channel carries
-        // the same path deliberately (ASC-FR-20, `changed_rel_paths`).
-        if rel == LIBRARY_TOML_REL {
-            continue;
-        }
-        // ASC-FR-23: a symbolic link yields no node — not a file node however
-        // its path would classify, and not a folder node whose subtree could be
-        // walked. The decision is made from the link alone; where it points is
-        // never resolved, so a link into the project is skipped exactly as one
-        // out of it is. `filter_entry` above already pruned linked directories;
-        // this catches linked *files*, which `filter_entry` sees but does not
-        // descend, and is the check that actually keeps them out of the tree.
-        if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
-            continue;
-        }
-        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
-        out.push(Entry { rel, is_dir });
-    }
-    out
+pub fn file_rel_paths(root: &crate::fs::RootFs) -> Vec<String> {
+    let mut paths: Vec<String> =
+        walk::walk_paths(root).into_iter().filter(|e| !e.is_dir).map(|e| e.rel).collect();
+    paths.sort();
+    paths
 }
 
 /// True for paths inside the prune set of ASC-FR-09.
@@ -621,7 +712,7 @@ fn walk_entries(root: &Path) -> Vec<Entry> {
 /// `CMS-comments-storage.md` (CMS-FR-29), `DSS-draft-statistics-storage.md`
 /// (DSS-FR-KQVN), and `DRS-draft-storage.md` (DRS-FR-04), and surfacing them
 /// would put one Library node per note, per commented artifact, and per draft in
-/// the tree.
+/// the tree. ASC-FR-SFCR: a `.git` entry at any depth is pruned too.
 pub(crate) fn is_pruned_dir(rel: &str) -> bool {
     const PRUNED: &[&str] = &[
         ".git",
@@ -632,10 +723,11 @@ pub(crate) fn is_pruned_dir(rel: &str) -> bool {
         ".synthesis/statistics",
     ];
     PRUNED.iter().any(|p| rel == *p || rel.starts_with(&format!("{p}/")))
+        || repos::has_git_segment(rel)
 }
 
 /// Forward-slash, root-relative rendering of a path.
-fn to_forward(path: &Path) -> String {
+pub(crate) fn to_forward(path: &Path) -> String {
     path.components()
         .filter_map(|c| match c {
             std::path::Component::Normal(s) => Some(s.to_string_lossy().into_owned()),
@@ -650,131 +742,6 @@ fn root_display_name(root: &Path) -> String {
     root.file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| root.to_string_lossy().into_owned())
-}
-
-// ---------------------------------------------------------------------------
-// The candidate list (ASC-FR-17) — the scan's file-node set, enumerable
-// ---------------------------------------------------------------------------
-
-/// One entry of the enumerable candidate list (ASC-FR-17): a `file` node of the
-/// scan, carrying its stable id, project-relative path, and resolved
-/// classification.
-///
-/// This is the set `../core/SCC-search.md` matches against (SCC-FR-03), which is
-/// why search inherits the exclusions of ASC-FR-09 without restating any of
-/// them: a path that never became a `file` node is never a candidate.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Candidate {
-    /// The node id (ASC-FR-13) — its project-relative path.
-    pub id: String,
-    /// Basename.
-    pub name: String,
-    /// Project-relative path (forward-slash separated).
-    pub path: String,
-    /// Position in the enumeration, from 0. The ordering key of SCC-FR-10.
-    pub ordinal: u64,
-    /// The scan's resolved type, or `None` for an unclassified file.
-    pub artifact_type: Option<ArtifactType>,
-}
-
-/// ASC-FR-17: enumerate a scanned tree's `file` nodes in a deterministic order.
-///
-/// The order is the tree's own — folders before files, each alphabetical (the
-/// `BTreeMap`/`BTreeSet` ordering `convert_dir` builds on) — so an unchanged
-/// tree enumerates identically every time, which is what makes SCC-FR-10's
-/// ordinals stable across two runs of the same query.
-pub fn candidate_files(tree: &TreeNode) -> Vec<Candidate> {
-    let mut out = Vec::new();
-    collect_candidates(tree, &mut out);
-    out
-}
-
-fn collect_candidates(node: &TreeNode, out: &mut Vec<Candidate>) {
-    if node.node_kind == NodeKind::File {
-        out.push(Candidate {
-            id: node.id.clone(),
-            name: node.name.clone(),
-            path: node.path.clone(),
-            ordinal: out.len() as u64,
-            artifact_type: node.artifact_type,
-        });
-    }
-    if let Some(children) = &node.children {
-        for child in children {
-            collect_candidates(child, out);
-        }
-    }
-}
-
-/// The mounted candidate list (ASC-FR-17 / SCC-FR-04).
-///
-/// It belongs to the project's content root and lives exactly as long as it: a
-/// project close (ASC-FR-14) and a worktree change (ASC-FR-16) both [`clear`] it,
-/// and the watcher [`invalidate`]s it on a structural change so the next
-/// enumeration sees the current tree (ASC-FR-10 / ASC-FR-15). Between those, the
-/// list is served from memory — which is what keeps a burst of searches from
-/// re-walking the tree once per keystroke.
-///
-/// [`clear`]: CandidateStore::clear
-/// [`invalidate`]: CandidateStore::invalidate
-#[derive(Default)]
-pub struct CandidateStore {
-    inner: Mutex<Option<Mounted>>,
-}
-
-struct Mounted {
-    root: PathBuf,
-    /// Shared so a running search holds the list it started from even if the
-    /// store is invalidated or torn down under it — a search never observes the
-    /// list changing halfway through, and a mid-search project close cannot
-    /// leave a worker reading freed state.
-    files: Arc<Vec<Candidate>>,
-}
-
-impl CandidateStore {
-    /// The candidate list for `root`, building it from a scan when nothing is
-    /// mounted, when the mounted list belongs to a different root, or when the
-    /// watcher has invalidated it. Never fails: an unreadable root scans to an
-    /// empty tree (ASC-FR-11), which enumerates to no candidates.
-    pub fn candidates(&self, root: &crate::fs::RootFs) -> Arc<Vec<Candidate>> {
-        if let Ok(guard) = self.inner.lock() {
-            if let Some(mounted) = guard.as_ref() {
-                if mounted.root.as_path() == root.path() {
-                    return Arc::clone(&mounted.files);
-                }
-            }
-        }
-        // Built outside the lock: a scan of a large project takes real time, and
-        // holding the mutex across it would serialise every other consumer
-        // behind it. A concurrent build of the same root produces an equal list,
-        // so the last writer simply wins.
-        let files = Arc::new(candidate_files(&scan(root)));
-        if let Ok(mut guard) = self.inner.lock() {
-            *guard = Some(Mounted { root: root.path().to_path_buf(), files: Arc::clone(&files) });
-        }
-        files
-    }
-
-    /// ASC-FR-10 / ASC-FR-15: the tree changed structurally, so the mounted list
-    /// no longer describes it. The next enumeration rebuilds; searches already
-    /// running keep the list they started from.
-    pub fn invalidate(&self) {
-        self.clear();
-    }
-
-    /// ASC-FR-14 / ASC-FR-16: tear the list down with the scan, on project close
-    /// and on a change of active worktree.
-    pub fn clear(&self) {
-        if let Ok(mut guard) = self.inner.lock() {
-            *guard = None;
-        }
-    }
-
-    /// Whether a list is currently mounted. Test-facing: the teardown and
-    /// invalidation claims of ASC-FR-17 have no other observable.
-    pub fn is_mounted(&self) -> bool {
-        self.inner.lock().map(|guard| guard.is_some()).unwrap_or(false)
-    }
 }
 
 /// The SHA-256 of `.synthesis/library.toml` as this application last wrote it
@@ -864,6 +831,9 @@ pub struct TreeChangedPayload {
     /// rather than omitting the field, so a consumer never has to distinguish
     /// "nothing removed" from "this build does not report removals".
     pub removed_paths: Vec<String>,
+    /// ASC-FR-JYXO: the folders whose `list_tree_children` answer changed,
+    /// `""` for the project root.
+    pub changed_folders: Vec<String>,
 }
 
 /// ASC-FR-22: of `changed`, the project-relative paths that no longer exist
@@ -973,6 +943,43 @@ pub fn changed_rel_paths(result: &DebounceEventResult, root: &Path) -> Vec<Strin
         }
     }
     out
+}
+
+/// ASC-FR-UWMI, ASC-FR-SFCR: each folder whose own `.git` entry a debounced
+/// batch touched — a submodule initialised, or a repository removed — so the
+/// index can tell whether a repository boundary moved. The project root is
+/// left out: its `.git` entry is not a boundary inside the project.
+pub fn git_boundaries(result: &DebounceEventResult, root: &Path) -> Vec<String> {
+    let Ok(events) = result else {
+        return Vec::new();
+    };
+    let mut out = BTreeSet::new();
+    for ev in events {
+        let Ok(rel) = ev.path.strip_prefix(root).map(to_forward) else {
+            continue;
+        };
+        if let Some(parent) = rel.strip_suffix("/.git") {
+            if !repos::has_git_segment(parent) {
+                out.insert(parent.to_string());
+            }
+        }
+    }
+    out.into_iter().collect()
+}
+
+/// ASC-FR-TWVB, ASC-FR-UWMI: whether a debounced batch wrote an `info/exclude`
+/// file of a `.git` folder inside the project. Its rules change what the tree
+/// admits, and the path itself is pruned from every other channel.
+pub fn exclude_changed(result: &DebounceEventResult, root: &Path) -> bool {
+    let Ok(events) = result else {
+        return false;
+    };
+    events.iter().any(|ev| {
+        ev.path
+            .strip_prefix(root)
+            .map(to_forward)
+            .is_ok_and(|rel| rel == ".git/info/exclude" || rel.ends_with("/.git/info/exclude"))
+    })
 }
 
 // ---------------------------------------------------------------------------

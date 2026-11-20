@@ -38,6 +38,7 @@ The modal surface for creating a plain file in the open project: the user picks 
 ## UI contract boundary
 - **Owned by the UI**: the modal layout, its centering, and its dismissal; the two inputs (Location, Name) and their enablement; the **Location** single-select over the project's existing folders and the project root, and the fact that the project root is its default (NFI-FR-04); the treatment of **Name** as the file's complete basename, extension included, with nothing appended or required (NFI-FR-05); client-side **Name** validation; the two invocation points (File menu `SNV-shell-navigation.md` SNV-FR-24, Project context menu `LCM-library-context-menu.md` LCM-FR-10) and the location seeding each performs (NFI-FR-06, NFI-FR-07); the routing of the created file to its natural surface and the reveal-and-select request issued to the Project panel (NFI-FR-12); and inline display of a creation error. The window reads the project's folder set from the tree the Project panel already holds; it never scans the filesystem itself and never assigns or infers an artifact type.
 - **Delegated to backend (abstract)**:
+  - `"search project paths (text, kind, limit)"` — lists every folder of the project, with `kind = folder` and no limit, for the **Location** select; owned by `../core/ASC-artifact-scanning.md` (ASC-FR-AVVY).
   - `"create file (location, name)"` — creates an empty file with no type assignment; owned by `../core/PST-project-storage.md` (PST-FR-25). Returns the new file node so the UI can open and reveal it.
   - `"open artifact by id"` — opens the newly-created file in its natural surface (owned by `../core/PST-project-storage.md` PST-FR-08), routed to Editor or Flow per `LIB-library.md` LIB-FR-03.
   - The new node also reaches the Project panel through the `"project tree changed"` event (`../core/ASC-artifact-scanning.md` ASC-FR-10); the window does not push the node into the tree itself.
@@ -62,6 +63,6 @@ The modal surface for creating a plain file in the open project: the user picks 
 ## Non-functional requirements
 - The window opens with keyboard focus on the **Name** input, because it is the only value the user must always supply.
 - The single-overlay rule of NFI-FR-01 is enforced by opening logic, not by listener coordination: the window assumes no other overlay is mounted while it is open.
-- The **Location** select is populated from the tree already in memory, so opening the window issues no backend call and costs no filesystem walk.
+- The **Location** select is populated from the project index through one `"search project paths (text, kind, limit)"` call, so opening the window costs no filesystem walk, and a list already read and not stale is reused with no call.
 - The window carries no expandable region and no optional block, so its height is fixed and it never reflows while the user fills it in.
 - The window imposes no extension allowlist or denylist (NFI-FR-05), so the range of files a project can hold is never narrowed by this surface.

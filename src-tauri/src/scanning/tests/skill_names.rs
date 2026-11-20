@@ -3,6 +3,7 @@
 //! One part of `../tests/mod.rs`, which holds the fixtures these run against.
 
 use super::*;
+use std::sync::Arc;
 
 // ------------------------------------------------------------------
 // ASC-FR-19: a skill's declared name rides on its node.

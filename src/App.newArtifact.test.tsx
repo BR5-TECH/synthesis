@@ -19,6 +19,7 @@ import { resetAppPreferencesCache } from "./state/appPreferences";
 import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
 import type { TreeNode } from "./types";
 import { resetPanelReveals } from "./state/panelReveal";
+import { TREE_COMMANDS, treeCommand } from "./test/treeCommands";
 import { defaultInvoke, enterIde, resetAppFixture } from "./test/appFixtures";
 
 const invokeMock = vi.fn();
@@ -160,10 +161,10 @@ describe("New Artifact modal wiring (NTA-FR-10 … NTA-FR-14)", () => {
   function backendCreating(node: TreeNode) {
     let created = false;
     invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
-      if (cmd === "load_project_tree") {
+      if (TREE_COMMANDS.has(cmd)) {
         const tree = emptyTree();
         if (created) tree.children[0].children!.push({ ...node });
-        return tree;
+        return treeCommand(cmd, args, tree);
       }
       if (cmd === "create_typed_file") {
         created = true;
@@ -362,7 +363,8 @@ describe("New Artifact modal wiring (NTA-FR-10 … NTA-FR-14)", () => {
   it("NTA-FR-16, NTA-FR-10: a collision is shown inline and the corrected retry succeeds", async () => {
     let attempts = 0;
     invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
-      if (cmd === "load_project_tree") return emptyTree();
+      const read = treeCommand(cmd, args, emptyTree());
+      if (read) return read;
       if (cmd === "create_typed_file") {
         attempts += 1;
         if (attempts === 1) throw "already exists: specifications/overview.md";
@@ -422,7 +424,8 @@ describe("New Artifact modal wiring (NTA-FR-10 … NTA-FR-14)", () => {
   // NTA-FR-15: dismissal invokes nothing and opens nothing.
   it("NTA-FR-15: dismissing the window creates nothing", async () => {
     invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
-      if (cmd === "load_project_tree") return emptyTree();
+      const read = treeCommand(cmd, args, emptyTree());
+      if (read) return read;
       return defaultInvoke(cmd, args as Record<string, unknown>);
     });
 
@@ -456,7 +459,8 @@ describe("New Artifact modal wiring (NTA-FR-10 … NTA-FR-14)", () => {
   // previous invocation's inputs never survive into the next one.
   it("NTA-FR-02: each open starts from the flow's own defaults", async () => {
     invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
-      if (cmd === "load_project_tree") return emptyTree();
+      const read = treeCommand(cmd, args, emptyTree());
+      if (read) return read;
       return defaultInvoke(cmd, args as Record<string, unknown>);
     });
 

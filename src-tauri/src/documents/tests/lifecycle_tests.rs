@@ -470,7 +470,7 @@ fn an_attribution_write_requests_a_documents_refresh() {
     watcher.pending.store(false, std::sync::atomic::Ordering::SeqCst);
 
     let candidates = a.app.state::<crate::scanning::CandidateStore>();
-    crate::library::republish_classification(&a.handle(), &root, &candidates);
+    crate::library::republish_classification(&a.handle(), &root, &candidates, "guides");
 
     assert!(watcher.pending.load(std::sync::atomic::Ordering::SeqCst), "a refresh is owed");
     watcher.running.store(false, std::sync::atomic::Ordering::SeqCst);

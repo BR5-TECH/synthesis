@@ -542,15 +542,15 @@ export function Notes({
   };
 
   /**
-   * The project's artifacts and Flows. Read from the Library tree, the one
-   * operation NTS-FR-22 delegates for this — and the only place the artifact
+   * The project's artifacts and Flows. Read from `"list project artifacts"`,
+   * the one operation NTS-FR-22 delegates for this — and the only place the artifact
    * *type* of a note's entity is knowable, which NTS-FR-11's routing needs.
    * Never throws: a tree that cannot be read leaves an empty list rather than
    * an overlay stuck on "Loading…".
    */
   const loadTargets = async (): Promise<MoveTarget[]> => {
     try {
-      return artifactTargets(await api.loadProjectTree());
+      return artifactTargets(await api.loadProjectArtifactsTree());
     } catch {
       return [];
     }

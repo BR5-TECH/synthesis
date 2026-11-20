@@ -167,11 +167,11 @@ pub fn break_block(level: u8) -> Block {
     }
 }
 
-/// DXP-FR-RWWA: remove each page break that has no other block before it or
-/// no other block after it, so an export never starts or ends with an empty
-/// page.
+/// DXP-FR-RWWA: remove each page break that has no exported block other than a
+/// vertical break before it or after it, so an export never starts or ends
+/// with a page of empty space alone.
 pub fn trim_page_breaks(blocks: &mut Vec<TopBlock>) {
-    let is_content = |top: &TopBlock| top.block != Block::PageBreak;
+    let is_content = |top: &TopBlock| !matches!(top.block, Block::PageBreak | Block::Spacer { .. });
     let first = blocks.iter().position(is_content);
     let last = blocks.iter().rposition(is_content);
     let (Some(first), Some(last)) = (first, last) else {

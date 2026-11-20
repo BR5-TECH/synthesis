@@ -5,6 +5,7 @@
  * SET-FR-LJYT).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { treeCommand } from "../test/treeCommands";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -117,8 +118,8 @@ beforeEach(() => {
         return setImpl((args as { settings: DeliverySettings }).settings);
       case "list_github_issue_types":
         return typeList();
-      case "load_project_tree":
-        return Promise.resolve(TREE);
+      case "list_project_artifacts":
+        return treeCommand(cmd, args, TREE)!;
       default:
         return Promise.reject(new Error(`unexpected command ${cmd}`));
     }
@@ -366,8 +367,8 @@ describe("reads that fail or wait (SET-FR-WDYJ / SET-FR-XFNA / SET-FR-XUKD)", ()
     invokeMock.mockImplementation((cmd: string) =>
       cmd === "get_delivery_settings"
         ? Promise.reject("no_project_open")
-        : cmd === "append_log_records" || cmd === "load_project_tree"
-          ? Promise.resolve(cmd === "load_project_tree" ? TREE : undefined)
+        : cmd === "append_log_records" || cmd === "list_project_artifacts"
+          ? (treeCommand(cmd, undefined, TREE) ?? Promise.resolve(undefined))
           : cmd === "list_github_issue_types"
             ? typeList()
             : cmd === "get_delivery_source"

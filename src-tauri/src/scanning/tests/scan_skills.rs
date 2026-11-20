@@ -69,6 +69,7 @@ fn tree_changed_payload_serializes_camelcase() {
     let json = serde_json::to_value(TreeChangedPayload {
         change_count: 5,
         removed_paths: vec!["docs/gone.md".to_string()],
+        changed_folders: vec!["docs".to_string()],
     })
     .unwrap();
     assert_eq!(json.get("changeCount").and_then(|v| v.as_u64()), Some(5));
@@ -79,8 +80,11 @@ fn tree_changed_payload_serializes_camelcase() {
     );
     // Always present: an empty list rather than an absent field, so a
     // consumer never has to tell "nothing removed" from "not reported".
-    let empty =
-        serde_json::to_value(TreeChangedPayload { change_count: 1, removed_paths: Vec::new() })
-            .unwrap();
+    let empty = serde_json::to_value(TreeChangedPayload {
+        change_count: 1,
+        removed_paths: Vec::new(),
+        changed_folders: Vec::new(),
+    })
+    .unwrap();
     assert_eq!(empty.get("removedPaths").and_then(|v| v.as_array()), Some(&vec![]));
 }

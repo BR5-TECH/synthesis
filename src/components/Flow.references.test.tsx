@@ -74,7 +74,7 @@ describe("item references (FLO-FR-10, FLO-FR-11, FLO-FR-12)", () => {
     ]);
     doc.references = ["gone/hld.md"];
     const b = flowBackend(doc);
-    b.on.load_project_tree = () => new Promise(() => {});
+    b.on.list_project_artifacts = () => new Promise(() => {});
     await renderFlow(b);
 
     selectItem("t1");

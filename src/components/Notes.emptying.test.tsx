@@ -4,6 +4,7 @@
 // record, its timestamps and the unresolved marking belong to
 // `NTC-notes-storage.md` and are covered by its own Rust tests.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { treeCommand } from "../test/treeCommands";
 import {
   cleanup,
   fireEvent,
@@ -74,8 +75,8 @@ beforeEach(() => {
         return served.project;
       case "list_all_notes":
         return served.all;
-      case "load_project_tree":
-        return TREE;
+      case "list_project_artifacts":
+        return treeCommand(cmd, undefined, TREE);
       case "create_note":
         return {
           id: "new",
@@ -144,8 +145,8 @@ describe("emptying a note (NTS-FR-16)", () => {
           return served.project;
         case "list_all_notes":
           return served.all;
-        case "load_project_tree":
-          return TREE;
+        case "list_project_artifacts":
+          return treeCommand(cmd, undefined, TREE);
         case "create_note":
           return BLANK_NEW.note;
         case "update_note": {

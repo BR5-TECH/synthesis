@@ -76,8 +76,8 @@ function backend(options: Scripted = {}) {
         });
       case "get_project_agentic_integration":
         return Promise.resolve({ vendor: "claude_code", resolution: "inherited", override: null });
-      case "load_project_tree":
-        return Promise.resolve(null);
+      case "search_project_paths":
+        return Promise.resolve({ paths: [], truncated: false });
       case "load_project_image_build_in_flight":
         return Promise.resolve(null);
       case "load_docker_in_docker_settings":

@@ -147,7 +147,7 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
           stored = args!.preferences!.theme;
           return undefined;
         }
-        return defaultInvoke(cmd);
+        return defaultInvoke(cmd, args);
       },
     );
 
@@ -203,9 +203,9 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
   });
 
   it("SNV-FR-15: reflects the persisted preference at startup, with no interaction and no save", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "load_app_preferences") return { theme: "light" };
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -233,7 +233,7 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
           stored = args!.preferences!.theme;
           return undefined;
         }
-        return defaultInvoke(cmd);
+        return defaultInvoke(cmd, args);
       },
     );
 
@@ -273,10 +273,10 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
   });
 
   it("SNV-FR-16: rolls back the chrome selection when persistence fails, so the displayed theme matches what survives relaunch", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "load_app_preferences") return { theme: "dark" };
       if (cmd === "save_app_preferences") throw "disk full";
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -327,9 +327,9 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
     // record and applies it, which is what "applies to the application root
     // immediately" means once the editor is another window (GLS-FR-05).
     let stored: ThemePreference = "dark";
-    invokeMock.mockImplementation(async (cmd: string) => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "load_app_preferences") return { theme: stored };
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -372,7 +372,7 @@ describe("Typographic roles (OVW-FR-14)", () => {
     // The Project picker is the startup surface, so the roles have to be on the
     // root before the IDE shell is ever reached — a font applied only once a
     // project is open is a flash of the built-in face on every launch.
-    invokeMock.mockImplementation(async (cmd: string) => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "load_app_preferences")
         return {
           theme: "dark",
@@ -381,7 +381,7 @@ describe("Typographic roles (OVW-FR-14)", () => {
             rich: { sizePx: 18 },
           },
         };
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -422,9 +422,9 @@ describe("Typographic roles (OVW-FR-14)", () => {
     // even unmounted by the author going to change it. That makes the promise
     // stronger and directly checkable: the SAME element survives the change.
     let stored: Record<string, unknown> = { theme: "dark" };
-    invokeMock.mockImplementation(async (cmd: string) => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "load_app_preferences") return stored;
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -487,9 +487,9 @@ describe("Typographic roles (OVW-FR-14)", () => {
       theme: "dark",
       fonts: { source: { sizePx: 16 } },
     };
-    invokeMock.mockImplementation(async (cmd: string) => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "load_app_preferences") return stored;
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     const { unmount } = render(<App />);

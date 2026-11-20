@@ -20,6 +20,8 @@ import { resetAppPreferencesCache } from "./state/appPreferences";
 import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
 import { pickSelector } from "./test/selectors";
 import { resetPanelReveals } from "./state/panelReveal";
+import { treeCommand } from "./test/treeCommands";
+import type { TreeNode } from "./types";
 import {
   createDraftFromPanel,
   defaultInvoke,
@@ -128,7 +130,7 @@ afterEach(() => {
 // entry points both create a draft and open it, and nothing reaches the project
 // until the draft is graduated (NAW-FR-24).
 describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
-  function treeWithSpecsFolder() {
+  function treeWithSpecsFolder(): TreeNode {
     return {
       id: "",
       name: "",
@@ -293,7 +295,8 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
   // written into that folder, no draft is created, and no tab opens anywhere.
   it("NAW-FR-07, NAW-FR-38: the Project entry opens the typed-artifact window and creates no draft", async () => {
     invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
-      if (cmd === "load_project_tree") return treeWithSpecsFolder();
+      const read = treeCommand(cmd, args, treeWithSpecsFolder());
+      if (read) return read;
       return defaultInvoke(cmd, args as Record<string, unknown>);
     });
     render(<App />);

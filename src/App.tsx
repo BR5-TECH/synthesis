@@ -244,7 +244,8 @@ function App({ projectWindowBoot = null }: AppProps = {}) {
    * silently do nothing, which is far more visible than the case being guarded.
    */
   const revealTargetMissing = (request: PanelRevealRequest): boolean => {
-    if (request.panel === "library") return projectFolders.hasPath(request.id) === false;
+    // The Project panel is answered by the project index instead (see below).
+    if (request.panel === "library") return false;
     // The drafts list the shell already holds for notification routing.
     if (request.panel === "drafts")
       return (
@@ -287,8 +288,30 @@ function App({ projectWindowBoot = null }: AppProps = {}) {
     // ("keeps its active surface … is neither opened nor hidden"). So the
     // shell asks the panel's own published contents instead.
     if (!reveal.optimistic && revealTargetMissing(reveal)) return;
-    if (vpanel.hidden) vpanel.setHidden(false);
-    s.setPanelSurface(reveal.panel);
+    const show = () => {
+      if (vpanel.hidden) vpanel.setHidden(false);
+      s.setPanelSurface(reveal.panel);
+    };
+    if (reveal.optimistic || reveal.panel !== "library") {
+      show();
+      return;
+    }
+    // SNV-FR-67 for the Project panel: the project index says whether it holds
+    // the target (ASC-FR-QKXR). Only a definite "not held" refuses; a read that
+    // fails says nothing, so the follow goes ahead.
+    // A newer request supersedes this one before it answers.
+    let current = true;
+    api
+      .existingProjectPaths([reveal.id])
+      .then((found) => {
+        if (current && found.length > 0) show();
+      })
+      .catch(() => {
+        if (current) show();
+      });
+    return () => {
+      current = false;
+    };
     // Keyed on the nonce alone: `reveal` is a fresh object each render and
     // `vpanel`/`s` are re-created every time, so depending on them would re-run
     // this on every render and drag the panel back off whatever the author

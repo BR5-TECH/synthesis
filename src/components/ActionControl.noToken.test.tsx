@@ -65,8 +65,8 @@ async function renderEditor(b: Backend) {
           createdAt: "2026-01-01T00:00:00Z",
           updatedAt: "2026-01-01T00:00:00Z",
         };
-      case "load_project_tree":
-        return { id: "", name: "p", path: "", nodeKind: "folder", children: [] };
+      case "list_project_artifacts":
+        return [];
       default:
         return undefined;
     }

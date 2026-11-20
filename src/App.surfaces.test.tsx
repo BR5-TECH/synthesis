@@ -22,6 +22,8 @@ import { resetAppPreferencesCache } from "./state/appPreferences";
 import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
 import { selectorButton, selectorValue } from "./test/selectors";
 import { resetPanelReveals } from "./state/panelReveal";
+import { treeCommand } from "./test/treeCommands";
+import type { TreeNode } from "./types";
 import {
   defaultInvoke,
   enterIde,
@@ -126,7 +128,7 @@ afterEach(() => {
 // LCM-FR-05: the Library "Notes" context-menu action switches the vertical
 // panel to Notes scoped to the chosen artifact, WITHOUT opening a tab.
 describe("Library Notes action scopes the Notes panel without opening a tab (LCM-FR-05)", () => {
-  function treeWithSpec() {
+  function treeWithSpec(): TreeNode {
     return {
       id: "",
       name: "",
@@ -147,9 +149,10 @@ describe("Library Notes action scopes the Notes panel without opening a tab (LCM
   }
 
   it("reveals Notes scoped to the artifact and adds no new tab", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithSpec();
-      return defaultInvoke(cmd);
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithSpec());
+      if (read) return read;
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -229,10 +232,10 @@ describe("the Notes panel binds to the active tab's entity id (NTS-FR-02)", () =
   });
 
   it("drops a Library-chosen scope when the active tab changes (NTS-FR-08)", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree" || cmd === "rescan_project_tree")
-        return treeWithSpecForNotes();
-      return defaultInvoke(cmd);
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithSpecForNotes());
+      if (read) return read;
+      return defaultInvoke(cmd, args);
     });
     render(<App />);
     await enterIde();
@@ -268,7 +271,7 @@ describe("the Notes panel binds to the active tab's entity id (NTS-FR-02)", () =
   });
 });
 
-function treeWithSpecForNotes() {
+function treeWithSpecForNotes(): TreeNode {
   return {
     id: "",
     name: "",

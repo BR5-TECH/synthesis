@@ -10,7 +10,12 @@ fn library_tree_command_functions_are_in_scope() {
     // Compile-time references: renaming/removing any Library tree command
     // without updating `generate_handler!` / `COMMAND_NAMES` fails to
     // compile here (the silent-failure class CLAUDE.md warns about).
-    let _ = load_project_tree;
+    let _ = list_tree_children;
+    let _ = list_tree_path;
+    let _ = filter_project_tree;
+    let _ = list_project_artifacts;
+    let _ = search_project_paths;
+    let _ = existing_project_paths;
     let _ = rescan_project_tree;
     let _ = assign_artifact_type;
     let _ = clear_artifact_type;
@@ -19,8 +24,8 @@ fn library_tree_command_functions_are_in_scope() {
 #[test]
 fn every_command_that_writes_an_assignment_publishes_the_classification() {
     // The wiring, not the pieces. `republish_classification` is what makes a
-    // reclassification take effect synchronously: it invalidates the
-    // candidate list, requests a BM25 pass (BMI-FR-17), and records the
+    // reclassification take effect synchronously: it classifies the path again
+    // in the project index, requests a BM25 pass (BMI-FR-17), and records the
     // attribution baseline so the watcher recognises this application's own
     // write rather than reporting it as an external one (ASC-FR-20).
     //
@@ -320,4 +325,44 @@ fn library_file_operation_commands_are_in_scope() {
     let _ = copy_path_into_folder;
     let _ = create_file;
     let _ = create_folder;
+}
+
+// ASC-FR-TPJO, PST-FR-EHVN: every command that reads the project index runs
+// off the main thread. Asserted over the source, as the attribute has no
+// runtime observable in a mock app.
+#[test]
+fn index_reading_commands_are_async() {
+    let sources = [
+        (
+            include_str!("../../library.rs"),
+            &[
+                "list_tree_children",
+                "list_tree_path",
+                "filter_project_tree",
+                "list_project_artifacts",
+                "search_project_paths",
+                "existing_project_paths",
+                "rescan_project_tree",
+                "assign_artifact_type",
+                "clear_artifact_type",
+                "create_folder",
+                "create_file",
+                "create_typed_file",
+            ][..],
+        ),
+        (include_str!("../../dashboard.rs"), &["list_recently_edited_artifacts"][..]),
+        (include_str!("../../flow_delivery.rs"), &["find_flow_items_for_draft"][..]),
+        (
+            include_str!("../../project.rs"),
+            &["open_project_at_path", "open_project_from_git_url", "create_project"][..],
+        ),
+    ];
+    for (source, names) in sources {
+        for name in names {
+            let marker = format!("pub fn {name}(");
+            let before = source.split_once(&marker).unwrap_or_else(|| panic!("{name}")).0;
+            let attribute = before.rsplit("#[tauri::command").next().unwrap_or("");
+            assert!(attribute.starts_with("(async)]"), "{name} must be #[tauri::command(async)]");
+        }
+    }
 }

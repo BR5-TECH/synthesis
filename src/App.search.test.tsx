@@ -147,7 +147,7 @@ describe("search click-through to a plain text file (SCH-FR-09, ESH-FR-ATDS, TAB
   beforeEach(() => {
     dispatched = [];
     let counter = 0;
-    invokeMock.mockImplementation(async (cmd: string) => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "start_search") {
         const id = `search-${counter++}`;
         dispatched.push(id);
@@ -155,7 +155,7 @@ describe("search click-through to a plain text file (SCH-FR-09, ESH-FR-ATDS, TAB
       }
       if (cmd === "load_artifact_contents_by_id")
         return { body: "fn main() {}", checksum: "ck-rs" };
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
   });
 
@@ -229,7 +229,7 @@ describe("overlay and full results tab are two searches (SCH-FR-18, SCH-FR-20)",
           dispatched.push({ id, scope: args?.scope as string });
           return id;
         }
-        return defaultInvoke(cmd);
+        return defaultInvoke(cmd, args);
       },
     );
   });

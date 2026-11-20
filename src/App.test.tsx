@@ -522,7 +522,7 @@ describe("In-window project switch (OVW-FR-11 / SNV-FR-19 / SNV-FR-22)", () => {
       const path = args?.path ?? "~/dev/acme";
       return { name: path.includes("beta") ? "beta" : "acme", path };
     }
-    return defaultInvoke(cmd);
+    return defaultInvoke(cmd, args);
   }
 
   it("OVW-FR-11: switching to a recent project tears down the window and reopens with Dashboard + Library", async () => {
@@ -550,9 +550,12 @@ describe("In-window project switch (OVW-FR-11 / SNV-FR-19 / SNV-FR-22)", () => {
     );
 
     // Switch to project B via the top-chrome switcher.
-    const treeLoadsBefore = invokeMock.mock.calls.filter(
-      (c) => c[0] === "load_project_tree",
-    ).length;
+    // The Library's read of the project root (LIB-FR-EMOO).
+    const rootReads = () =>
+      invokeMock.mock.calls.filter(
+        (c) => c[0] === "list_tree_children" && c[1]?.path === "",
+      ).length;
+    const treeLoadsBefore = rootReads();
     await userEvent.click(screen.getByTestId("project-switcher"));
     const menu = await screen.findByTestId("project-switcher-menu");
     await userEvent.click(await within(menu).findByText("beta"));
@@ -580,12 +583,7 @@ describe("In-window project switch (OVW-FR-11 / SNV-FR-19 / SNV-FR-22)", () => {
     expect(container.querySelector(".bottom-panel")).toBeNull();
     // The main-window subtree remounted for B: project-scoped surfaces re-fetch
     // for the newly-activated project rather than showing A's data (OVW-FR-11).
-    await waitFor(() =>
-      expect(
-        invokeMock.mock.calls.filter((c) => c[0] === "load_project_tree")
-          .length,
-      ).toBeGreaterThan(treeLoadsBefore),
-    );
+    await waitFor(() => expect(rootReads()).toBeGreaterThan(treeLoadsBefore));
   });
 
   it("PJT-FR-IOEV: 'Open Another Project…' shows the Project picker over the window and keeps the project", async () => {
@@ -652,9 +650,12 @@ describe("In-window project switch (OVW-FR-11 / SNV-FR-19 / SNV-FR-22)", () => {
 // ---------------------------------------------------------------------------
 
 describe("switching the active worktree from the top chrome (OVW-FR-12)", () => {
+  // The Library's reads of the project root (LIB-FR-EMOO, LIB-FR-11).
   const treeLoads = () =>
     invokeMock.mock.calls.filter(
-      (c) => c[0] === "load_project_tree" || c[0] === "rescan_project_tree",
+      (c) =>
+        (c[0] === "list_tree_children" && (c[1] as { path?: string } | undefined)?.path === "") ||
+        c[0] === "rescan_project_tree",
     ).length;
 
   // LIB-FR-02, LIB-FR-13 / CHG-FR-26, CHG-FR-09: the surfaces bound to the content root reload. This
@@ -731,9 +732,9 @@ describe("switching the active worktree from the top chrome (OVW-FR-12)", () => 
 
   // SNV-FR-32, WTS-FR-02, WTS-FR-29 end to end: no repository, no selector.
   it("renders no selector for a project outside a Git repository", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "get_active_worktree") throw "not a git repository";
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
     render(<App />);
     await enterIde();

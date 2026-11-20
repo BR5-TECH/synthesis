@@ -1,14 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 
-import { flattenFolders, useProjectFolders } from "./useProjectFolders";
+import { useProjectFolders } from "./useProjectFolders";
 import { PROJECT_TREE_CHANGED } from "../events";
-import type { TreeNode } from "../types";
+import { treeCommand } from "../test/treeCommands";
+import type { PathSearch, TreeNode } from "../types";
 
-// NFW-FR-04 + the NFW non-functional requirement: the New Folder window's parent
-// list comes from the tree the Library already loaded, so opening it costs no
-// scan — while still being complete when the Library is unmounted and nothing has
-// reloaded on its behalf.
+// NFW-FR-04 / NFI-FR-04 / NTA-FR-04: the folder list of the creation windows
+// comes from one `"search project paths"` read of the project index
+// (ASC-FR-AVVY). The list is read again only when a tree change made it
+// stale, so an open with a fresh list issues no call.
 
 const invokeMock = vi.fn();
 const listeners: Record<string, Array<(e: { payload: unknown }) => void>> = {};
@@ -55,113 +56,123 @@ function tree(extra: TreeNode[] = []): TreeNode {
   ]);
 }
 
+/** The project the index answers from. A test changes it to change the next read. */
+let project: TreeNode;
+
+/** Answer the folder search from `project`, as the index would. */
+function answerFromProject() {
+  invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+    if (cmd === "append_log_records") return undefined;
+    const read = cmd === "search_project_paths" ? treeCommand(cmd, args, project) : undefined;
+    if (read) return read;
+    throw new Error(`unexpected invoke ${cmd}`);
+  });
+}
+
+/** The folder searches issued so far. */
+const searches = () =>
+  invokeMock.mock.calls.filter((c) => c[0] === "search_project_paths");
+
+/** A search answer held open until the test releases it. */
+function holdSearches() {
+  let release: (paths: string[]) => void = () => {};
+  invokeMock.mockImplementation((cmd: string) => {
+    if (cmd !== "search_project_paths") return Promise.reject(`unexpected invoke ${cmd}`);
+    return new Promise<PathSearch>((resolve) => {
+      release = (paths) => resolve({ paths, truncated: false });
+    });
+  });
+  return (paths: string[]) => release(paths);
+}
+
 function fireTreeChanged() {
   act(() => {
     for (const h of [...(listeners[PROJECT_TREE_CHANGED] ?? [])]) {
-      h({ payload: { changeCount: 1 } });
+      h({ payload: { changeCount: 1, changedFolders: [""] } });
     }
   });
 }
 
+const paths = (r: { current: { folders: { path: string }[] } }) =>
+  r.current.folders.map((f) => f.path);
+
 beforeEach(() => {
   invokeMock.mockReset();
-  invokeMock.mockImplementation(async (cmd: string) => {
-    if (cmd !== "load_project_tree") throw new Error(`unexpected invoke ${cmd}`);
-    return tree([folder("scanned-only")]);
-  });
+  project = tree();
+  answerFromProject();
   for (const k in listeners) delete listeners[k];
 });
 
 afterEach(cleanup);
 
-describe("flattenFolders (NFW-FR-04)", () => {
-  it("lists every folder, in tree order, and no files", () => {
-    expect(flattenFolders(tree([folder("tooling")]))).toEqual([
-      { path: "specifications", label: "specifications" },
-      { path: "specifications/ui", label: "specifications/ui" },
-      { path: "tooling", label: "tooling" },
-    ]);
-  });
-
-  it("includes an empty folder — one the Library's default lens hides", () => {
-    // The whole point: a folder with nothing in it is still a valid parent.
-    expect(flattenFolders(folder("", [folder("empty")]))).toEqual([
-      { path: "empty", label: "empty" },
-    ]);
-  });
-});
-
 describe("useProjectFolders", () => {
-  it("takes its list from a published tree without scanning", async () => {
-    const { result } = renderHook(() => useProjectFolders("proj::0"));
-
-    act(() => result.current.publishTree(tree()));
-    expect(result.current.folders.map((f) => f.path)).toEqual([
-      "specifications",
-      "specifications/ui",
-    ]);
-
-    // A published list is fresh, so a consumer opening now issues nothing.
-    act(() => result.current.ensureFresh());
-    expect(invokeMock).not.toHaveBeenCalled();
-  });
-
-  it("scans once when nothing has been published yet", async () => {
+  it("NFW-FR-04: reads every folder with one folder search, files excluded, empty folders included", async () => {
+    project = tree([folder("empty")]);
     const { result } = renderHook(() => useProjectFolders("proj::0"));
 
     act(() => result.current.ensureFresh());
 
     await waitFor(() =>
-      expect(result.current.folders.map((f) => f.path)).toContain("scanned-only"),
+      // ASC-FR-AVVY: in tree order, each folder's child folders by name.
+      expect(paths(result)).toEqual(["empty", "specifications", "specifications/ui"]),
     );
-    expect(
-      invokeMock.mock.calls.filter((c) => c[0] === "load_project_tree"),
-    ).toHaveLength(1);
-
-    // The scan's result is itself a publish, so the next open scans nothing.
-    act(() => result.current.ensureFresh());
-    expect(
-      invokeMock.mock.calls.filter((c) => c[0] === "load_project_tree"),
-    ).toHaveLength(1);
-  });
-
-  it("re-scans after a tree change nobody published a reload for", async () => {
-    // The Library is what normally republishes; while it is unmounted (another
-    // vertical-panel surface is showing) a structural change would otherwise
-    // leave the parent list missing a folder that now exists.
-    const { result } = renderHook(() => useProjectFolders("proj::0"));
-    act(() => result.current.publishTree(tree()));
-    await waitFor(() => expect(listeners[PROJECT_TREE_CHANGED]?.length).toBe(1));
-
-    fireTreeChanged();
-    act(() => result.current.ensureFresh());
-
-    await waitFor(() =>
-      expect(result.current.folders.map((f) => f.path)).toContain("scanned-only"),
-    );
-  });
-
-  it("does not scan on a tree change by itself — only when a consumer asks", async () => {
-    // The event alone must not trigger a walk: the Library is already reloading
-    // on the same event, and a second scan would double the work and show a
-    // second "Indexing project…" operation in the status bar.
-    const { result } = renderHook(() => useProjectFolders("proj::0"));
-    act(() => result.current.publishTree(tree()));
-    await waitFor(() => expect(listeners[PROJECT_TREE_CHANGED]?.length).toBe(1));
-
-    fireTreeChanged();
-
-    expect(invokeMock).not.toHaveBeenCalled();
-    // And the last published list is still what a render sees.
-    expect(result.current.folders.map((f) => f.path)).toEqual([
-      "specifications",
-      "specifications/ui",
+    expect(result.current.folders[0]).toEqual({ path: "empty", label: "empty" });
+    // One read of the index, for folders, with no text and no limit.
+    expect(searches()).toEqual([
+      ["search_project_paths", { text: "", kind: "folder", limit: null }],
     ]);
   });
 
-  it("keeps the last published list when a scan fails", async () => {
+  it("reads nothing until a consumer asks", async () => {
+    renderHook(() => useProjectFolders("proj::0"));
+    await waitFor(() => expect(listeners[PROJECT_TREE_CHANGED]?.length).toBe(1));
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("reads once, and a fresh list opens the next window with no call", async () => {
     const { result } = renderHook(() => useProjectFolders("proj::0"));
-    act(() => result.current.publishTree(tree()));
+
+    act(() => result.current.ensureFresh());
+    await waitFor(() => expect(paths(result)).toContain("specifications"));
+    expect(searches()).toHaveLength(1);
+
+    act(() => result.current.ensureFresh());
+    expect(searches()).toHaveLength(1);
+  });
+
+  it("reads again after a tree change, when a consumer asks", async () => {
+    const { result } = renderHook(() => useProjectFolders("proj::0"));
+    act(() => result.current.ensureFresh());
+    await waitFor(() => expect(paths(result)).toContain("specifications"));
+    await waitFor(() => expect(listeners[PROJECT_TREE_CHANGED]?.length).toBe(1));
+
+    project = tree([folder("created-since")]);
+    fireTreeChanged();
+    act(() => result.current.ensureFresh());
+
+    await waitFor(() => expect(paths(result)).toContain("created-since"));
+    expect(searches()).toHaveLength(2);
+  });
+
+  it("does not read on a tree change by itself — only when a consumer asks", async () => {
+    // A change while no window needs the list costs nothing.
+    const { result } = renderHook(() => useProjectFolders("proj::0"));
+    act(() => result.current.ensureFresh());
+    await waitFor(() => expect(paths(result)).toContain("specifications"));
+    await waitFor(() => expect(listeners[PROJECT_TREE_CHANGED]?.length).toBe(1));
+
+    project = tree([folder("created-since")]);
+    fireTreeChanged();
+
+    expect(searches()).toHaveLength(1);
+    // And the last list read is still what a render sees.
+    expect(paths(result)).toEqual(["specifications", "specifications/ui"]);
+  });
+
+  it("keeps the last list read when a read fails, and retries on the next open", async () => {
+    const { result } = renderHook(() => useProjectFolders("proj::0"));
+    act(() => result.current.ensureFresh());
+    await waitFor(() => expect(paths(result)).toContain("specifications"));
     await waitFor(() => expect(listeners[PROJECT_TREE_CHANGED]?.length).toBe(1));
 
     invokeMock.mockImplementation(async () => {
@@ -169,61 +180,52 @@ describe("useProjectFolders", () => {
     });
     fireTreeChanged();
     act(() => result.current.ensureFresh());
-
-    await waitFor(() => expect(invokeMock).toHaveBeenCalled());
+    await waitFor(() => expect(searches()).toHaveLength(2));
     // Degraded to what was last known rather than emptied — creating a folder in
     // one of those parents still works.
-    expect(result.current.folders.map((f) => f.path)).toEqual([
-      "specifications",
-      "specifications/ui",
-    ]);
+    expect(paths(result)).toEqual(["specifications", "specifications/ui"]);
+
+    // The failed read left the list stale, so the next open reads again.
+    project = tree([folder("after-failure")]);
+    answerFromProject();
+    act(() => result.current.ensureFresh());
+    await waitFor(() => expect(paths(result)).toContain("after-failure"));
   });
 
-  it("re-scans when a tree change lands while a scan is already in flight", async () => {
-    // The race that silently produces a wrong answer: a scan dispatched BEFORE the
-    // change resolves AFTER it, so its (already-stale) tree would otherwise be
-    // recorded as fresh and the next open would trust an incomplete parent list.
-    let release: (tree: TreeNode) => void = () => {};
-    invokeMock.mockImplementation(
-      () => new Promise<TreeNode>((resolve) => (release = resolve)),
-    );
+  it("reads again when a tree change lands while a read is already in flight", async () => {
+    // A read dispatched BEFORE the change resolves AFTER it, so its
+    // (already-stale) list must not be recorded as fresh.
+    const release = holdSearches();
     const { result } = renderHook(() => useProjectFolders("proj::0"));
     await waitFor(() => expect(listeners[PROJECT_TREE_CHANGED]?.length).toBe(1));
 
     act(() => result.current.ensureFresh());
-    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(searches()).toHaveLength(1);
 
-    // The change arrives mid-flight, then the pre-change tree lands.
+    // The change arrives mid-flight, then the pre-change list lands.
     fireTreeChanged();
     await act(async () => {
-      release(tree());
+      release(["specifications", "specifications/ui"]);
     });
-    expect(result.current.folders.map((f) => f.path)).toEqual([
-      "specifications",
-      "specifications/ui",
-    ]);
+    expect(paths(result)).toEqual(["specifications", "specifications/ui"]);
 
-    // Still stale, so the next open really does scan again.
-    invokeMock.mockImplementation(async () => tree([folder("scanned-only")]));
+    // Still stale, so the next open really does read again.
+    project = tree([folder("created-since")]);
+    answerFromProject();
     act(() => result.current.ensureFresh());
-    await waitFor(() =>
-      expect(result.current.folders.map((f) => f.path)).toContain("scanned-only"),
-    );
+    await waitFor(() => expect(paths(result)).toContain("created-since"));
   });
 
-  it("coalesces two opens in quick succession into one scan", async () => {
-    let release: (tree: TreeNode) => void = () => {};
-    invokeMock.mockImplementation(
-      () => new Promise<TreeNode>((resolve) => (release = resolve)),
-    );
+  it("coalesces two opens in quick succession into one read", async () => {
+    const release = holdSearches();
     const { result } = renderHook(() => useProjectFolders("proj::0"));
 
     act(() => result.current.ensureFresh());
     act(() => result.current.ensureFresh());
-    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(searches()).toHaveLength(1);
 
     await act(async () => {
-      release(tree());
+      release(["specifications"]);
     });
   });
 
@@ -235,54 +237,46 @@ describe("useProjectFolders", () => {
       ({ key }: { key: string }) => useProjectFolders(key),
       { initialProps: { key: "projA::0" } },
     );
-    act(() => result.current.publishTree(tree()));
-    expect(result.current.folders).toHaveLength(2);
+    act(() => result.current.ensureFresh());
+    await waitFor(() => expect(result.current.folders).toHaveLength(2));
 
+    project = tree([folder("only-in-b")]);
     rerender({ key: "projB::0" });
 
     expect(result.current.folders).toEqual([]);
     // And it is stale again, so the next open reads the NEW root.
     act(() => result.current.ensureFresh());
-    await waitFor(() =>
-      expect(result.current.folders.map((f) => f.path)).toContain("scanned-only"),
-    );
+    await waitFor(() => expect(paths(result)).toContain("only-in-b"));
   });
 
-  it("discards a scan that outlived its content root, and still scans the new one", async () => {
-    // The nastiest interleaving: a scan is in flight when the user switches
-    // project. Two things must not happen — the old project's folders must not be
-    // written into the new project's list (they would be offered as parents for a
-    // folder in a project they do not belong to), and the in-flight marker must
-    // not block the scan the new root needs (the window would open with no parents
-    // at all and nothing to refill it).
-    let release: (tree: TreeNode) => void = () => {};
-    invokeMock.mockImplementation(
-      () => new Promise<TreeNode>((resolve) => (release = resolve)),
-    );
+  it("discards a read that outlived its content root, and still reads the new one", async () => {
+    // A read is in flight when the user switches project. The old project's
+    // folders must not land in the new project's list, and the in-flight marker
+    // must not block the read the new root needs.
+    const release = holdSearches();
     const { result, rerender } = renderHook(
       ({ key }: { key: string }) => useProjectFolders(key),
       { initialProps: { key: "projA::0" } },
     );
 
     act(() => result.current.ensureFresh());
-    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(searches()).toHaveLength(1);
 
     rerender({ key: "projB::0" });
     expect(result.current.folders).toEqual([]);
 
-    // Project A's scan lands late, naming A's folders.
+    // Project A's read lands late, naming A's folders.
     await act(async () => {
-      release(tree([folder("only-in-a")]));
+      release(["only-in-a"]);
     });
     expect(result.current.folders).toEqual([]);
 
-    // And B's own scan goes out rather than being swallowed by A's stale marker.
-    invokeMock.mockImplementation(async () => tree([folder("only-in-b")]));
+    // And B's own read goes out rather than being swallowed by A's stale marker.
+    project = tree([folder("only-in-b")]);
+    answerFromProject();
     act(() => result.current.ensureFresh());
-    await waitFor(() =>
-      expect(result.current.folders.map((f) => f.path)).toContain("only-in-b"),
-    );
-    expect(result.current.folders.map((f) => f.path)).not.toContain("only-in-a");
+    await waitFor(() => expect(paths(result)).toContain("only-in-b"));
+    expect(paths(result)).not.toContain("only-in-a");
   });
 
   it("drops the list when the worktree changes within the same project", async () => {
@@ -290,7 +284,8 @@ describe("useProjectFolders", () => {
       ({ key }: { key: string }) => useProjectFolders(key),
       { initialProps: { key: "projA::0" } },
     );
-    act(() => result.current.publishTree(tree()));
+    act(() => result.current.ensureFresh());
+    await waitFor(() => expect(result.current.folders).toHaveLength(2));
     rerender({ key: "projA::1" });
     expect(result.current.folders).toEqual([]);
   });

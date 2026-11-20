@@ -24,7 +24,6 @@ export interface IssueViewProps {
   facts: ItemFacts;
   references: Reference[];
   artifacts: ArtifactOption[];
-  paths: string[];
   treeLoaded: boolean;
   inert: boolean;
   handlers: ItemEditHandlers;

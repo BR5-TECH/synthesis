@@ -15,6 +15,18 @@ fn set_mtime(path: &std::path::Path, unix_secs: u64) {
     file.set_times(std::fs::FileTimes::new().set_modified(at(unix_secs))).unwrap();
 }
 
+/// The widget's items, read from a fresh project index. In the app the
+/// watcher keeps the index current after each write (ASC-FR-UWMI); these
+/// tests run no watcher, so they drop the mounted index first.
+fn edited(
+    app: &tauri::App<tauri::test::MockRuntime>,
+    root: &crate::fs::RootFs,
+) -> Vec<RecentlyEditedItem> {
+    use tauri::Manager;
+    app.state::<crate::scanning::CandidateStore>().clear();
+    recently_edited_impl(&app.handle().clone(), root)
+}
+
 fn write(root: &crate::fs::RootFs, rel: &str, body: &str, unix_secs: u64) {
     let path = root.path().join(rel);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -40,7 +52,7 @@ fn recently_edited_reads_the_project_and_its_filesystem_and_nothing_else() {
     // project — so its absence below is the assertion (PST-FR-23).
     write(&root, "src/main.rs", "fn main() {}\n", 9_999);
 
-    let items = recently_edited_impl(&app.handle().clone(), &root);
+    let items = edited(&app, &root);
     assert_eq!(items.len(), DASHBOARD_ITEM_CAP, "the loader applies the cap");
     assert_eq!(
         items.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
@@ -60,13 +72,13 @@ fn recently_edited_reads_the_project_and_its_filesystem_and_nothing_else() {
 
     // An external editor rewrites the least recent artifact: it leads.
     set_mtime(&dir.path().join("specs/a0.spec.md"), 20_000);
-    let after_external = recently_edited_impl(&app.handle().clone(), &root);
+    let after_external = edited(&app, &root);
     assert_eq!(after_external[0].id, "specs/a0.spec.md");
 
     // Artifact metadata is not an activity source: the order is what it was.
     write(&root, ".synthesis/artifacts/a0.toml", "rewritten\n", 30_000);
     assert_eq!(
-        recently_edited_impl(&app.handle().clone(), &root),
+        edited(&app, &root),
         after_external,
         "rewriting `.synthesis/artifacts/` metadata moves no item"
     );
@@ -77,7 +89,7 @@ fn recently_edited_reads_the_project_and_its_filesystem_and_nothing_else() {
     // one artifact. Written last, so it leads and the assertion names the
     // row it is about.
     write(&root, ".claude/skills/analyst/SKILL.md", "---\nname: analyst\n---\n\nbody\n", 40_000);
-    let named = recently_edited_impl(&app.handle().clone(), &root);
+    let named = edited(&app, &root);
     assert_eq!(
         named[0].name, "analyst",
         "the display name the file declares, not the basename every skill shares"
@@ -100,7 +112,7 @@ fn a_save_puts_its_artifact_first_and_a_removed_one_is_absent() {
     write(&root, "specs/b.spec.md", "two\n", 2_000);
     write(&root, "specs/gone.spec.md", "three\n", 3_000);
     assert_eq!(
-        recently_edited_impl(&app.handle().clone(), &root)[0].id,
+        edited(&app, &root)[0].id,
         "specs/gone.spec.md",
         "precondition: `a` is last, so nothing below passes by accident"
     );
@@ -114,7 +126,7 @@ fn a_save_puts_its_artifact_first_and_a_removed_one_is_absent() {
     .unwrap();
     std::fs::remove_file(dir.path().join("specs/gone.spec.md")).unwrap();
 
-    let items = recently_edited_impl(&app.handle().clone(), &root);
+    let items = edited(&app, &root);
     assert_eq!(
         items[0].id, "specs/a.spec.md",
         "the modification time the write gave the file is what moved it"
@@ -291,4 +303,29 @@ fn pending_git_reports_commits_to_push_and_commits_to_fetch_the_right_way_round(
     let counts = pending_git_impl(&root).unwrap();
     assert_eq!(counts.unpushed_commits, Some(2), "commits the branch holds above its upstream");
     assert_eq!(counts.fetchable_commits, Some(1), "commits the upstream holds above the branch");
+}
+
+/// PST-FR-EHVN: the widget reads the artifact set from the mounted project
+/// index and scans nothing. A typed file written with no watcher update is
+/// absent until the index applies it.
+#[test]
+fn recently_edited_reads_the_mounted_index_and_not_the_disk() {
+    use tauri::Manager;
+    let app = crate::tools::tests::mock_app();
+    let dir = tempfile::TempDir::new().unwrap();
+    let root = crate::fs::RootFs::for_root(dir.path());
+    write(&root, "specs/a.spec.md", "one\n", 1_000);
+    let store = app.state::<crate::scanning::CandidateStore>();
+    store.clear();
+    let _ = store.index(&root);
+    write(&root, "specs/b.spec.md", "two\n", 2_000);
+    let ids = |items: Vec<RecentlyEditedItem>| -> Vec<String> {
+        items.into_iter().map(|i| i.id).collect()
+    };
+    assert_eq!(ids(recently_edited_impl(&app.handle().clone(), &root)), vec!["specs/a.spec.md"]);
+    store.update(&root, |i| i.apply(&root, &["specs/b.spec.md".to_string()], false, &[]));
+    assert_eq!(
+        ids(recently_edited_impl(&app.handle().clone(), &root)),
+        vec!["specs/b.spec.md", "specs/a.spec.md"]
+    );
 }

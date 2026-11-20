@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { listen } from "@tauri-apps/api/event";
 
 import App from "./App";
+import { treeCommand } from "./test/treeCommands";
+import type { TreeNode } from "./types";
 import { resetAppPreferencesCache } from "./state/appPreferences";
 import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
 
@@ -108,7 +110,33 @@ vi.mock("@tauri-apps/api/window", () => {
   };
 });
 
-function defaultInvoke(cmd: string) {
+/** The project tree every tree read is answered from (`test/treeCommands.ts`). */
+const TREE: TreeNode = {
+  id: "",
+  name: "acme",
+  path: "",
+  nodeKind: "folder",
+  children: [
+    {
+      id: "a.md",
+      name: "a.md",
+      path: "a.md",
+      nodeKind: "file",
+      artifactType: "spec",
+    },
+    {
+      id: "b.md",
+      name: "b.md",
+      path: "b.md",
+      nodeKind: "file",
+      artifactType: "spec",
+    },
+  ],
+};
+
+function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
+  const read = treeCommand(cmd, args, TREE);
+  if (read) return read;
   switch (cmd) {
     case "list_recent_projects":
       return [
@@ -121,29 +149,6 @@ function defaultInvoke(cmd: string) {
       return null;
     case "load_app_preferences":
       return { theme: "dark" };
-    case "load_project_tree":
-      return {
-        id: "",
-        name: "acme",
-        path: "",
-        nodeKind: "folder",
-        children: [
-          {
-            id: "a.md",
-            name: "a.md",
-            path: "a.md",
-            nodeKind: "file",
-            artifactType: "spec",
-          },
-          {
-            id: "b.md",
-            name: "b.md",
-            path: "b.md",
-            nodeKind: "file",
-            artifactType: "spec",
-          },
-        ],
-      };
     case "validate_flow_document":
       // FGV-FR-02 / FLO-FR-46: the backend judges a Flow body before the canvas
       // renders it. The rules themselves are covered by the Rust suite.
@@ -201,7 +206,7 @@ beforeEach(() => {
   refreshListeners();
   listenMock.mockClear();
   invokeMock.mockReset();
-  invokeMock.mockImplementation(async (cmd: string) => defaultInvoke(cmd));
+  invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => defaultInvoke(cmd, args));
   // Both records are cached at module scope; reset them so one test's
   // persisted state is not served to the next.
   resetAppPreferencesCache();
@@ -335,10 +340,10 @@ describe("Edit menu find wiring (SNV-FR-43)", () => {
     // persisted (SCH-FR-13); the Editor panel's is the artifact's own value.
     // Here the persisted global mode is `regex`, so a panel that read it would
     // open in regex — and a panel that WROTE it would push a save.
-    invokeMock.mockImplementation(async (cmd: string) => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "load_app_preferences")
         return { theme: "dark", searchQueryMode: "regex" };
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -486,7 +491,7 @@ describe("Edit menu find wiring (SNV-FR-43)", () => {
 
   it("NAW-FR-57, NAW-FR-59, SNV-FR-43 / NAW-FR-09, NAW-FR-44: a draft reading a past version disables both items and opens nothing", async () => {
     // NAW-FR-40 / DHS-FR-10: the rail's list, and the one version it holds.
-    invokeMock.mockImplementation(async (cmd: string) => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "list_draft_history") {
         return {
           entries: [
@@ -512,7 +517,7 @@ describe("Edit menu find wiring (SNV-FR-43)", () => {
       if (cmd === "load_draft_history_entry") {
         return { content: "the prompt as it was", sha256: "sha-1" };
       }
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -550,7 +555,7 @@ describe("Edit menu find wiring (SNV-FR-43)", () => {
 
   it("SNV-FR-43, NAW-FR-09, NAW-FR-44, NAW-FR-59: a draft its graduation holds read-only disables both items", async () => {
     // NAW-FR-44: a non-terminal run holds the prompt, so it takes no edit.
-    invokeMock.mockImplementation(async (cmd: string) => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "get_draft_graduation") {
         // `get draft graduation` answers with the run itself (GRD contract).
         return {
@@ -583,7 +588,7 @@ describe("Edit menu find wiring (SNV-FR-43)", () => {
           updatedAt: "2026-07-31T10:00:00Z",
         };
       }
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);

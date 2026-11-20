@@ -5,6 +5,7 @@
  * The context-menu actions, the persisted panel state, the reveal, and the
  * lens row each live in a `Library.<topic>.test.tsx` sibling.
  */
+import { resetLogBufferForTest } from "../logging";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -45,6 +46,8 @@ import {
   file,
   folder,
   makeTreeStubs,
+  FILTER_TIMEOUT,
+  waitForTree,
   panelState,
   renderLibrary,
 } from "../test/libraryFixtures";
@@ -58,9 +61,10 @@ import {
 } from "../test/selectors";
 import { resetPanelReveals } from "../state/panelReveal";
 
-const { mockInvoke, setLoadTree } = makeTreeStubs(invokeMock);
+const { mockInvoke, setTree } = makeTreeStubs(invokeMock);
 
 beforeEach(() => {
+  resetLogBufferForTest();
   // Module-level, like the preferences cache: reveal nonces are minted from
   // one counter for the app's life, so a suite that does not reset finds its
   // first request already consumed by the previous one.
@@ -77,15 +81,16 @@ afterEach(() => {
 describe("Library filesystem tree", () => {
   // LIB-FR-07: tree mirrors on-disk nesting; no separate "Flows" group.
   it("renders folders and files nested as on disk, with no Flows group", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
 
     // Folders + files appear. Children show because the persisted state this
     // fixture supplies has every folder expanded (LIB-FR-15) — folders are not
-    // expanded by default.
+    // expanded by default. Each expanded folder loads its children on its own
+    // read (LIB-FR-EMOO), so a nested row is waited for.
     expect(await screen.findByText(".claude")).toBeInTheDocument();
-    expect(screen.getByText("skills")).toBeInTheDocument();
-    expect(screen.getByText("onboarding.md")).toBeInTheDocument();
+    expect(await screen.findByText("skills")).toBeInTheDocument();
+    expect(await screen.findByText("onboarding.md")).toBeInTheDocument();
     expect(screen.getByText("specifications")).toBeInTheDocument();
     expect(screen.getByText("AGENTS.md")).toBeInTheDocument();
     // The Flow appears at its natural location — there is no "Flows" group.
@@ -96,7 +101,7 @@ describe("Library filesystem tree", () => {
   // LIB-FR-03: clicking a non-Flow file asks to open it (App routes it to
   // an Editor tab via the resolved artifact type).
   it("opens a non-Flow file with its resolved type", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     const { onOpenArtifact } = renderLibrary();
 
     fireEvent.click(await screen.findByText("onboarding.md"));
@@ -111,7 +116,7 @@ describe("Library filesystem tree", () => {
   // a test whose fixture always spelled `.flow` would keep passing if the
   // routing went back to reading the filename.
   it("opens a Flow file by its resolved type, whatever it is named", async () => {
-    setLoadTree({
+    setTree({
       ...baseTree(),
       children: [
         ...(baseTree().children ?? []),
@@ -133,9 +138,10 @@ describe("Library filesystem tree", () => {
 
   // LIB-FR-05, LIB-FR-06: type filter hides non-matching nodes; expand state preserved.
   it("filters by artifact type, hiding non-matching nodes", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
     await screen.findByText("onboarding.md");
+    await waitForTree();
 
     await pickSelector("Filter by type", "skill");
 
@@ -152,7 +158,7 @@ describe("Library filesystem tree", () => {
   // The unclassified file only surfaces under the "All files" lens (LIB-FR-12),
   // so switch to it before asserting the no-tag case.
   it("shows a type tag for classified files and none for unclassified", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
 
     const specRow = (await screen.findByText("specifications/LIB-library.md".split("/").pop()!))
@@ -170,9 +176,10 @@ describe("Library filesystem tree", () => {
   // is hidden under the default "All artifacts" lens; "All files" reveals the
   // folder together with its unclassified files.
   it("hides artifact-less folders by default and reveals them under All files", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
     await screen.findByText("AGENTS.md");
+    await waitForTree();
 
     // `misc` holds only the unclassified `todo.txt` -> hidden by default.
     expect(screen.queryByText("misc")).not.toBeInTheDocument();
@@ -185,19 +192,38 @@ describe("Library filesystem tree", () => {
 
   // LCM-FR-04: assign a folder type via the context menu.
   it("assigns a folder type and re-tags its files without a manual reload", async () => {
-    // After assignment, the backend returns a tree where misc's file is a spec.
-    const reassigned = folder("", true, [
-      folder("misc", true, [file("misc/todo.txt", "spec", "inherited")]),
-    ]);
+    // The assignment returns the folder's node at once (LCM-FR-04). The
+    // watcher then reports the folder's answer changed (LIB-FR-10), and the
+    // reload shows misc's file as a spec.
+    let current = baseTree();
+    const reassigned = () => {
+      const t = baseTree();
+      t.children = t.children!.map((c) =>
+        c.id === "misc"
+          ? folder("misc", true, [file("misc/todo.txt", "spec", "inherited")])
+          : c,
+      );
+      return t;
+    };
     mockInvoke(
       {
-        load_project_tree: () => baseTree(),
-        assign_artifact_type: () => reassigned,
+        tree: () => current,
+        assign_artifact_type: () => {
+          current = reassigned();
+          return {
+            ...folder("misc", true, []),
+            children: undefined,
+            artifactType: "spec",
+            typeSource: "assigned",
+            hasChildren: true,
+          };
+        },
       },
       expandedAll(baseTree()),
     );
     renderLibrary();
     await screen.findByText("AGENTS.md");
+    await waitForTree();
 
     // Reveal the artifact-less folder (via the "All files" lens) so it can be
     // right-clicked.
@@ -217,9 +243,23 @@ describe("Library filesystem tree", () => {
         scope: "folder",
       }),
     );
-    // The re-tagged file now renders with a Spec tag.
-    const fileRow = (await screen.findByText("todo.txt")).closest(".tree-row")!;
-    expect(within(fileRow as HTMLElement).getByText("SPC")).toBeInTheDocument();
+    // The returned node re-tags the folder row at once, with no reload.
+    await waitFor(() =>
+      expect(
+        within(screen.getByText("misc").closest(".tree-row") as HTMLElement).getByText("SPC"),
+      ).toBeInTheDocument(),
+    );
+    // The watcher's event names the changed folder, and its reload re-tags
+    // the file.
+    listeners[PROJECT_TREE_CHANGED]?.({
+      payload: { changeCount: 1, changedFolders: ["misc"] },
+    });
+    await waitFor(() => {
+      const fileRow = screen.getByText("todo.txt").closest(".tree-row") as HTMLElement;
+      expect(within(fileRow).getByText("SPC")).toBeInTheDocument();
+    });
+    // No manual rescan was used.
+    expect(invokeMock.mock.calls.some((c) => c[0] === "rescan_project_tree")).toBe(false);
   });
 
   // LIB-FR-06, LIB-FR-10: a `"project tree changed"` event reloads the tree, preserving
@@ -233,20 +273,14 @@ describe("Library filesystem tree", () => {
       ]),
       file("created-externally.md", "spec", "inferred"),
     ]);
-    mockInvoke(
-      {
-        load_project_tree: () =>
-          // First load = base tree; subsequent loads (after the event) include
-          // the externally-created file.
-          invokeMock.mock.calls.filter((c) => c[0] === "load_project_tree")
-            .length === 1
-            ? baseTree()
-            : withNewFile,
-      },
-      expandedAll(baseTree()),
-    );
+    // The loads before the event read the base tree; those after it read the
+    // tree that holds the externally-created file.
+    let current = baseTree();
+    mockInvoke({ tree: () => current }, expandedAll(baseTree()));
     renderLibrary();
     await screen.findByText("onboarding.md");
+    await waitForTree();
+    expect(screen.queryByText("created-externally.md")).not.toBeInTheDocument();
 
     // Click `.claude`: this both selects it and collapses it, so we can prove
     // the reload preserves BOTH selection and expand state (LIB-FR-06).
@@ -256,8 +290,11 @@ describe("Library filesystem tree", () => {
       screen.getByText(".claude").closest(".tree-row"),
     ).toHaveAttribute("data-selected", "true");
 
-    // Fire the backend event.
-    listeners[PROJECT_TREE_CHANGED]?.({ payload: { changeCount: 1 } });
+    // Fire the backend event: the root's answer changed.
+    current = withNewFile;
+    listeners[PROJECT_TREE_CHANGED]?.({
+      payload: { changeCount: 1, changedFolders: [""] },
+    });
 
     // New file appears…
     expect(await screen.findByText("created-externally.md")).toBeInTheDocument();
@@ -273,9 +310,10 @@ describe("Library filesystem tree", () => {
   // surfaces a matching unclassified file inside an otherwise-hidden folder,
   // while non-matching top-level files are hidden by the same text filter.
   it("AND-combines the All files lens with a text filter to reveal one file", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
     await screen.findByText("AGENTS.md");
+    await waitForTree();
 
     // `misc` holds only the unclassified `todo.txt` and is hidden by default.
     expect(screen.queryByText("misc")).not.toBeInTheDocument();
@@ -283,17 +321,28 @@ describe("Library filesystem tree", () => {
     await pickSelector("Filter by type", "files");
     await userEvent.type(screen.getByLabelText("Filter tree"), "todo");
 
+    // The backend answers the filter after a rest in typing (LIB-FR-PPAT).
+    // Non-matching top-level files are hidden by the AND-combined text filter.
+    // LIB-FR-PPAT: a loading row stands for the tree until the filter answers.
+    await waitForTree(FILTER_TIMEOUT);
+    await waitFor(
+      () => expect(screen.queryByText("AGENTS.md")).not.toBeInTheDocument(),
+      FILTER_TIMEOUT,
+    );
     // The unclassified file is now reachable and its folder is shown for it.
     expect(screen.getByText("misc")).toBeInTheDocument();
     expect(screen.getByText("todo.txt")).toBeInTheDocument();
-    // Non-matching top-level files are hidden by the AND-combined text filter.
-    expect(screen.queryByText("AGENTS.md")).not.toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith("filter_project_tree", {
+      text: "todo",
+      lens: "all_files",
+      limit: 2000,
+    });
   });
 
   // LIB-FR-12: the default "All artifacts" lens shows classified artifacts and
   // hides unclassified tooling/config files (the reported bug fix, LIB-FR-12).
   it("hides unclassified files under the default All artifacts lens", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
 
     // Classified artifacts at the root are shown…
@@ -306,9 +355,10 @@ describe("Library filesystem tree", () => {
   // LIB-FR-08: the "All files" lens shows every file, unclassified ones included
   // and rendered without a type tag (LIB-FR-08).
   it("shows every file under the All files lens, unclassified without a tag", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
     await screen.findByText("AGENTS.md");
+    await waitForTree();
 
     await pickSelector("Filter by type", "files");
 
@@ -333,25 +383,27 @@ describe("Library filesystem tree", () => {
       ]),
       file("lib-agent.md", "agent", "inferred"),
     ]);
-    setLoadTree(tree);
+    setTree(tree);
     renderLibrary();
     await screen.findByText("LIB-library.md");
+    await waitForTree();
 
     await pickSelector("Filter by type", "spec");
     await userEvent.type(screen.getByLabelText("Filter tree"), "lib");
 
     // The spec named "lib…" survives; the agent named "lib…" is excluded by the
-    // type half of the AND.
-    expect(screen.getByText("LIB-library.md")).toBeInTheDocument();
+    // type half of the AND. The backend answers after a rest in typing.
+    expect(await screen.findByText("LIB-library.md", {}, FILTER_TIMEOUT)).toBeInTheDocument();
     expect(screen.queryByText("lib-agent.md")).not.toBeInTheDocument();
   });
 
   // LIB-FR-09: under a specific-type lens, a folder whose only descendants are
   // a DIFFERENT classified type is hidden.
   it("hides a folder of a different classified type under a specific lens", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
     await screen.findByText("onboarding.md");
+    await waitForTree();
 
     await pickSelector("Filter by type", "skill");
 
@@ -381,9 +433,10 @@ describe("Library filesystem tree", () => {
       typed,
       folder("hollow", false, [folder("hollow/sub", false, [])]),
     ]);
-    setLoadTree(tree);
+    setTree(tree);
     renderLibrary();
     await screen.findByText("AGENTS.md");
+    await waitForTree();
 
     // All artifacts (the default): the typed folder shows, the untyped one does
     // not.
@@ -421,18 +474,25 @@ describe("Library filesystem tree", () => {
       folder("specifications", true, [file("specifications/x.md", "spec", "inferred")]),
       file("AGENTS.md", "agent", "inferred"),
     ]);
-    setLoadTree(tree, panelState({ expandedPaths: allFolderIds(tree) }));
+    setTree(tree, panelState({ expandedPaths: allFolderIds(tree) }));
     renderLibrary();
     await screen.findByText("specifications");
+    await waitForTree();
 
     await pickSelector("Filter by type", "files");
     await userEvent.type(screen.getByLabelText("Filter tree"), "specif");
 
     // The folder matches by name; its child does not match, so it is filtered out
-    // of the folder's rendered children.
+    // of the folder's rendered children. The backend answers the filter after
+    // a rest in typing (LIB-FR-PPAT).
+    // LIB-FR-PPAT: a loading row stands for the tree until the filter answers.
+    await waitForTree(FILTER_TIMEOUT);
+    await waitFor(
+      () => expect(screen.queryByText("AGENTS.md")).not.toBeInTheDocument(),
+      FILTER_TIMEOUT,
+    );
     expect(screen.getByText("specifications")).toBeInTheDocument();
     expect(screen.queryByText("x.md")).not.toBeInTheDocument();
-    expect(screen.queryByText("AGENTS.md")).not.toBeInTheDocument();
   });
 
   // LIB-FR-08: a folder carrying its own folder-scope assignment wears the tag,
@@ -447,7 +507,7 @@ describe("Library filesystem tree", () => {
       // Holds an `agent` file but carries no assignment of its own.
       folder("src", true, [file("src/AGENTS.md", "agent", "inferred")]),
     ]);
-    setLoadTree(tree);
+    setTree(tree);
     renderLibrary();
 
     const draftsRow = (await screen.findByText("drafts")).closest(".tree-row")!;
@@ -465,9 +525,10 @@ describe("Library filesystem tree", () => {
   it("offers All Artifacts, the present types, then All Files — title-cased", async () => {
     // `baseTree` holds a skill, a spec, an agent, and a flow, and nothing of
     // the other four types.
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
     await screen.findByText("AGENTS.md");
+    await waitForTree();
 
     expect(selectorNames("Filter by type")).toEqual([
       "All Artifacts",
@@ -491,9 +552,10 @@ describe("Library filesystem tree", () => {
   // LIB-FR-06: expand/collapse state and selection are preserved across a lens
   // change (not just across tree reloads).
   it("preserves collapse state and selection across a lens change", async () => {
-    setLoadTree(baseTree());
+    setTree(baseTree());
     renderLibrary();
     await screen.findByText("onboarding.md");
+    await waitForTree();
 
     // Collapse `.claude` (also selects it).
     fireEvent.click(screen.getByText(".claude"));
@@ -518,7 +580,7 @@ describe("Library filesystem tree", () => {
   it("varies the empty-state message by the active lens", async () => {
     // A tree with only an unclassified file: empty under "All artifacts" and any
     // specific type, non-empty under "All files".
-    setLoadTree(folder("", false, [file("notes.txt")]));
+    setTree(folder("", false, [file("notes.txt")]));
     renderLibrary();
 
     // Default "All artifacts" lens: nothing classified -> artifacts message.
@@ -534,12 +596,12 @@ describe("Library filesystem tree", () => {
     expect(screen.queryByText(/No .*found\./)).not.toBeInTheDocument();
   });
 
-  // LIB error path: load_project_tree rejecting (e.g. "no project open")
+  // LIB error path: the root's list_tree_children rejecting (e.g. "no project open")
   // surfaces an inline message instead of crashing.
   it("shows an inline error when the tree fails to load", async () => {
     mockInvoke(
       {
-        load_project_tree: () => {
+        tree: () => {
           throw "no project open";
         },
       },
@@ -549,18 +611,30 @@ describe("Library filesystem tree", () => {
     expect(await screen.findByText(/no project open/)).toBeInTheDocument();
   });
 
-  // LIB-FR-11: the manual rescan affordance re-renders the returned tree.
+  // LIB-FR-11: the manual rescan affordance re-renders the returned root.
   it("re-renders the tree when the manual rescan affordance is used", async () => {
-    const rescanned = folder("", true, [file("fresh.md", "spec", "inferred")]);
+    // The rescan builds the index again; from then on every read sees the
+    // rescanned project.
+    let current = baseTree();
+    const rescanned = folder("", true, [
+      folder(".claude", true, [
+        folder(".claude/skills", true, [file(".claude/skills/fresh-skill.md", "skill", "inferred")]),
+      ]),
+      file("fresh.md", "spec", "inferred"),
+    ]);
     mockInvoke(
       {
-        load_project_tree: () => baseTree(),
-        rescan_project_tree: () => rescanned,
+        tree: () => current,
+        rescan_project_tree: () => {
+          current = rescanned;
+          return rescanned.children!.map((c) => ({ ...c, children: undefined, hasChildren: true }));
+        },
       },
       expandedAll(baseTree()),
     );
     renderLibrary();
-    await screen.findByText("AGENTS.md");
+    await screen.findByText("onboarding.md");
+    await waitForTree();
 
     await userEvent.click(screen.getByLabelText("Rescan project tree"));
 
@@ -568,5 +642,10 @@ describe("Library filesystem tree", () => {
       expect(invokeMock).toHaveBeenCalledWith("rescan_project_tree"),
     );
     expect(await screen.findByText("fresh.md")).toBeInTheDocument();
+    expect(screen.queryByText("AGENTS.md")).not.toBeInTheDocument();
+    // The rescan drops every loaded folder, and the expanded ones load again
+    // as their rows render (LIB-FR-EMOO).
+    expect(await screen.findByText("fresh-skill.md")).toBeInTheDocument();
+    expect(screen.queryByText("onboarding.md")).not.toBeInTheDocument();
   });
 });

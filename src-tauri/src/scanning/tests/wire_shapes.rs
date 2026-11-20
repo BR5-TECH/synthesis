@@ -29,6 +29,9 @@ fn tree_node_serializes_camelcase_and_omits_empty_optionals() {
         type_source: Some(TypeSource::Inferred),
         display_name: None,
         has_artifacts: None,
+        subtree_types: None,
+        has_children: None,
+        nested_repo: None,
         children: None,
     };
     let json = serde_json::to_value(&file).unwrap();

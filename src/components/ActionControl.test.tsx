@@ -146,8 +146,8 @@ function wire(b: Backend): (cmd: string, args: unknown) => Promise<unknown> {
           startedAt: "2026-01-01T00:00:00Z",
           endedAt: null,
         };
-      case "load_project_tree":
-        return { id: "", name: "p", path: "", nodeKind: "folder", children: [] };
+      case "list_project_artifacts":
+        return [];
       case "get_diff":
         return { hunks: [], binary: false, deleted: false };
       default:

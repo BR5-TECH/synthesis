@@ -164,3 +164,20 @@ fn a_table_keeps_its_cells_beside_an_aligned_block() {
         "the table has borders"
     );
 }
+
+// DXP-FR-SEDX: two V1 breaks in sequence are two page breaks of the PDF.
+#[test]
+fn pdf_two_v1_breaks_are_two_page_breaks() {
+    let pages = pdf_pages("First.\n\n<!-- % -->\n<!-- % -->\nLast.\n");
+    assert_eq!(pages.len(), 3, "{pages:?}");
+}
+
+// DXP-FR-RWWA: a spacer is no exported block for the trim, so a V2 then a V1
+// at the start makes no page of empty space alone.
+#[test]
+fn a_leading_spacer_then_v1_makes_no_page_break() {
+    assert_eq!(docx_page_breaks(&docx_xml("<!-- %% -->\n<!-- % -->\na\n", false)), 0);
+    assert_eq!(pdf_pages("<!-- %% -->\n<!-- % -->\nOnly.\n").len(), 1);
+    // With the frontmatter left out, a leading V1 has no block before it.
+    assert_eq!(docx_page_breaks(&docx_xml("---\ntitle: T\n---\n<!-- % -->\nbody\n", false)), 0);
+}

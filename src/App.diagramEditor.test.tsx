@@ -6,6 +6,8 @@ import { listen } from "@tauri-apps/api/event";
 vi.mock("mermaid", async () => (await import("./test/mermaidMock")).mermaidModule);
 
 import App from "./App";
+import { treeCommand } from "./test/treeCommands";
+import type { TreeNode } from "./types";
 import { resetDiagramEditorForTest } from "./components/DiagramEditor/store";
 import { resetMermaidForTest } from "./components/markdownMermaidRender";
 import { resetMermaidMock } from "./test/mermaidMock";
@@ -115,7 +117,33 @@ vi.mock("@tauri-apps/api/window", () => {
   };
 });
 
-function defaultInvoke(cmd: string) {
+/** The project tree every tree read is answered from (`test/treeCommands.ts`). */
+const TREE: TreeNode = {
+  id: "",
+  name: "acme",
+  path: "",
+  nodeKind: "folder",
+  children: [
+    {
+      id: "a.md",
+      name: "a.md",
+      path: "a.md",
+      nodeKind: "file",
+      artifactType: "spec",
+    },
+    {
+      id: "b.md",
+      name: "b.md",
+      path: "b.md",
+      nodeKind: "file",
+      artifactType: "spec",
+    },
+  ],
+};
+
+function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
+  const read = treeCommand(cmd, args, TREE);
+  if (read) return read;
   switch (cmd) {
     case "list_recent_projects":
       return [
@@ -128,29 +156,6 @@ function defaultInvoke(cmd: string) {
       return null;
     case "load_app_preferences":
       return { theme: "dark" };
-    case "load_project_tree":
-      return {
-        id: "",
-        name: "acme",
-        path: "",
-        nodeKind: "folder",
-        children: [
-          {
-            id: "a.md",
-            name: "a.md",
-            path: "a.md",
-            nodeKind: "file",
-            artifactType: "spec",
-          },
-          {
-            id: "b.md",
-            name: "b.md",
-            path: "b.md",
-            nodeKind: "file",
-            artifactType: "spec",
-          },
-        ],
-      };
     case "validate_flow_document":
       // FGV-FR-02 / FLO-FR-46: the backend judges a Flow body before the canvas
       // renders it. The rules themselves are covered by the Rust suite.
@@ -209,7 +214,7 @@ beforeEach(() => {
   refreshListeners();
   listenMock.mockClear();
   invokeMock.mockReset();
-  invokeMock.mockImplementation(async (cmd: string) => defaultInvoke(cmd));
+  invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => defaultInvoke(cmd, args));
   resetLogBufferForTest();
   resetDiagramEditorForTest();
   resetMermaidForTest();

@@ -596,7 +596,6 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
                 state={delivery.states?.get(c.selected.id)}
                 references={resolveReferences(c.selected.artifactIds, byId, project.loaded)}
                 artifacts={project.referenceable}
-                paths={project.paths}
                 treeLoaded={project.loaded}
                 inert={inert}
                 at={panelAt}
@@ -619,7 +618,6 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
                 facts={factsOf(c.selected)}
                 references={resolveReferences(c.selected.artifactIds, byId, project.loaded)}
                 artifacts={project.referenceable}
-                paths={project.paths}
                 treeLoaded={project.loaded}
                 inert={inert}
                 handlers={editHandlersOf(c.selected)}

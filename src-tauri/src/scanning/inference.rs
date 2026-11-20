@@ -202,6 +202,17 @@ pub fn infer_from_content(text: &str) -> Option<ArtifactType> {
     read_content_facts(text).artifact_type
 }
 
+/// ASC-FR-HWQJ: whether a leading `---` frontmatter block closes inside
+/// `text`. A text with no frontmatter counts as closed, as it has nothing to
+/// cut.
+pub(super) fn frontmatter_closes(text: &str) -> bool {
+    let mut lines = text.lines();
+    match lines.next() {
+        Some(l) if l.trim() == "---" => lines.any(|l| l.trim() == "---"),
+        _ => true,
+    }
+}
+
 /// ASC-FR-19: whether `rel` is a file whose declared name identifies it, because
 /// its filename does not. A skill lives in `SKILL.md`, so every skill in a
 /// project shares one filename; nothing else in the built-in type set has that

@@ -9,17 +9,64 @@ import type {
   ArtifactContents,
   ArtifactType,
   AssignScope,
+  FilterResult,
+  FolderChildren,
   OpenedArtifact,
   FlowValidationReport,
+  PathSearch,
   SaveResult,
+  TreeLens,
   TreeNode,
 } from "../types";
 
 // --- Library tree (library.rs) --------------------------------------------
 
-export const loadProjectTree = () => invoke<TreeNode>("load_project_tree");
+/** ASC-FR-KVIE: the direct children of one folder; `""` is the project root. */
+export const listTreeChildren = (path: string) =>
+  invoke<TreeNode[]>("list_tree_children", { path });
 
-export const rescanProjectTree = () => invoke<TreeNode>("rescan_project_tree");
+/** ASC-FR-AGGG: the children of each folder on the way to `path`, or null. */
+export const listTreePath = (path: string) =>
+  invoke<FolderChildren[] | null>("list_tree_path", { path });
+
+/** ASC-FR-SKRN: the nodes that match a text under a lens, with ancestors. */
+export const filterProjectTree = (text: string, lens: TreeLens, limit: number) =>
+  invoke<FilterResult>("filter_project_tree", { text, lens, limit });
+
+/** ASC-FR-YNJR: every typed file and every typed folder, flat. */
+export const listProjectArtifacts = () => invoke<TreeNode[]>("list_project_artifacts");
+
+/**
+ * A list of nodes as the children of one synthetic root, for the helpers that
+ * walk a tree (`flowFiles`, `artifactTargets`, `dockerfileCandidates`).
+ */
+export const asTreeRoot = (children: TreeNode[]): TreeNode => ({
+  id: "",
+  name: "",
+  path: "",
+  nodeKind: "folder",
+  children,
+});
+
+/** ASC-FR-YNJR: the typed nodes, as the children of one synthetic root. */
+export const loadProjectArtifactsTree = async () => asTreeRoot(await listProjectArtifacts());
+
+/** ASC-FR-AVVY: the project paths of a kind that hold `text`. */
+export const searchProjectPaths = (
+  text: string,
+  kind: "file" | "folder" | "any",
+  limit?: number,
+) => invoke<PathSearch>("search_project_paths", { text, kind, limit: limit ?? null });
+
+/** ASC-FR-QKXR: the paths of `paths` that the project index holds. */
+export const existingProjectPaths = (paths: string[]) =>
+  invoke<string[]>("existing_project_paths", { paths });
+
+/** ASC-FR-11: build the index again and return the children of the root. */
+export const rescanProjectTree = () => invoke<TreeNode[]>("rescan_project_tree");
+
+/** The error a tree read gives for a folder the index does not hold. */
+export const ERR_PATH_NOT_IN_TREE = "path_not_in_tree";
 
 export const assignArtifactType = (
   path: string,

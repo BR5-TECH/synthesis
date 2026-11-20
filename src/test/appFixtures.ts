@@ -12,6 +12,9 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect } from "vitest";
 
+import type { TreeNode } from "../types";
+import { treeCommand } from "./treeCommands";
+
 let saveAppPrefsImpl: () => unknown = () => undefined;
 /** Which worktree the backend currently reports as rooting the project. */
 export let activeWorktreePath: string = "~/dev/acme";
@@ -51,7 +54,67 @@ let createdDrafts: {
   updatedAt: string;
 }[] = [];
 
+/**
+ * A minimal Library tree holding the one artifact the Changes fixtures also
+ * report, so the Editor-tab half of CHG-FR-20 has something to open. Every
+ * tree read is answered from it (`treeCommands.ts`).
+ */
+export const APP_TREE: TreeNode = {
+  id: "",
+  name: "acme",
+  path: "",
+  nodeKind: "folder",
+  hasArtifacts: true,
+  children: [
+    {
+      id: "src",
+      name: "src",
+      path: "src",
+      nodeKind: "folder",
+      // Unclassified: visible only under the Library's "All files" lens
+      // (LIB-FR-12), which is TAB-FR-02, TAB-FR-04, TAB-FR-05's second entry point.
+      hasArtifacts: false,
+      children: [
+        {
+          id: "src/main.rs",
+          name: "main.rs",
+          path: "src/main.rs",
+          nodeKind: "file",
+        },
+      ],
+    },
+    {
+      id: "specifications",
+      name: "specifications",
+      path: "specifications",
+      nodeKind: "folder",
+      hasArtifacts: true,
+      children: [
+        {
+          id: "specifications/ui",
+          name: "ui",
+          path: "specifications/ui",
+          nodeKind: "folder",
+          hasArtifacts: true,
+          children: [
+            {
+              id: "specifications/ui/CHG-changes.md",
+              name: "CHG-changes.md",
+              path: "specifications/ui/CHG-changes.md",
+              nodeKind: "file",
+              artifactType: "spec",
+              typeSource: "inferred",
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
 export function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
+  const read = treeCommand(cmd, args, APP_TREE);
+  if (read) return read;
   switch (cmd) {
     // NTD-FR-02: the platform's disposition, read at startup (NTF-FR-13).
     // Granted, so the post policy of NTF-FR-08/NTF-FR-11 is the only thing
@@ -131,62 +194,6 @@ export function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
     case "list_installed_plugins":
     case "list_agent_adapters":
       return [];
-    // A minimal Library tree holding the one artifact the Changes fixtures
-    // also report, so the Editor-tab half of CHG-FR-20 has something to open.
-    case "load_project_tree":
-    case "rescan_project_tree":
-      return {
-        id: "",
-        name: "acme",
-        path: "",
-        nodeKind: "folder",
-        hasArtifacts: true,
-        children: [
-          {
-            id: "src",
-            name: "src",
-            path: "src",
-            nodeKind: "folder",
-            // Unclassified: visible only under the Library's "All files" lens
-            // (LIB-FR-12), which is TAB-FR-02, TAB-FR-04, TAB-FR-05's second entry point.
-            hasArtifacts: false,
-            children: [
-              {
-                id: "src/main.rs",
-                name: "main.rs",
-                path: "src/main.rs",
-                nodeKind: "file",
-              },
-            ],
-          },
-          {
-            id: "specifications",
-            name: "specifications",
-            path: "specifications",
-            nodeKind: "folder",
-            hasArtifacts: true,
-            children: [
-              {
-                id: "specifications/ui",
-                name: "ui",
-                path: "specifications/ui",
-                nodeKind: "folder",
-                hasArtifacts: true,
-                children: [
-                  {
-                    id: "specifications/ui/CHG-changes.md",
-                    name: "CHG-changes.md",
-                    path: "specifications/ui/CHG-changes.md",
-                    nodeKind: "file",
-                    artifactType: "spec",
-                    typeSource: "inferred",
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
     case "validate_flow_document":
       // FGV-FR-02 / FLO-FR-46: the backend judges a Flow body before the canvas
       // renders it. The rules themselves are covered by the Rust suite.

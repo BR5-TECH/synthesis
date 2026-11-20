@@ -2,6 +2,7 @@
  * The Library panel state persisted per machine and per worktree
  * (`../../specifications/ui/LIB-library.md`, LIB-FR-13 … LIB-FR-17).
  */
+import { resetLogBufferForTest } from "../logging";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -40,6 +41,8 @@ import {
   folder,
   LibraryHost,
   makeTreeStubs,
+  FILTER_TIMEOUT,
+  waitForTree,
   panelState,
   renderLibrary,
 } from "../test/libraryFixtures";
@@ -48,13 +51,14 @@ import type { LibraryPanelState, TreeChangedPayload, TreeNode } from "../types";
 import { PROJECT_TREE_CHANGED } from "../events";
 import { pickSelector, selectorValue } from "../test/selectors";
 import { resetPanelReveals } from "../state/panelReveal";
+import { treeCommand } from "../test/treeCommands";
 
-const { mockInvoke, setLoadTree } = makeTreeStubs(invokeMock);
+const { mockInvoke, setTree } = makeTreeStubs(invokeMock);
 
 /** The payload of the most recent `save_library_panel_state` call, if any. */
 /**
  * The commands invoked so far, minus the traffic that is not the panel acting on
- * the user's behalf: its own tree load and panel-state round trip, and
+ * the user's behalf: its own folder reads and type list, its panel-state round trip, and
  * `append_log_records`. The log batch is flushed off a timer (`../logging`), so
  * whether it lands inside any given test is a matter of timing rather than
  * behaviour — leaving it in makes every exhaustive assertion below flaky.
@@ -64,7 +68,8 @@ function commandsBeyondPanelTraffic(): string[] {
     .map((c) => c[0] as string)
     .filter(
       (cmd) =>
-        cmd !== "load_project_tree" &&
+        cmd !== "list_tree_children" &&
+        cmd !== "list_project_artifacts" &&
         cmd !== "load_library_panel_state" &&
         cmd !== "save_library_panel_state" &&
         cmd !== "append_log_records",
@@ -103,6 +108,7 @@ async function settleDebounce() {
 const SAVE_TIMEOUT = { timeout: PERSIST_DEBOUNCE_MS + 2500 };
 
 beforeEach(() => {
+  resetLogBufferForTest();
   // Module-level, like the preferences cache: reveal nonces are minted from
   // one counter for the app's life, so a suite that does not reset finds its
   // first request already consumed by the previous one.
@@ -122,7 +128,7 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
   // every folder collapsed, the All artifacts lens, an empty text filter — with
   // the root's immediate children visible (LIB-FR-12 / LIB-FR-15).
   it("renders the defaults for a worktree with no persisted state", async () => {
-    setLoadTree(baseTree(), panelState());
+    setTree(baseTree(), panelState());
     renderLibrary();
 
     // The root's immediate children are visible…
@@ -143,7 +149,7 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
   // LIB-FR-06, LIB-FR-14, LIB-FR-15: the persisted set is restored — those folders expand, every
   // folder absent from it stays collapsed, and nothing is selected.
   it("restores exactly the persisted expanded folders, with no selection", async () => {
-    setLoadTree(
+    setTree(
       baseTree(),
       panelState({ expandedPaths: [".claude", ".claude/skills"] }),
     );
@@ -151,7 +157,7 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
 
     // The two persisted folders are expanded, down to the nested file…
     expect(await screen.findByText("skills")).toBeInTheDocument();
-    expect(screen.getByText("onboarding.md")).toBeInTheDocument();
+    expect(await screen.findByText("onboarding.md")).toBeInTheDocument();
     // …while `specifications`, absent from the set, is collapsed.
     expect(screen.getByText("specifications")).toBeInTheDocument();
     expect(screen.queryByText("LIB-library.md")).not.toBeInTheDocument();
@@ -165,7 +171,7 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
 
   // LIB-FR-14: the lens and the text filter are restored alongside the tree.
   it("restores the artifact-type lens and the text filter", async () => {
-    setLoadTree(
+    setTree(
       baseTree(),
       panelState({
         expandedPaths: ["misc"],
@@ -181,19 +187,29 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
     expect(screen.getByLabelText("Filter tree")).toHaveValue("todo");
     // The restored pair is actually applied: the unclassified file inside the
     // artifact-less folder is reachable, and non-matching files are hidden.
+    // The backend answers the filter after a rest in typing (LIB-FR-PPAT).
+    // `todo.txt` shows once the tree is loaded, and `AGENTS.md` goes only when
+    // the filter result lands.
+    await waitFor(() => {
+      expect(screen.getByText("todo.txt")).toBeInTheDocument();
+      expect(screen.queryByText("AGENTS.md")).not.toBeInTheDocument();
+    }, FILTER_TIMEOUT);
     expect(screen.getByText("misc")).toBeInTheDocument();
-    expect(screen.getByText("todo.txt")).toBeInTheDocument();
-    expect(screen.queryByText("AGENTS.md")).not.toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith("filter_project_tree", {
+      text: "todo",
+      lens: "all_files",
+      limit: 2000,
+    });
   });
 
   // LIB-FR-14: expanding a folder persists the new set, recording expansion
   // rather than collapse (LIB-FR-15).
   it("persists the expanded set when a folder is expanded", async () => {
-    setLoadTree(baseTree(), panelState());
+    setTree(baseTree(), panelState());
     renderLibrary();
 
     fireEvent.click(await screen.findByText("specifications"));
-    expect(screen.getByText("LIB-library.md")).toBeInTheDocument();
+    expect(await screen.findByText("LIB-library.md")).toBeInTheDocument();
 
     await waitFor(() =>
       expect(lastSave()).toEqual({
@@ -207,7 +223,7 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
   // LIB-FR-15: collapsing a folder removes it from the persisted set rather
   // than recording a collapse.
   it("removes a folder from the persisted set when it is collapsed", async () => {
-    setLoadTree(baseTree(), panelState({ expandedPaths: ["specifications"] }));
+    setTree(baseTree(), panelState({ expandedPaths: ["specifications"] }));
     renderLibrary();
 
     fireEvent.click(await screen.findByText("specifications"));
@@ -219,12 +235,13 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
   // LIB-FR-17: the record is written whole, so a lens change carries the
   // expanded set and the text filter through unchanged.
   it("carries the other two values through when one changes", async () => {
-    setLoadTree(
+    setTree(
       baseTree(),
       panelState({ expandedPaths: [".claude"], textFilter: "md" }),
     );
     renderLibrary();
     await screen.findByText("skills");
+    await waitForTree();
 
     await pickSelector("Filter by type", "files");
 
@@ -240,9 +257,10 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
   // LIB-FR-17: a run of keystrokes coalesces into a single write carrying the
   // final text, not one write per character.
   it("coalesces a burst of text-filter keystrokes into one write", async () => {
-    setLoadTree(baseTree(), panelState({ expandedPaths: [".claude"] }));
+    setTree(baseTree(), panelState({ expandedPaths: [".claude"] }));
     renderLibrary();
     await screen.findByText("skills");
+    await waitForTree();
 
     const input = screen.getByLabelText("Filter tree");
     // Four separate changes in quick succession, inside the debounce window.
@@ -259,7 +277,7 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
 
   // LIB-FR-17: a value changed and changed straight back is not written at all.
   it("does not write when the state returns to what was persisted", async () => {
-    setLoadTree(
+    setTree(
       baseTree(),
       // Two entries, deliberately not in sorted order, so this also pins that
       // the guard compares sets rather than the order they were expanded in.
@@ -267,6 +285,7 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
     );
     renderLibrary();
     await screen.findByText("LIB-library.md");
+    await waitForTree();
 
     // Collapse and re-expand within the coalescing window.
     fireEvent.click(screen.getByText("specifications"));
@@ -282,20 +301,21 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
   // LIB-FR-17: several folders expanded in succession also coalesce — the FR
   // names this case alongside the keystroke burst.
   it("coalesces several folders expanded in succession into one write", async () => {
-    setLoadTree(baseTree(), panelState());
+    // Three top-level folders, so the three clicks need no folder read between
+    // them and all land inside the coalescing window.
+    const tree = baseTree();
+    tree.children!.push(folder("docs", true, [file("docs/guide.md", "doc", "inferred")]));
+    setTree(tree, panelState());
     renderLibrary();
-    await screen.findByText("specifications");
+    await screen.findByText("docs");
+    await waitForTree();
 
     fireEvent.click(screen.getByText(".claude"));
     fireEvent.click(screen.getByText("specifications"));
-    fireEvent.click(screen.getByText("skills"));
+    fireEvent.click(screen.getByText("docs"));
 
     await waitFor(() => expect(saveCount()).toBe(1), SAVE_TIMEOUT);
-    expect(lastSave()?.expandedPaths).toEqual([
-      ".claude",
-      ".claude/skills",
-      "specifications",
-    ]);
+    expect(lastSave()?.expandedPaths).toEqual([".claude", "docs", "specifications"]);
     // And nothing further is written once the burst has settled.
     await settleDebounce();
     expect(saveCount()).toBe(1);
@@ -314,20 +334,16 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
       ]),
       file("AGENTS.md", "agent", "inferred"),
     ]);
+    let current = withoutSpecs;
     mockInvoke(
-      {
-        load_project_tree: () =>
-          invokeMock.mock.calls.filter((c) => c[0] === "load_project_tree")
-            .length === 1
-            ? withoutSpecs
-            : baseTree(),
-      },
+      { tree: () => current },
       panelState({ expandedPaths: ["specifications", ".claude"] }),
     );
     renderLibrary();
 
     // The absent folder simply does not render, and nothing is reported.
     await screen.findByText("AGENTS.md");
+    await waitForTree();
     expect(screen.queryByText("specifications")).not.toBeInTheDocument();
     expect(document.querySelector(".vpanel__body")?.textContent).not.toContain(
       "specifications",
@@ -339,8 +355,11 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
     await waitFor(() => expect(lastSave()).not.toBeNull(), SAVE_TIMEOUT);
     expect(lastSave()?.expandedPaths).toContain("specifications");
 
-    // The folder returns on the watcher-driven reload…
-    listeners[PROJECT_TREE_CHANGED]?.({ payload: { changeCount: 1 } });
+    // The folder returns on the watcher-driven reload of the root…
+    current = baseTree();
+    listeners[PROJECT_TREE_CHANGED]?.({
+      payload: { changeCount: 1, changedFolders: [""] },
+    });
 
     // …and comes back expanded, because its path was never pruned.
     expect(await screen.findByText("LIB-library.md")).toBeInTheDocument();
@@ -351,12 +370,19 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
   // (LIB NFR). Holding the tree load open proves it: a chained implementation
   // could not have issued the panel-state load yet.
   it("issues the panel-state load without waiting for the tree load", async () => {
-    let releaseTree: (tree: TreeNode) => void = () => {};
-    const treeLoad = new Promise<TreeNode>((resolve) => {
+    let releaseTree: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
       releaseTree = resolve;
     });
     mockInvoke(
-      { load_project_tree: () => treeLoad },
+      {
+        tree: () => baseTree(),
+        // The folder reads wait for the gate.
+        list_tree_children: async (args) => {
+          await gate;
+          return treeCommand("list_tree_children", args, baseTree());
+        },
+      },
       panelState({ expandedPaths: [".claude", ".claude/skills"] }),
     );
     renderLibrary();
@@ -370,15 +396,17 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
     );
 
     // And when the tree does arrive it paints already-expanded.
-    releaseTree(baseTree());
+    releaseTree();
     expect(await screen.findByText("onboarding.md")).toBeInTheDocument();
   });
 
   // LIB NFR: a panel state that cannot be read leaves the tree usable on its
   // defaults rather than surfacing a blocking error.
   it("falls back to the defaults when the panel state cannot be read", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return baseTree();
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      const read = treeCommand(cmd, args, baseTree());
+      if (read) return read;
+      if (cmd === "append_log_records") return undefined;
       if (cmd === "load_library_panel_state") throw "no project open";
       if (cmd === "save_library_panel_state") return undefined;
       throw new Error(`unexpected invoke ${cmd}`);
@@ -395,8 +423,10 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
   // state is written again on the next change rather than being assumed durable.
   it("keeps the tree usable when persisting fails, and retries on the next change", async () => {
     let failWrites = true;
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return baseTree();
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      const read = treeCommand(cmd, args, baseTree());
+      if (read) return read;
+      if (cmd === "append_log_records") return undefined;
       if (cmd === "load_library_panel_state") return panelState();
       if (cmd === "save_library_panel_state") {
         if (failWrites) throw "disk full";
@@ -410,7 +440,7 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
     await waitFor(() => expect(saveCount()).toBe(1), SAVE_TIMEOUT);
 
     // The expansion still happened and no error is shown.
-    expect(screen.getByText("LIB-library.md")).toBeInTheDocument();
+    expect(await screen.findByText("LIB-library.md")).toBeInTheDocument();
     expect(screen.queryByText(/disk full/)).not.toBeInTheDocument();
 
     // The next change writes again — and carries the value the failed write was
@@ -427,8 +457,10 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
   // suppressed and never written at all.
   it("does not let an out-of-order write claim the persisted value", async () => {
     const resolvers: Array<() => void> = [];
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return baseTree();
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      const read = treeCommand(cmd, args, baseTree());
+      if (read) return read;
+      if (cmd === "append_log_records") return undefined;
       if (cmd === "load_library_panel_state") return panelState();
       if (cmd === "save_library_panel_state") {
         return new Promise<void>((resolve) => resolvers.push(resolve));
@@ -437,6 +469,7 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
     });
     renderLibrary();
     await screen.findByText("specifications");
+    await waitForTree();
 
     // Write #1: expand `specifications`. Held open.
     fireEvent.click(screen.getByText("specifications"));
@@ -462,13 +495,14 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
   // the expand/filter state must outlive that component. A pending write is not
   // lost either — the state lives above the surface switch.
   it("preserves the expanded set across a vertical-panel surface switch", async () => {
-    setLoadTree(baseTree(), panelState());
+    setTree(baseTree(), panelState());
     const { rerender } = render(<LibraryHost />);
 
     // Expand a folder, then switch surface immediately — inside the coalescing
     // window, so any pending write is still in flight.
+    // The folder's own read is not waited for, so the switch stays inside the
+    // window.
     fireEvent.click(await screen.findByText("specifications"));
-    expect(screen.getByText("LIB-library.md")).toBeInTheDocument();
     rerender(<LibraryHost surface="other" />);
     expect(screen.getByText("other surface")).toBeInTheDocument();
 
@@ -500,12 +534,13 @@ describe("worktree switch (LIB-FR-13)", () => {
         file("specifications/LIB-library.md", "spec", "inferred"),
       ]),
     ]);
-    setLoadTree(
+    setTree(
       baseTree(),
       panelState({ expandedPaths: ["specifications"], textFilter: "lib" }),
     );
     const { unmount } = render(<LibraryHost />);
     await screen.findByText("LIB-library.md");
+    await waitForTree();
     expect(screen.getByLabelText("Filter tree")).toHaveValue("lib");
 
     // Change something in A so a write carrying A's paths genuinely exists —
@@ -523,7 +558,7 @@ describe("worktree switch (LIB-FR-13)", () => {
 
     // The switch remounts the whole subtree against the new content root.
     unmount();
-    setLoadTree(treeB, panelState({ expandedPaths: ["src"] }));
+    setTree(treeB, panelState({ expandedPaths: ["src"] }));
     render(<LibraryHost />);
 
     // B's folder is expanded, A's is not, and A's text filter did not travel.
@@ -554,14 +589,14 @@ describe("worktree switch (LIB-FR-13)", () => {
    * pass every one of them.
    */
   it("discards a pending write on a worktree switch rather than flushing it", async () => {
-    setLoadTree(baseTree(), panelState());
+    setTree(baseTree(), panelState());
     const { unmount } = render(<LibraryHost />);
     await screen.findByText("specifications");
+    await waitForTree();
 
     // Expand a folder and switch worktree inside the coalescing window, so a
     // write is still pending at the moment the subtree is torn down.
     fireEvent.click(screen.getByText("specifications"));
-    expect(screen.getByText("LIB-library.md")).toBeInTheDocument();
     unmount();
 
     // The pending write was dropped, not flushed.
@@ -572,7 +607,7 @@ describe("worktree switch (LIB-FR-13)", () => {
     const treeB = folder("", true, [
       folder("src", true, [file("src/lib.rs", "spec", "inferred")]),
     ]);
-    setLoadTree(treeB, panelState({ expandedPaths: ["src"] }));
+    setTree(treeB, panelState({ expandedPaths: ["src"] }));
     render(<LibraryHost />);
     expect(await screen.findByText("lib.rs")).toBeInTheDocument();
     await settleDebounce();
@@ -582,7 +617,7 @@ describe("worktree switch (LIB-FR-13)", () => {
   it("renders the defaults when the incoming worktree has no record", async () => {
     // LIB-FR-02, LIB-FR-13: B has nothing persisted, so every folder is collapsed, the
     // lens is All artifacts and the text filter is empty.
-    setLoadTree(
+    setTree(
       baseTree(),
       panelState({
         expandedPaths: [".claude", ".claude/skills"],
@@ -591,10 +626,11 @@ describe("worktree switch (LIB-FR-13)", () => {
     );
     const { unmount } = render(<LibraryHost />);
     await screen.findByText("onboarding.md");
+    await waitForTree();
     expect(selectorValue("Filter by type")).toBe("files");
 
     unmount();
-    setLoadTree(baseTree(), panelState());
+    setTree(baseTree(), panelState());
     render(<LibraryHost />);
 
     expect(await screen.findByText(".claude")).toBeInTheDocument();
@@ -613,8 +649,10 @@ describe("restore racing user interaction", () => {
     const stateLoad = new Promise<LibraryPanelState>((resolve) => {
       releaseState = resolve;
     });
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return baseTree();
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      const read = treeCommand(cmd, args, baseTree());
+      if (read) return read;
+      if (cmd === "append_log_records") return undefined;
       if (cmd === "load_library_panel_state") return stateLoad;
       if (cmd === "save_library_panel_state") return undefined;
       throw new Error(`unexpected invoke ${cmd}`);
@@ -623,6 +661,7 @@ describe("restore racing user interaction", () => {
 
     // The tree has painted but the panel state has not arrived yet.
     await screen.findByText("AGENTS.md");
+    await waitForTree();
     fireEvent.change(screen.getByLabelText("Filter tree"), {
       target: { value: "agents" },
     });
@@ -648,8 +687,10 @@ describe("restore racing user interaction", () => {
     const stateLoad = new Promise<LibraryPanelState>((resolve) => {
       releaseState = resolve;
     });
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return baseTree();
+    invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
+      const read = treeCommand(cmd, args, baseTree());
+      if (read) return read;
+      if (cmd === "append_log_records") return undefined;
       if (cmd === "load_library_panel_state") return stateLoad;
       if (cmd === "save_library_panel_state") return undefined;
       throw new Error(`unexpected invoke ${cmd}`);
@@ -659,8 +700,9 @@ describe("restore racing user interaction", () => {
     // The tree has painted but the panel state has not arrived. Everything is
     // collapsed, so the only thing the user can do is expand.
     await screen.findByText("specifications");
+    await waitForTree();
     fireEvent.click(screen.getByText("specifications"));
-    expect(screen.getByText("LIB-library.md")).toBeInTheDocument();
+    expect(await screen.findByText("LIB-library.md")).toBeInTheDocument();
 
     releaseState(panelState({ expandedPaths: [".claude", ".claude/skills"] }));
 

@@ -19,6 +19,7 @@ import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
 import { selectorValue } from "./test/selectors";
 import type { TreeNode } from "./types";
 import { resetPanelReveals } from "./state/panelReveal";
+import { TREE_COMMANDS, treeCommand } from "./test/treeCommands";
 import {
   createDraftFromPanel,
   defaultInvoke,
@@ -167,8 +168,9 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
   }
 
   it("NFW-FR-09, NFW-FR-10 / NFW-FR-11, LIB-FR-18: Create invokes create_folder, closes the modal, reveals the folder and opens no tab", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
       if (cmd === "create_folder") {
         return {
           id: "notes-inbox",
@@ -179,7 +181,7 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
           children: [],
         };
       }
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -220,8 +222,8 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
     // reload brings it into the tree, and the Library then relaxes the lens that
     // would have hidden an untyped empty folder and selects the row.
     let created = false;
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (TREE_COMMANDS.has(cmd)) {
         const tree = treeWithFolders();
         if (created) {
           tree.children.push({
@@ -233,7 +235,7 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
             children: [],
           });
         }
-        return tree;
+        return treeCommand(cmd, args, tree);
       }
       if (cmd === "create_folder") {
         created = true;
@@ -246,7 +248,7 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
           children: [],
         };
       }
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -274,7 +276,10 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
     // LIB-FR-18: the lens was relaxed because All Artifacts would have hidden it.
     expect(selectorValue("Filter by type")).toBe("files");
     // NFW-FR-11: collapsed — the node itself was never expanded — and no tab.
-    expect(row.querySelector(".tree-row__caret")?.children.length ?? 0).toBe(1);
+    // The new folder holds nothing, so it shows no caret (LIB-FR-JZNT), and
+    // no row waits for its children under it.
+    expect(row.querySelector(".tree-row__caret")?.children.length ?? 0).toBe(0);
+    expect(document.querySelector(".tree-row--loading")).toBeNull();
     expect(
       invokeMock.mock.calls.filter((c) => c[0] === "open_artifact_by_id"),
     ).toEqual([]);
@@ -294,17 +299,17 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
       typeSource: "assigned",
       children: [],
     };
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (TREE_COMMANDS.has(cmd)) {
         const tree = treeWithFolders();
         if (created) tree.children.push({ ...typedNode });
-        return tree;
+        return treeCommand(cmd, args, tree);
       }
       if (cmd === "create_folder") {
         created = true;
         return { ...typedNode };
       }
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -341,8 +346,9 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
   });
 
   it("NFW-FR-10: the chosen artifact type rides along with the creation", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
       if (cmd === "create_folder") {
         return {
           id: "scenarios",
@@ -355,7 +361,7 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
           children: [],
         };
       }
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -395,9 +401,9 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
       typeSource: "assigned",
       children: [],
     };
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") {
-        const prompts = {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (TREE_COMMANDS.has(cmd)) {
+        const prompts: TreeNode = {
           id: "prompts",
           name: "prompts",
           path: "prompts",
@@ -407,14 +413,14 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
           typeSource: "assigned",
           children: created ? [{ ...inherited }] : [],
         };
-        return {
+        return treeCommand(cmd, args, {
           id: "",
           name: "",
           path: "",
           nodeKind: "folder",
           hasArtifacts: true,
           children: [prompts],
-        };
+        });
       }
       if (cmd === "create_folder") {
         created = true;
@@ -427,7 +433,7 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
           textFilter: "",
         };
       }
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -465,10 +471,11 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
   });
 
   it("NFW-FR-13: a backend create_folder rejection is shown inline and keeps the modal open", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
       if (cmd === "create_folder") throw "already exists: drafts";
-      return defaultInvoke(cmd);
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -489,9 +496,10 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
   // the right-clicked folder and leaves the type unset even though that folder
   // carries one (NFW-FR-07).
   it("LCM-FR-09, NFW-FR-07: the Library context-menu entry seeds the parent and leaves the type unset", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
-      return defaultInvoke(cmd);
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -511,42 +519,54 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
     expect(within(dialog).getByLabelText("Artifact Type")).toHaveValue("");
   });
 
-  // NFW-FR-04 / NFW NFR: the parent list comes from the tree the Library already
-  // published, so opening the window costs no scan of its own.
-  it("populates the parent list from the Library's tree without scanning again", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
-      return defaultInvoke(cmd);
+  // NFW-FR-04 / NFW NFR: the parent list comes from one search of the
+  // project index, and a list that is not stale opens the window with no call.
+  it("NFW-FR-04: populates the parent list from one folder search, and reads nothing on a second open", async () => {
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
     await enterIde();
     await screen.findByText("specifications");
 
-    const scansBefore = invokeMock.mock.calls.filter(
-      (c) => c[0] === "load_project_tree",
-    ).length;
+    // NFW-FR-04 / NFI-FR-04: one folder search of the project index fills
+    // the list; no folder of the disk is walked.
+    const folderSearches = () =>
+      invokeMock.mock.calls.filter(
+        (c) => c[0] === "search_project_paths" && c[1]?.kind === "folder",
+      );
 
     fireBusEvent("menu:new-folder");
-    const dialog = await screen.findByRole("dialog");
-
-    const parent = within(dialog).getByLabelText(
-      "Parent Folder",
-    ) as HTMLSelectElement;
-    expect(Array.from(parent.options).map((o) => o.value)).toEqual([
-      "",
-      "specifications",
+    let dialog = await screen.findByRole("dialog");
+    await waitFor(() => {
+      const parent = within(dialog).getByLabelText("Parent Folder") as HTMLSelectElement;
+      expect(Array.from(parent.options).map((o) => o.value)).toEqual(["", "specifications"]);
+    });
+    expect(folderSearches()).toEqual([
+      ["search_project_paths", { text: "", kind: "folder", limit: null }],
     ]);
-    // No further scan was issued to build that list.
+
+    // With no tree change since, a second open reads nothing.
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    fireBusEvent("menu:new-folder");
+    dialog = await screen.findByRole("dialog");
     expect(
-      invokeMock.mock.calls.filter((c) => c[0] === "load_project_tree").length,
-    ).toBe(scansBefore);
+      Array.from(
+        (within(dialog).getByLabelText("Parent Folder") as HTMLSelectElement).options,
+      ).map((o) => o.value),
+    ).toEqual(["", "specifications"]);
+    expect(folderSearches()).toHaveLength(1);
   });
 
   it("NTA-FR-01, NFW-FR-01: opening New Folder closes the New File modal, and vice versa", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
-      return defaultInvoke(cmd);
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -582,9 +602,10 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
   });
 
   it("NTA-FR-01, NFW-FR-01: opening the search overlay closes the New Folder modal, and opening it closes the overlay", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
-      return defaultInvoke(cmd);
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -613,9 +634,10 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
     // reachable by keyboard from a mounted modal even though the scrim blocks the
     // pointer. Those dropdowns are floating overlays too, so the invariant only
     // holds if they close the modal on the way up.
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
-      return defaultInvoke(cmd);
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);
@@ -635,9 +657,10 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
   // NFW-FR-02: the window is re-centered on each open, which falls out of it
   // being unmounted while closed rather than hidden.
   it("NFW-FR-02: the modal is unmounted while closed, so each open is fresh", async () => {
-    invokeMock.mockImplementation(async (cmd: string) => {
-      if (cmd === "load_project_tree") return treeWithFolders();
-      return defaultInvoke(cmd);
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      const read = treeCommand(cmd, args, treeWithFolders());
+      if (read) return read;
+      return defaultInvoke(cmd, args);
     });
 
     render(<App />);

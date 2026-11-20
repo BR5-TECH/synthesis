@@ -329,18 +329,36 @@ pub fn start_watching<R: tauri::Runtime>(
             if attribution_changed {
                 crate::documents::request_refresh(&app_handle);
             }
-            if changed.is_empty() && !attribution_changed {
+            // ASC-FR-UWMI: a `.git` entry that came or went inside the project
+            // can move a repository boundary (ASC-FR-SFCR).
+            let boundaries = scanning::git_boundaries(&result, &root_owned);
+            // ASC-FR-TWVB: an edit of an `info/exclude` file changes what the
+            // tree admits, so the index builds again, as for an attribution.
+            let rules_changed = scanning::exclude_changed(&result, &root_owned);
+            if changed.is_empty() && !attribution_changed && !rules_changed && boundaries.is_empty()
+            {
                 return;
             }
-            // ASC-FR-10 / ASC-FR-15 / ASC-FR-17: the mounted candidate list no
-            // longer describes the tree, so the next search rebuilds it. A
-            // search already running keeps the list it started from.
+            // ASC-FR-UWMI / ASC-FR-JYXO / ASC-FR-17: the project index applies
+            // the paths of this burst, and says which folders now answer
+            // differently. A search already running keeps the index it started
+            // from.
             //
-            // Invalidated for *any* change, not only a structural one: a content
+            // Applied for *any* change, not only a structural one: a content
             // edit can change a file's classification through the frontmatter
-            // tiebreak (ASC-FR-04), and a stale list would go on grouping that
+            // tiebreak (ASC-FR-04), and a stale index would go on grouping that
             // file under the type it used to have (SCC-FR-08).
-            app_handle.project_store::<scanning::CandidateStore>().invalidate();
+            let index_changes =
+                app_handle.try_project_store::<scanning::CandidateStore>().and_then(|store| {
+                    store.update(&root_owned, |index| {
+                        index.apply(
+                            &root_owned,
+                            &changed,
+                            attribution_changed || rules_changed,
+                            &boundaries,
+                        )
+                    })
+                });
             // BMI-FR-15 / BMI-FR-16 / BMI-FR-17 / BMI-FR-18: every change the
             // watcher sees — a creation, a deletion, a content edit, a pull
             // that rewrote half the tree — reaches the BM25 indexes here and
@@ -367,8 +385,14 @@ pub fn start_watching<R: tauri::Runtime>(
             // which of its open tabs no longer has a file behind it.
             let mut structural_paths: Vec<String> = Vec::new();
             for rel in &changed {
-                let current = root_owned.sha256_file(rel).ok();
                 let tracked = tracker.current(rel);
+                // Only a file an editor tab tracks is hashed: the route of an
+                // untracked path does not depend on its bytes, and a monorepo
+                // burst must not read every file it names.
+                let current = match tracked {
+                    Some(_) => root_owned.sha256_file(rel).ok(),
+                    None => None,
+                };
                 let route = route_watch_change(tracked.as_deref(), current.as_deref());
                 // PST-FR-35 carries **no self-write suppression**: a write this
                 // application performed moves the file's modification time and
@@ -405,13 +429,25 @@ pub fn start_watching<R: tauri::Runtime>(
                     WatchRoute::Structural => structural_paths.push(rel.clone()),
                 }
             }
+            // No index mounted: the next read builds one, and each folder above
+            // a structural path may answer differently. An attribution change
+            // can change the answer of any folder; the root stands for them.
+            let changed_folders = index_changes.unwrap_or_else(|| {
+                let mut folders = scanning::affected_folders(&structural_paths);
+                if attribution_changed && folders.is_empty() {
+                    folders.push(String::new());
+                }
+                folders
+            });
             // PST-FR-35: a structural change alters which artifacts exist and
             // therefore what the widget enumerates, whatever their modification
             // times say.
-            if recently_edited_moved || !structural_paths.is_empty() {
+            if recently_edited_moved || !changed_folders.is_empty() {
                 crate::dashboard::note_recently_edited_changed(&app_handle);
             }
-            if !structural_paths.is_empty() || attribution_changed {
+            // ASC-FR-JYXO: a burst that changes no answer of the tree reads —
+            // the content edit of a file whose type stays — fires no event.
+            if !changed_folders.is_empty() {
                 let removed_paths = scanning::removed_rel_paths(&structural_paths, &root_owned);
                 // The tree reload an attribution change causes has no path
                 // records of its own — the file is not a node, so the loop below
@@ -502,6 +538,7 @@ pub fn start_watching<R: tauri::Runtime>(
                         // Structural only. The attribution file backs no tab, so
                         // it must never reach TAB-FR-19's close-removed pass.
                         removed_paths,
+                        changed_folders,
                     },
                 );
             }

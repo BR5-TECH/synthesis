@@ -30,22 +30,17 @@ import {
   makeTreeStubs,
   renderLibrary,
 } from "../test/libraryFixtures";
+import { wireNode } from "../test/treeCommands";
 import { resetPanelReveals } from "../state/panelReveal";
 import type { TreeNode } from "../types";
 
 const { mockInvoke } = makeTreeStubs(invokeMock);
 
 /** The base tree with its `specifications` folder typed as Document. */
-function typedTree(): TreeNode {
-  const tree = baseTree();
-  return {
-    ...tree,
-    children: (tree.children ?? []).map((child) =>
-      child.path === "specifications"
-        ? { ...child, artifactType: "doc", typeSource: "assigned" }
-        : child,
-    ),
-  };
+/** The `specifications` node an assignment of Document returns (LCM-FR-04). */
+function typedNode(): TreeNode {
+  const child = (baseTree().children ?? []).find((c) => c.path === "specifications")!;
+  return wireNode({ ...child, artifactType: "doc", typeSource: "assigned" });
 }
 
 beforeEach(() => {
@@ -58,8 +53,8 @@ describe("the Document type in the Project panel", () => {
   it("LCM-FR-04, LCM-FR-07, LIB-FR-08: the submenu offers Document with its icon and tag, and a folder takes it at folder scope", async () => {
     mockInvoke(
       {
-        load_project_tree: () => baseTree(),
-        assign_artifact_type: () => typedTree(),
+        tree: () => baseTree(),
+        assign_artifact_type: () => typedNode(),
       },
       expandedAll(baseTree()),
     );
@@ -84,7 +79,7 @@ describe("the Document type in the Project panel", () => {
         scope: "folder",
       }),
     );
-    // LCM-FR-04 / LIB-FR-08: the returned tree re-tags the folder at once.
+    // LCM-FR-04 / LIB-FR-08: the returned node re-tags the folder at once.
     const row = (await screen.findByText("specifications")).closest(".tree-row") as HTMLElement;
     await waitFor(() => expect(within(row).getByText("DOC")).toHaveAttribute("data-type", "doc"));
   });
@@ -93,7 +88,7 @@ describe("the Document type in the Project panel", () => {
     const tree = folder("", true, [
       folder("guides", true, [file("guides/intro.md", "doc", "inherited")]),
     ]);
-    mockInvoke({ load_project_tree: () => tree }, expandedAll(tree));
+    mockInvoke({ tree: () => tree }, expandedAll(tree));
     renderLibrary();
 
     const row = (await screen.findByText("intro.md")).closest(".tree-row") as HTMLElement;

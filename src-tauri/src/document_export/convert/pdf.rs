@@ -315,6 +315,9 @@ struct Writer<'a> {
     layout: Layout,
 }
 
+/// DXP-FR-SEDX: the comment `markdown2pdf` reads as a page break.
+const PAGE_BREAK: &str = "<!-- pagebreak -->";
+
 fn paragraph_end(out: &mut Vec<Token>) {
     out.push(Token::Newline);
     out.push(Token::Newline);
@@ -466,9 +469,19 @@ impl Writer<'_> {
                 }
             }
             Block::PageBreak => {
-                // DXP-FR-SEDX: `markdown2pdf` reads this comment as a page
-                // break and starts a new page for the block after it.
-                out.push(Token::HtmlBlock("<!-- pagebreak -->".to_string()));
+                // DXP-FR-SEDX: `markdown2pdf` starts no new page on a page that
+                // is still empty, so a break that follows a break first puts an
+                // empty image of one pixel on the page between them.
+                if matches!(out.last(), Some(Token::HtmlBlock(prev)) if prev == PAGE_BREAK) {
+                    if let Some(png) = empty_png(1) {
+                        let token = self.image_token(&png, "", 1.0);
+                        out.push(token);
+                        paragraph_end(out);
+                    }
+                }
+                // `markdown2pdf` reads this comment as a page break and starts
+                // a new page for the block after it.
+                out.push(Token::HtmlBlock(PAGE_BREAK.to_string()));
             }
             Block::Html(text) => {
                 out.push(Token::Code {

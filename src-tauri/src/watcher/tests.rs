@@ -291,25 +291,22 @@ fn a_watched_change_invalidates_the_candidate_list() {
     assert!(store.is_mounted());
     std::fs::write(root.join("b.md"), b"two").unwrap();
 
-    // The debouncer coalesces over 300ms; give it a bounded window rather
-    // than a fixed sleep.
-    let mut invalidated = false;
+    // ASC-FR-UWMI: the burst updates the mounted index in place. The
+    // debouncer coalesces over 300ms; wait for the state in a bounded window
+    // rather than a fixed sleep.
+    let rooted = crate::fs::RootFs::for_root(root);
+    let has_b =
+        || store.mounted(&rooted).is_some_and(|i| i.candidates().iter().any(|c| c.path == "b.md"));
+    let mut updated = false;
     for _ in 0..100 {
-        if !store.is_mounted() {
-            invalidated = true;
+        if has_b() {
+            updated = true;
             break;
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    assert!(invalidated, "a filesystem change must invalidate the mounted candidate list");
-
-    // And the rebuilt list holds the new file.
-    let rebuilt = store.candidates(&crate::fs::RootFs::for_root(root));
-    assert!(
-        rebuilt.iter().any(|c| c.path == "b.md"),
-        "the rebuilt list must see the new file: {:?}",
-        rebuilt.iter().map(|c| &c.path).collect::<Vec<_>>()
-    );
+    assert!(updated, "a filesystem change must reach the mounted index");
+    assert!(store.is_mounted(), "the index is updated, not dropped");
 }
 
 #[test]
@@ -409,24 +406,24 @@ fn an_external_attribution_write_invalidates_the_candidate_list() {
     )
     .unwrap();
 
-    let mut invalidated = false;
+    // The mounted index carries the inherited type, which is what a pass reads
+    // to decide index membership (BMI-FR-03).
+    let rooted = crate::fs::RootFs::for_root(root);
+    let typed = || {
+        store.mounted(&rooted).is_some_and(|i| {
+            i.candidates().iter().find(|c| c.path == "notes/x.md").and_then(|c| c.artifact_type)
+                == Some(scanning::ArtifactType::Scenario)
+        })
+    };
+    let mut updated = false;
     for _ in 0..100 {
-        if !store.is_mounted() {
-            invalidated = true;
+        if typed() {
+            updated = true;
             break;
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    assert!(invalidated, "an external attribution write must invalidate the mounted list");
-
-    // And the rebuilt list carries the inherited type, which is what a pass
-    // reads to decide index membership (BMI-FR-03).
-    let rebuilt = store.candidates(&crate::fs::RootFs::for_root(root));
-    assert_eq!(
-        rebuilt.iter().find(|c| c.path == "notes/x.md").and_then(|c| c.artifact_type),
-        Some(scanning::ArtifactType::Scenario),
-        "the pulled folder-scope assignment must resolve onto the file"
-    );
+    assert!(updated, "the pulled folder-scope assignment must resolve onto the file");
 }
 
 /// The `"project tree changed"` payloads a test observed, as parsed JSON.
@@ -795,6 +792,8 @@ fn reverting_the_attribution_file_to_bytes_this_application_wrote_is_still_exter
     let a = "[assignments]\n[assignments.\"notes\"]\ntype = \"scenario\"\nscope = \"folder\"\n";
     let b = "[assignments]\n[assignments.\"notes\"]\ntype = \"prompt\"\nscope = \"folder\"\n";
     std::fs::write(root.join(scanning::LIBRARY_TOML_REL), a).unwrap();
+    std::fs::create_dir_all(root.join("notes")).unwrap();
+    std::fs::write(root.join("notes/x.md"), b"# X").unwrap();
 
     let app = tauri::test::mock_app();
     app.manage(scanning::CandidateStore::default());
@@ -808,18 +807,26 @@ fn reverting_the_attribution_file_to_bytes_this_application_wrote_is_still_exter
     start_watching(&app.handle().clone(), &watcher, &crate::fs::RootFs::for_root(root));
     assert!(watcher.is_active(), "precondition");
     let store = app.state::<scanning::CandidateStore>();
+    let rooted = crate::fs::RootFs::for_root(root);
+    let type_of_x = || {
+        store.mounted(&rooted).and_then(|i| {
+            i.candidates().iter().find(|c| c.path == "notes/x.md").and_then(|c| c.artifact_type)
+        })
+    };
 
     // A teammate's `b` arrives and is reported.
-    let _ = store.candidates(&crate::fs::RootFs::for_root(root));
+    let _ = store.candidates(&rooted);
+    assert_eq!(type_of_x(), Some(scanning::ArtifactType::Scenario), "precondition");
     std::fs::write(root.join(scanning::LIBRARY_TOML_REL), b).unwrap();
-    assert!(wait_until(|| !store.is_mounted()), "the external write to `b` must invalidate");
+    assert!(
+        wait_until(|| type_of_x() == Some(scanning::ArtifactType::Prompt)),
+        "the external write to `b` must reach the index"
+    );
 
     // A checkout restores `a` — bytes this application once wrote.
-    let _ = store.candidates(&crate::fs::RootFs::for_root(root));
-    assert!(store.is_mounted(), "precondition: remounted before the revert");
     std::fs::write(root.join(scanning::LIBRARY_TOML_REL), a).unwrap();
     assert!(
-        wait_until(|| !store.is_mounted()),
+        wait_until(|| type_of_x() == Some(scanning::ArtifactType::Scenario)),
         "a revert to bytes we once wrote is still an external change; \
              suppressing it strands every consumer on the superseded \
              classification"
@@ -886,4 +893,68 @@ fn an_ignored_skill_edit_still_reaches_the_callback() {
     ]);
     let (changed, _) = batch_changes(&batch, root, None, None);
     assert_eq!(changed, vec![".claude/skills/a/SKILL.md".to_string()]);
+}
+
+// ASC-FR-JYXO, ASC-FR-15, ASC-FR-UWMI: with an index mounted, a new file fires
+// `"project tree changed"` naming its folder, and a content edit that keeps
+// the type of a file fires none. The edited file is tracked, so its burst
+// fires `"artifact changed externally"`: that event is the positive signal
+// that the burst was handled before the absence is asserted.
+#[test]
+fn a_content_edit_that_keeps_the_type_fires_no_tree_event() {
+    use tauri::Manager;
+    let dir = tempfile::TempDir::new().unwrap();
+    let root = &crate::changes::canonicalize_lenient(dir.path());
+    std::fs::create_dir_all(root.join(".synthesis")).unwrap();
+    std::fs::create_dir_all(root.join("docs")).unwrap();
+    std::fs::write(root.join("docs/a.md"), b"one").unwrap();
+
+    let app = tauri::test::mock_app();
+    app.manage(scanning::CandidateStore::default());
+    app.manage(ContentTracker::default());
+    app.manage(scanning::AttributionBaseline::default());
+    let rooted = crate::fs::RootFs::for_root(root);
+    let _ = app.state::<scanning::CandidateStore>().index(&rooted);
+    let checksum = rooted.sha256_file("docs/a.md").unwrap();
+    app.state::<ContentTracker>().record("docs/a.md", &checksum);
+    let content_events = {
+        use tauri::Listener;
+        let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let c = std::sync::Arc::clone(&count);
+        app.listen(ARTIFACT_CHANGED_EXTERNALLY, move |_| {
+            c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        });
+        count
+    };
+    let seen = collect_tree_events(&app);
+    let watcher = ProjectWatcher::default();
+    start_watching(&app.handle().clone(), &watcher, &rooted);
+    assert!(watcher.is_active(), "precondition");
+
+    std::fs::write(root.join("docs/b.md"), b"new").unwrap();
+    assert!(wait_until(|| !seen.lock().unwrap().is_empty()), "a new file fires an event");
+    let first = seen.lock().unwrap()[0].clone();
+    assert_eq!(first["changedFolders"], serde_json::json!(["docs"]), "{first}");
+
+    std::fs::write(root.join("docs/a.md"), b"two").unwrap();
+    assert!(
+        wait_until(|| content_events.load(std::sync::atomic::Ordering::SeqCst) > 0),
+        "the edit's burst was handled"
+    );
+    assert_eq!(seen.lock().unwrap().len(), 1, "the edit fired no tree event");
+    std::fs::write(root.join("docs/c.md"), b"barrier").unwrap();
+    let store = app.state::<scanning::CandidateStore>();
+    assert!(wait_until(|| {
+        store.mounted(&rooted).is_some_and(|i| i.candidates().iter().any(|c| c.path == "docs/c.md"))
+    }));
+    assert!(wait_until(|| seen.lock().unwrap().len() >= 2));
+    let events = seen.lock().unwrap().clone();
+    assert_eq!(events.len(), 2, "one event per new file, none for the edit: {events:?}");
+    for e in &events {
+        assert_eq!(e["changedFolders"], serde_json::json!(["docs"]), "{events:?}");
+    }
+    assert!(
+        events.iter().all(|e| e["removedPaths"] == serde_json::json!([])),
+        "nothing was removed: {events:?}"
+    );
 }

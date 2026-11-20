@@ -12,7 +12,8 @@ import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { resetAppPreferencesCache } from "./state/appPreferences";
 import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
-import type { LayoutPreferences } from "./types";
+import type { LayoutPreferences, TreeNode } from "./types";
+import { treeCommand } from "./test/treeCommands";
 
 // SNV-shell-navigation.md SNV-FR-44 – SNV-FR-49 at the App seam: the activity
 // bar's two clusters driving the two panels, the toggle-off that hides them,
@@ -69,7 +70,28 @@ vi.mock("@tauri-apps/api/window", () => {
 let storedLayout: LayoutPreferences | null;
 let savedLayouts: LayoutPreferences[];
 
+/** The project tree every tree read is answered from (`test/treeCommands.ts`). */
+const TREE: TreeNode = {
+  id: "",
+  name: "acme",
+  path: "",
+  nodeKind: "folder",
+  hasArtifacts: true,
+  children: [
+    {
+      id: "a.md",
+      name: "a.md",
+      path: "a.md",
+      nodeKind: "file",
+      artifactType: "spec",
+      typeSource: "inferred",
+    },
+  ],
+};
+
 function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
+  const read = treeCommand(cmd, args, TREE);
+  if (read) return read;
   switch (cmd) {
     case "list_recent_projects":
       return [
@@ -107,25 +129,6 @@ function defaultInvoke(cmd: string, args?: Record<string, unknown>) {
       return undefined;
     case "load_app_preferences":
       return { theme: "dark" };
-    case "load_project_tree":
-    case "rescan_project_tree":
-      return {
-        id: "",
-        name: "acme",
-        path: "",
-        nodeKind: "folder",
-        hasArtifacts: true,
-        children: [
-          {
-            id: "a.md",
-            name: "a.md",
-            path: "a.md",
-            nodeKind: "file",
-            artifactType: "spec",
-            typeSource: "inferred",
-          },
-        ],
-      };
     case "validate_flow_document":
       // FGV-FR-02 / FLO-FR-46: the backend judges a Flow body before the canvas
       // renders it. The rules themselves are covered by the Rust suite.

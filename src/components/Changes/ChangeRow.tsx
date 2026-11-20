@@ -7,6 +7,7 @@ import { useEffect, useRef } from "react";
 import { typeChip } from "../../artifactTypes";
 import type { ChangeEntry } from "../../types";
 import { Icon } from "../icons";
+import { isPointer, pointerCommitsText, shortId } from "./groups";
 import { visibleFileCount, type ChangeNode, type CheckState } from "./tree";
 
 /**
@@ -14,6 +15,26 @@ import { visibleFileCount, type ChangeNode, type CheckState } from "./tree";
  * do not shift horizontally as counts change during a reload.
  */
 function DiffStat({ entry }: { entry: ChangeEntry }) {
+  // CHG-FR-GBTE: a pointer row states its two commits, not a line count. The
+  // previous id is a part of its own, so a narrow row gives it up first and
+  // the current id stays whole.
+  if (isPointer(entry)) {
+    return (
+      <span
+        className="change-row__stat change-row__stat--pointer"
+        title={`Submodule commit: ${pointerCommitsText(entry)}`}
+      >
+        {entry.previousCommit && (
+          <span className="change-row__pointer-previous">
+            {shortId(entry.previousCommit)}
+          </span>
+        )}
+        <span className="change-row__pointer">
+          {entry.previousCommit ? "→" : "+"} {shortId(entry.currentCommit)}
+        </span>
+      </span>
+    );
+  }
   if (entry.isBinary) {
     return (
       <span className="change-row__stat" title="Binary file">
@@ -38,10 +59,15 @@ export function CheckBox({
   state,
   label,
   onChange,
+  disabled = false,
+  title,
 }: {
   state: CheckState;
   label: string;
   onChange: (next: boolean) => void;
+  /** CHG-FR-AYTR: an implied check takes no input. */
+  disabled?: boolean;
+  title?: string;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -54,6 +80,8 @@ export function CheckBox({
       className="change-check"
       aria-label={label}
       checked={state === "checked"}
+      disabled={disabled}
+      title={title}
       // CHG-FR-18: toggling a checkbox is not a click on the row — it changes
       // the check and opens nothing.
       onClick={(e) => e.stopPropagation()}
@@ -95,6 +123,11 @@ interface ChangeRowProps {
   selected: boolean;
   /** CHG-FR-26: null in Branch mode, which renders no checkbox at all. */
   checkState: CheckState | null;
+  /**
+   * CHG-FR-AYTR: the check is implied by a checked file of the submodule, so
+   * the checkbox renders checked and takes no input.
+   */
+  checkImplied?: boolean;
   onCheck: (node: ChangeNode, next: boolean) => void;
   onToggle: (node: ChangeNode) => void;
   onOpen: (node: ChangeNode) => void;
@@ -106,12 +139,14 @@ export function ChangeRow({
   open,
   selected,
   checkState,
+  checkImplied = false,
   onCheck,
   onToggle,
   onOpen,
 }: ChangeRowProps) {
   const isFolder = node.kind === "folder";
   const entry = node.entry;
+  const pointer = entry != null && isPointer(entry);
   return (
     <div
       className="tree-row"
@@ -122,6 +157,7 @@ export function ChangeRow({
       // distinct rows (CHG-FR-09).
       data-node-key={node.key}
       data-change-status={entry?.changeStatus}
+      data-entry-kind={pointer ? "submodule" : undefined}
       onClick={() => (isFolder ? onToggle(node) : onOpen(node))}
     >
       {checkState && (
@@ -129,6 +165,14 @@ export function ChangeRow({
           state={checkState}
           label={`Include ${node.path}`}
           onChange={(next) => onCheck(node, next)}
+          disabled={checkImplied}
+          title={
+            checkImplied
+              ? isFolder
+                ? "Included: the commits of the submodules record these pointers."
+                : "Included: the commit of the submodule records this pointer."
+              : undefined
+          }
         />
       )}
       <span className="tree-row__caret">
@@ -141,7 +185,14 @@ export function ChangeRow({
         ) : null}
       </span>
       <span className="tree-row__icon">
-        {isFolder ? <Icon.Folder size={13} /> : <Icon.File size={13} />}
+        {/* CHG-FR-GBTE: a pointer row carries the branch icon. */}
+        {isFolder ? (
+          <Icon.Folder size={13} />
+        ) : pointer ? (
+          <Icon.Branch size={13} />
+        ) : (
+          <Icon.File size={13} />
+        )}
       </span>
       <span
         className={

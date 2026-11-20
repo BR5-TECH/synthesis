@@ -17,9 +17,12 @@ fn upstream_sync_state_reports_no_remote_when_none_is_configured() {
     f.commit("base");
     let state = upstream_sync_state(&f.root()).unwrap();
     assert_eq!(
-        state,
-        UpstreamSyncState { has_remote: false, has_upstream: false, ahead: None, behind: None }
+        (state.has_remote, state.has_upstream, state.ahead, state.behind),
+        (false, false, None, None)
     );
+    // GTC-FR-OQJB: a project with no submodule has one repository state.
+    assert_eq!(state.repositories.len(), 1);
+    assert_eq!(state.repositories[0].repository, "");
 }
 
 #[test]

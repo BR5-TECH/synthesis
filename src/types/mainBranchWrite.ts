@@ -24,6 +24,11 @@ export interface BranchWriteGuard {
   isMain: boolean;
   /** GTC-FR-YWRZ. */
   confirmed: boolean;
+  /**
+   * GTC-FR-ZBAL: the project-relative root of the submodule the guard is of.
+   * Absent for the main repository.
+   */
+  repository?: string;
 }
 
 /** MBW-FR-DBGA: the writes the confirmation names. */

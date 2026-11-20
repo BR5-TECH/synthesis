@@ -14,8 +14,18 @@ import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import { Icon } from "./icons";
 import { worktreeIdentityChanged } from "../state/graduation";
+import { partialCommit } from "../api/git";
+import { logWarn } from "../logging";
 import { useInlineWriteGuard } from "./MainBranchWrite";
 import type { CommitOutcome } from "../types";
+
+/** CMW-FR-WZRQ: a repository of the repository set, as the window names it. */
+export interface CommitRepository {
+  /** Project-relative root. `""` is the main repository. */
+  path: string;
+  /** The name of the main repository, or the path of a submodule. */
+  label: string;
+}
 
 /** One entry of the commit set, as the Changes panel hands it over. */
 export interface CommitFile {
@@ -23,6 +33,54 @@ export interface CommitFile {
   path: string;
   /** CMW-FR-06: marked in place, because it is added to VCS by the commit. */
   untracked: boolean;
+  /**
+   * CMW-FR-WZRQ / GSM-FR-MPWK: the repository that owns the path, then each
+   * parent up to the main repository — every repository a commit of this path
+   * is made in. Absent when the project has one repository.
+   */
+  repositoryChain?: CommitRepository[];
+}
+
+/** Main repository first, then the submodules in path order (CHG-FR-BYWJ). */
+function byRepositoryPath(a: CommitRepository, b: CommitRepository): number {
+  if (a.path === b.path) return 0;
+  if (a.path === "") return -1;
+  if (b.path === "") return 1;
+  return a.path.localeCompare(b.path);
+}
+
+/**
+ * CMW-FR-WZRQ: every repository that a commit of `files` is made in — the
+ * owners of the paths and their parents, which record the new pointers
+ * (GSM-FR-MPWK).
+ */
+export function commitRepositories(files: CommitFile[]): CommitRepository[] {
+  const found = new Map<string, CommitRepository>();
+  for (const f of files) {
+    for (const r of f.repositoryChain ?? []) {
+      if (!found.has(r.path)) found.set(r.path, r);
+    }
+  }
+  return [...found.values()].sort(byRepositoryPath);
+}
+
+/** CMW-FR-WZRQ: the files grouped by the repository that owns each of them. */
+export function groupCommitFiles(
+  files: CommitFile[],
+): { repository: CommitRepository; files: CommitFile[] }[] {
+  const groups = new Map<
+    string,
+    { repository: CommitRepository; files: CommitFile[] }
+  >();
+  for (const f of files) {
+    const owner = f.repositoryChain?.[0] ?? { path: "", label: "" };
+    const group = groups.get(owner.path) ?? { repository: owner, files: [] };
+    group.files.push(f);
+    groups.set(owner.path, group);
+  }
+  return [...groups.values()].sort((a, b) =>
+    byRepositoryPath(a.repository, b.repository),
+  );
 }
 
 /**
@@ -30,10 +88,27 @@ export interface CommitFile {
  * ones `../specifications/core/GTC-git.md` GTC-FR-20 returns; anything else is
  * shown as it arrived rather than swallowed.
  */
-export function commitErrorMessage(error: unknown): string {
+export function commitErrorMessage(
+  error: unknown,
+  /** GTC-FR-TJPJ: the label of each repository, by its path. */
+  labels: ReadonlyMap<string, string> = new Map(),
+): string {
   const raw = String(
     error instanceof Error ? error.message : (error ?? "commit failed"),
   );
+  // GTC-FR-TJPJ / GSM-FR-ZKEJ: the commit in one repository failed after the
+  // commit in another one was made. The commits made stay, so the sentence
+  // names them beside the repository that failed.
+  if (raw.includes("partial_commit")) {
+    const partial = partialCommit(error);
+    const name = (path: string) =>
+      labels.get(path) || (path === "" ? "the main repository" : path);
+    if (partial) {
+      const made = partial.committed.map((c) => name(c.repository)).join(", ");
+      return `The commit failed in ${name(partial.failed)}: ${partial.cause}. The commits already made in ${made || "no repository"} stay.`;
+    }
+    return "The commit failed in one repository after commits were made in others. The commits already made stay.";
+  }
   if (raw.includes("empty_commit_message")) {
     return "A commit message is required.";
   }
@@ -271,7 +346,18 @@ export function CommitMessageModal({
       // CMW-FR-08: the window stays open with the message intact and the file
       // set unchanged, so the author fixes the cause and retries. A merge never
       // reaches here — its refusal is the opening surface's (WSS-FR-NPXC).
-      setError(commitErrorMessage(e));
+      if (String(e).includes("partial_commit")) {
+        // GTC-FR-TJPJ: commits were made in some repositories and not in all.
+        logWarn(["frontend"], "commit stopped after a partial commit", {
+          repositories: commitRepositories(committing_set).length,
+        });
+      }
+      setError(
+        commitErrorMessage(
+          e,
+          new Map(commitRepositories(committing_set).map((r) => [r.path, r.label])),
+        ),
+      );
       setCommitting(false);
       // The action row was inert while the commit ran, so focus had nowhere to
       // stand and fell to the document body. "Retries without retyping" means
@@ -285,6 +371,20 @@ export function CommitMessageModal({
 
   const untrackedCount = committing_set.filter((f) => f.untracked).length;
   const hiddenTracked = hidden.filter((f) => !f.untracked).length;
+  // CMW-FR-WZRQ: with paths of more than one repository, the window names
+  // each repository the commit is made in and groups the list by repository.
+  const repositories = commitRepositories(committing_set);
+  const multiRepository = repositories.length > 1;
+  const fileRow = (f: CommitFile) => (
+    <li key={f.path} className="commit-files__row">
+      <span className="commit-files__path">{f.path}</span>
+      {f.untracked && (
+        <span className="badge badge--accent" title="Not yet tracked by Git">
+          new
+        </span>
+      )}
+    </li>
+  );
 
   return (
     <div
@@ -392,21 +492,44 @@ export function CommitMessageModal({
                 window opened (CHG-FR-27). Scrolls within its own frame so a
                 commit of several hundred files never grows the window past the
                 screen. */}
+            {/* CMW-FR-WZRQ: above the list, each repository the commit is made
+                in, the parents that record a new pointer among them. */}
+            {multiRepository && (
+              <div className="commit-repositories" data-testid="commit-repositories">
+                <span>
+                  One commit is made in each of {repositories.length} repositories:
+                </span>
+                <ul className="commit-repositories__list">
+                  {repositories.map((r) => (
+                    <li key={r.path} className="commit-repositories__item">
+                      <Icon.Branch size={11} />
+                      {r.label}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <ul
               className="commit-files"
               aria-labelledby="cmw-files-label"
               data-testid="commit-files"
             >
-              {committing_set.map((f) => (
-                <li key={f.path} className="commit-files__row">
-                  <span className="commit-files__path">{f.path}</span>
-                  {f.untracked && (
-                    <span className="badge badge--accent" title="Not yet tracked by Git">
-                      new
-                    </span>
-                  )}
-                </li>
-              ))}
+              {multiRepository
+                ? groupCommitFiles(committing_set).map((g) => (
+                    <li
+                      key={`repo:${g.repository.path}`}
+                      className="commit-files__group"
+                      data-repository={g.repository.path}
+                    >
+                      <div className="commit-files__group-label">
+                        {g.repository.label}
+                      </div>
+                      <ul className="commit-files__group-list">
+                        {g.files.map(fileRow)}
+                      </ul>
+                    </li>
+                  ))
+                : committing_set.map(fileRow)}
             </ul>
           </div>
           )}

@@ -7,7 +7,8 @@ use std::path::Path;
 use git2::{DiffFormat, Repository};
 use serde::{Deserialize, Serialize};
 
-use crate::changes::{self, ERR_NO_MERGE_BASE};
+use crate::changes;
+use crate::changes::repo_set::{Base, RepoSet};
 
 // ---------------------------------------------------------------------------
 // Wire shapes
@@ -196,18 +197,13 @@ pub(crate) fn repo_pathspec(prefix: &str, path: &str) -> String {
 /// empty payload rather than an error, so a Diff tab whose file was just
 /// reverted renders "no changes" instead of failing (CHG-FR-22).
 pub fn diff_for_scope(root: &Path, scope: &DiffScope) -> Result<DiffPayload, String> {
-    let repo = changes::open_repo(root)?;
-    let prefix = changes::project_prefix(&repo, root);
+    let set = RepoSet::open(root)?;
+    let repo = &set.main().repo;
+    let prefix = set.main().prefix.clone();
 
     match scope {
         DiffScope::Path { path, previous_path } => {
-            let mut opts = file_options(&prefix, path, previous_path.as_deref());
-            let tree = head_tree(&repo);
-            let mut diff = repo
-                .diff_tree_to_workdir_with_index(tree.as_ref(), Some(&mut opts))
-                .map_err(|e| format!("failed to diff working tree: {e}"))?;
-            changes::find_renames(&mut diff)?;
-            format_diff(&diff)
+            owned_file_diff(&set, Base::Head, path, previous_path.as_deref())
         }
         DiffScope::Staged => {
             let mut opts = changes::diff_options();
@@ -215,7 +211,7 @@ pub fn diff_for_scope(root: &Path, scope: &DiffScope) -> Result<DiffPayload, Str
             // The staged set is the index against HEAD; untracked files are not
             // part of it.
             opts.include_untracked(false).recurse_untracked_dirs(false);
-            let tree = head_tree(&repo);
+            let tree = head_tree(repo);
             let mut diff = repo
                 .diff_tree_to_index(tree.as_ref(), None, Some(&mut opts))
                 .map_err(|e| format!("failed to diff the staged set: {e}"))?;
@@ -223,15 +219,30 @@ pub fn diff_for_scope(root: &Path, scope: &DiffScope) -> Result<DiffPayload, Str
             format_diff(&diff)
         }
         DiffScope::Branch { path, target_branch, previous_path } => {
-            let base_tree = merge_base_tree(&repo, target_branch)?;
-            let mut opts = file_options(&prefix, path, previous_path.as_deref());
-            let mut diff = repo
-                .diff_tree_to_workdir_with_index(Some(&base_tree), Some(&mut opts))
-                .map_err(|e| format!("failed to diff against merge base: {e}"))?;
-            changes::find_renames(&mut diff)?;
-            format_diff(&diff)
+            owned_file_diff(&set, Base::MergeBase(target_branch), path, previous_path.as_deref())
         }
     }
+}
+
+/// GTC-FR-HYHB: the diff of one file in the repository that owns it, against
+/// the base of that repository for the comparison.
+fn owned_file_diff(
+    set: &RepoSet,
+    base: Base<'_>,
+    path: &str,
+    previous_path: Option<&str>,
+) -> Result<DiffPayload, String> {
+    let bases = set.bases(base)?;
+    let index = set.owner_index(path);
+    let member = &set.members[index];
+    let previous = previous_path.map(|p| member.to_repo(p));
+    let mut opts = file_options("", &member.to_repo(path), previous.as_deref());
+    let mut diff = member
+        .repo
+        .diff_tree_to_workdir_with_index(bases.of[index].tree(), Some(&mut opts))
+        .map_err(|e| format!("failed to diff working tree: {e}"))?;
+    changes::find_renames(&mut diff)?;
+    format_diff(&diff)
 }
 
 /// Diff options narrowed to one file — and, for a rename, to both of its paths.
@@ -255,24 +266,6 @@ pub(crate) fn file_options(
 
 pub(crate) fn head_tree(repo: &Repository) -> Option<git2::Tree<'_>> {
     repo.head().ok()?.peel_to_commit().ok()?.tree().ok()
-}
-
-/// The tree at the merge-base of the current branch and `target_branch`,
-/// resolved exactly as `changes::branch_change_set` resolves it (CHC-FR-04) so
-/// a Diff tab and the panel row that opened it agree on the comparison.
-pub(crate) fn merge_base_tree<'r>(
-    repo: &'r Repository,
-    target_branch: &str,
-) -> Result<git2::Tree<'r>, String> {
-    let target = changes::resolve_branch_commit(repo, target_branch)?;
-    let head = repo
-        .head()
-        .ok()
-        .and_then(|h| h.peel_to_commit().ok())
-        .map(|c| c.id())
-        .ok_or_else(|| ERR_NO_MERGE_BASE.to_string())?;
-    let base = repo.merge_base(head, target).map_err(|_| ERR_NO_MERGE_BASE.to_string())?;
-    repo.find_commit(base).and_then(|c| c.tree()).map_err(|_| ERR_NO_MERGE_BASE.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -349,25 +342,27 @@ pub fn file_revisions_for_scope(
     root: &crate::fs::RootFs,
     scope: &DiffScope,
 ) -> Result<FileRevisions, String> {
-    let repo = changes::open_repo(root)?;
-    let prefix = changes::project_prefix(&repo, root);
-
-    let (path, previous_path, base_tree) = match scope {
-        DiffScope::Path { path, previous_path } => {
-            (path, previous_path.as_deref(), head_tree(&repo))
-        }
+    let set = RepoSet::open(root)?;
+    let (path, previous_path, base) = match scope {
+        DiffScope::Path { path, previous_path } => (path, previous_path.as_deref(), Base::Head),
         DiffScope::Branch { path, target_branch, previous_path } => {
-            (path, previous_path.as_deref(), Some(merge_base_tree(&repo, target_branch)?))
+            (path, previous_path.as_deref(), Base::MergeBase(target_branch.as_str()))
         }
         DiffScope::Staged => return Err(ERR_SCOPE_NOT_A_FILE.to_string()),
     };
+    // GTC-FR-HYHB: the file is read in the repository that owns it, against the
+    // base of that repository.
+    let bases = set.bases(base)?;
+    let index = set.owner_index(path);
+    let member = &set.members[index];
+    let repo = &member.repo;
 
     // A renamed entry's old side lives at its pre-rename path; without that the
     // old revision reads as absent and the whole file renders as an addition,
     // contradicting the `+n −n` the row that opened the tab showed (CHC-FR-09).
-    let old_spec = repo_pathspec(&prefix, previous_path.unwrap_or(path));
-    let new_spec = repo_pathspec(&prefix, path);
-    let old_bytes = base_tree.as_ref().and_then(|tree| blob_at(&repo, tree, &old_spec));
+    let old_spec = member.to_repo(previous_path.unwrap_or(path));
+    let new_spec = member.to_repo(path);
+    let old_bytes = bases.of[index].tree().and_then(|tree| blob_at(repo, tree, &old_spec));
 
     // The path arrives from the frontend, so it is resolved under the content
     // root rather than joined blindly: a `..` segment must not reach a file
@@ -388,8 +383,8 @@ pub fn file_revisions_for_scope(
 
     let is_binary = old_bytes.as_deref().map(looks_binary).unwrap_or(false)
         || new_bytes.as_deref().map(looks_binary).unwrap_or(false)
-        || marked_binary_by_attributes(&repo, &new_spec)
-        || marked_binary_by_attributes(&repo, &old_spec);
+        || marked_binary_by_attributes(repo, &new_spec)
+        || marked_binary_by_attributes(repo, &old_spec);
     if is_binary {
         return Ok(FileRevisions { old: None, new: None, is_binary: true });
     }

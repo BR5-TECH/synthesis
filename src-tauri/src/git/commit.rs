@@ -1,10 +1,12 @@
 //! The path-scoped commit (GTC-FR-19 / GTC-FR-20).
 
-use std::path::Path;
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 
 use git2::Repository;
 use serde::Serialize;
 
+use crate::changes::repo_set::{self, Member, RepoSet, GITLINK_MODE};
 use crate::changes::{self};
 
 use super::*;
@@ -33,11 +35,12 @@ pub(crate) fn base_tree_or_empty(repo: &Repository) -> Result<git2::Tree<'_>, St
     repo.find_tree(oid).map_err(|e| format!("failed to read the empty tree: {e}"))
 }
 
-/// The tree entry mode for an index entry's raw mode. Anything that is not a
-/// symlink or an executable blob is a plain blob — a gitlink cannot reach here,
-/// because `diff_options()` ignores submodules.
+/// The tree entry mode for an index entry's raw mode. A submodule pointer is a
+/// submodule entry (GTC-FR-GDNR), and anything that is not a symlink or an
+/// executable blob is a plain blob.
 pub(crate) fn tree_mode(raw: u32) -> git2::FileMode {
     match raw & 0o170000 {
+        GITLINK_MODE => git2::FileMode::Commit,
         0o120000 => git2::FileMode::Link,
         _ if raw & 0o111 != 0 => git2::FileMode::BlobExecutable,
         _ => git2::FileMode::Blob,
@@ -117,8 +120,34 @@ pub(crate) fn changed_named_paths(
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitOutcome {
+    /// The commit of the main repository; the last commit made when the main
+    /// repository holds none.
     pub commit_id: String,
     pub committed_paths: Vec<String>,
+    /// GTC-FR-CHEC: one per commit made, in the order made.
+    pub repositories: Vec<RepositoryCommit>,
+}
+
+/// GTC-FR-CHEC: the commit made in one repository of the set.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepositoryCommit {
+    /// The project-relative root of the repository; `""` for the main one.
+    pub repository: String,
+    pub commit_id: String,
+    pub committed_paths: Vec<String>,
+}
+
+/// GTC-FR-TJPJ: a commit failed after a commit in another repository was made.
+pub const ERR_PARTIAL_COMMIT: &str = "partial_commit";
+
+/// GTC-FR-TJPJ / GSM-FR-ZKEJ: the typed error, with the commits made and the
+/// repository that failed as data, in the form of `worktree_identity_error`.
+pub fn partial_commit_error(committed: &[RepositoryCommit], failed: &str, cause: &str) -> String {
+    format!(
+        "{ERR_PARTIAL_COMMIT}: {}",
+        serde_json::json!({ "committed": committed, "failed": failed, "cause": cause })
+    )
 }
 
 /// GTC-FR-19: create one commit holding exactly `paths`, against the active
@@ -175,23 +204,167 @@ fn commit_paths_with(
         return Err(ERR_NO_PATHS_SELECTED.to_string());
     }
 
-    let repo = changes::open_repo(root)?;
-    let prefix = changes::project_prefix(&repo, root);
-
     // Every path arrives from the frontend, so each is resolved under the
     // content root before it is used: a `..` segment must not reach a file
     // outside the project (GTC-FR-18).
-    let mut specs = Vec::with_capacity(paths.len());
     for path in paths {
         crate::fs::resolve_under(root, path).map_err(|e| e.to_string())?;
-        specs.push(repo_pathspec(&prefix, path));
     }
 
-    let (changed, previous_of) = changed_named_paths(&repo, &prefix, &specs, pair_renames)?;
-    if changed.is_empty() {
+    // GTC-FR-HYHB: each path goes to the repository that owns it. A submodule
+    // root path is the pointer of that submodule in its parent.
+    let set = RepoSet::open(root)?;
+    let mut named: Vec<Vec<String>> = vec![Vec::new(); set.members.len()];
+    let mut pointers_named: BTreeSet<usize> = BTreeSet::new();
+    for path in paths {
+        // GSM-FR-GHFY: the exact commit of an application store or a work
+        // stream runs no check per submodule, so it commits in the main
+        // repository alone, as for a project with no submodule.
+        if !pair_renames {
+            named[0].push(set.members[0].to_repo(path));
+            continue;
+        }
+        match set.index_of(path).filter(|i| *i != 0) {
+            Some(sub) => {
+                pointers_named.insert(sub);
+            }
+            None => {
+                let owner = set.owner_index(path);
+                named[owner].push(set.members[owner].to_repo(path));
+                // CHG-FR-AYTR, GSM-FR-MPWK: a file of a submodule implies the
+                // pointer of that submodule and of each parent submodule. A
+                // retry after a partial commit then records the pointers that
+                // the failed run did not record.
+                let mut member = &set.members[owner];
+                while !member.is_main() {
+                    if let Some(i) = set.index_of(&member.path) {
+                        pointers_named.insert(i);
+                    }
+                    match set.parent_of(member) {
+                        Some(parent) => member = parent,
+                        None => break,
+                    }
+                }
+            }
+        }
+    }
+
+    // GTC-FR-20 / GTC-FR-TJPJ: the whole list is validated before the first
+    // commit, so a refusal writes nothing in any repository.
+    let mut plans: Vec<ChangedNamedPaths> = Vec::with_capacity(set.members.len());
+    for (member, specs) in set.members.iter().zip(&named) {
+        plans.push(if specs.is_empty() {
+            (Vec::new(), Vec::new())
+        } else {
+            changed_named_paths(&member.repo, &member.prefix, specs, pair_renames)?
+        });
+    }
+    let pointer_moved = pointers_named.iter().any(|i| pointer_change(&set, *i).is_some());
+    if plans.iter().all(|(changed, _)| changed.is_empty()) && !pointer_moved {
         return Err(ERR_NOTHING_TO_COMMIT.to_string());
     }
 
+    // GSM-FR-KWWZ: the deepest repository first and the main one last, so the
+    // parent commit records the new pointer of each submodule (GSM-FR-MPWK).
+    let mut made: Vec<RepositoryCommit> = Vec::new();
+    let mut committed_subs: BTreeSet<usize> = BTreeSet::new();
+    for i in set.deepest_first() {
+        let member = &set.members[i];
+        let pointers: Vec<(String, git2::Oid)> = set
+            .members
+            .iter()
+            .enumerate()
+            .filter(|(c, child)| {
+                child.parent.as_deref() == Some(member.path.as_str())
+                    && (committed_subs.contains(c) || pointers_named.contains(c))
+            })
+            .filter_map(|(c, _)| pointer_change(&set, c))
+            .collect();
+        let (changed, previous_of) = &plans[i];
+        if changed.is_empty() && pointers.is_empty() {
+            continue;
+        }
+        match commit_in_member(root, member, message, changed, previous_of, &pointers) {
+            Ok(commit) => {
+                if !member.is_main() {
+                    committed_subs.insert(i);
+                }
+                made.push(commit);
+            }
+            Err(e) if made.is_empty() => return Err(e),
+            Err(e) => return Err(partial_commit_error(&made, &member.path, &e)),
+        }
+    }
+
+    let commit_id = made
+        .iter()
+        .find(|c| c.repository.is_empty())
+        .or(made.last())
+        .map(|c| c.commit_id.clone())
+        .unwrap_or_default();
+    let committed_paths = made.iter().flat_map(|c| c.committed_paths.iter().cloned()).collect();
+    Ok(CommitOutcome { commit_id, committed_paths, repositories: made })
+}
+
+/// GSM-FR-GHFY: the repositories a commit of `paths` can write, as
+/// `(project-relative root, checkout)`, so the main branch write check runs on
+/// each before the first commit. The owner of each path and every parent above
+/// it are written, because each parent records the new pointer (GSM-FR-MPWK).
+/// The main repository's checkout is the content root.
+pub fn commit_targets(root: &Path, paths: &[String]) -> Result<Vec<(String, PathBuf)>, String> {
+    let set = RepoSet::open(root)?;
+    let mut written: BTreeSet<usize> = BTreeSet::new();
+    for path in paths {
+        let mut member = match set.submodule_at(path) {
+            Some(sub) => set.parent_of(sub),
+            None => Some(set.owner(path)),
+        };
+        while let Some(current) = member {
+            if let Some(i) = set.index_of(&current.path) {
+                written.insert(i);
+            }
+            member = set.parent_of(current);
+        }
+    }
+    Ok(written
+        .into_iter()
+        .filter_map(|i| {
+            let member = &set.members[i];
+            let checkout = if member.is_main() {
+                Some(root.to_path_buf())
+            } else {
+                member.repo.workdir().map(Path::to_path_buf)
+            };
+            checkout.map(|c| (member.path.clone(), c))
+        })
+        .collect())
+}
+
+/// GSM-FR-FCOF: the pointer of the submodule at index `sub` as its parent
+/// must record it — `(path in the parent, commit at the submodule HEAD)` —
+/// when the parent `HEAD` records another commit for it.
+fn pointer_change(set: &RepoSet, sub: usize) -> Option<(String, git2::Oid)> {
+    let member = &set.members[sub];
+    let current = member.head_id()?;
+    let parent = set.parent_of(member)?;
+    let spec = member.path_in_parent.clone()?;
+    let recorded =
+        repo_set::head_tree(&parent.repo).and_then(|t| repo_set::recorded_commit(&t, &spec));
+    (recorded != Some(current)).then_some((spec, current))
+}
+
+/// GTC-FR-19 / GTC-FR-GDNR: one commit in `member` holding exactly `changed`
+/// (repository-relative), the previous location of each rename in
+/// `previous_of`, and the submodule `pointers`.
+fn commit_in_member(
+    root: &crate::fs::RootFs,
+    member: &Member,
+    message: &str,
+    changed: &[String],
+    previous_of: &[(String, String)],
+    pointers: &[(String, git2::Oid)],
+) -> Result<RepositoryCommit, String> {
+    let repo = &member.repo;
     // The index is advanced only for what is actually going into the commit.
     // `add_path` reads the working-directory content through the repository's
     // filters, so a checkout under `core.autocrlf` commits the blob Git would
@@ -204,7 +377,7 @@ fn commit_paths_with(
         .workdir()
         .ok_or_else(|| "the repository has no working directory".to_string())?
         .to_path_buf();
-    for spec in &changed {
+    for spec in changed {
         let relative = Path::new(spec);
         // `symlink_metadata`, not `exists`: a symlink whose target is gone is
         // still a file the commit records, not a deletion.
@@ -235,17 +408,23 @@ fn commit_paths_with(
     // that path as a modification instead, so the two halves cannot both appear
     // — but the guard costs nothing and the invariant is the one that matters:
     // a named path is never removed on another entry's behalf.
-    for (new, old) in &previous_of {
+    for (new, old) in previous_of {
         if changed.iter().any(|spec| spec == new) && !changed.iter().any(|spec| spec == old) {
             let _ = index.remove_path(Path::new(old));
         }
     }
+    // GTC-FR-GDNR: a pointer is recorded as a submodule entry, never as a file.
+    for (spec, commit) in pointers {
+        index
+            .add(&gitlink_entry(spec, *commit))
+            .map_err(|e| format!("failed to stage {spec}: {e}"))?;
+    }
     index.write().map_err(|e| format!("failed to write the index: {e}"))?;
 
     // The tree is HEAD's, updated at the named paths only.
-    let base = base_tree_or_empty(&repo)?;
+    let base = base_tree_or_empty(repo)?;
     let mut update = git2::build::TreeUpdateBuilder::new();
-    let mut touched: Vec<String> = changed.clone();
+    let mut touched: Vec<String> = changed.to_vec();
     touched.extend(
         previous_of
             .iter()
@@ -254,6 +433,7 @@ fn commit_paths_with(
             })
             .map(|(_, old)| old.clone()),
     );
+    touched.extend(pointers.iter().map(|(spec, _)| spec.clone()));
     touched.sort();
     touched.dedup();
     for spec in &touched {
@@ -272,7 +452,7 @@ fn commit_paths_with(
         }
     }
     let tree_oid = update
-        .create_updated(&repo, &base)
+        .create_updated(repo, &base)
         .map_err(|e| format!("failed to build the commit tree: {e}"))?;
     let tree =
         repo.find_tree(tree_oid).map_err(|e| format!("failed to read the commit tree: {e}"))?;
@@ -289,31 +469,28 @@ fn commit_paths_with(
     let oid = repo
         .commit(Some("HEAD"), &signature, &signature, message, &tree, &parent_refs)
         .map_err(|e| format!("failed to create the commit: {e}"))?;
-    // GTC-FR-19: report every path the commit **recorded** — the named set that
-    // actually changed, plus the previous location of each rename — rather than
-    // the set the caller submitted. The strip closes Diff tabs from this
-    // (`../ui/TAB-tabs.md` TAB-FR-22), and re-deriving "what landed" from "what
-    // was asked for" would miss a rename's old location and would close a tab on
-    // a path the commit turned out to hold nothing for.
-    //
-    // Reported project-relative, the way every path crossing this boundary is:
-    // `touched` is repository-relative, and a project nested below the
-    // repository root would otherwise hand the frontend paths it cannot match
-    // against anything it holds.
-    let committed_paths =
-        touched.iter().filter_map(|spec| project_relative(&prefix, spec)).collect();
-    Ok(CommitOutcome { commit_id: oid.to_string(), committed_paths })
+    let committed_paths = touched.iter().filter_map(|spec| member.to_project(spec)).collect();
+    Ok(RepositoryCommit {
+        repository: member.path.clone(),
+        commit_id: oid.to_string(),
+        committed_paths,
+    })
 }
 
-/// The inverse of [`repo_pathspec`]: a repository-relative spec back to the
-/// project-relative path the frontend names files by.
-///
-/// A spec outside the project prefix is dropped rather than reported: it names
-/// a file the project does not contain, so no surface downstream could act on
-/// it.
-pub(crate) fn project_relative(prefix: &str, spec: &str) -> Option<String> {
-    if prefix.is_empty() {
-        return Some(spec.to_string());
+/// The index entry of a submodule pointer at `spec`.
+fn gitlink_entry(spec: &str, commit: git2::Oid) -> git2::IndexEntry {
+    git2::IndexEntry {
+        ctime: git2::IndexTime::new(0, 0),
+        mtime: git2::IndexTime::new(0, 0),
+        dev: 0,
+        ino: 0,
+        mode: GITLINK_MODE,
+        uid: 0,
+        gid: 0,
+        file_size: 0,
+        id: commit,
+        flags: 0,
+        flags_extended: 0,
+        path: spec.as_bytes().to_vec(),
     }
-    spec.strip_prefix(prefix).and_then(|rest| rest.strip_prefix('/')).map(str::to_string)
 }

@@ -44,7 +44,7 @@ let pushInvocations: number;
 
 function installBackend() {
   backend({
-    sync: { hasRemote: true, hasUpstream: true, ahead: 2, behind: 0 },
+    sync: { hasRemote: true, hasUpstream: true, ahead: 2, behind: 0, repositories: [] },
   });
   const base = invokeMock.getMockImplementation()!;
   invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {

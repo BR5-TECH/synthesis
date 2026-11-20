@@ -625,7 +625,7 @@ describe("the commit message window at the App seam", () => {
 
     // The commit lands, the window closes, and the push it was gating runs.
     await act(async () => {
-      release({ commitId: "abc1234", committedPaths: [] });
+      release({ commitId: "abc1234", committedPaths: [], repositories: [] });
     });
     await waitFor(() =>
       expect(

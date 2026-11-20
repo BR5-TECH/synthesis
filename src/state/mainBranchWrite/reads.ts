@@ -10,10 +10,16 @@ import * as api from "../../api";
 import type { BranchWriteGuard } from "../../types";
 
 export interface BranchWriteGuardReads {
-  /** `"get branch write guard (branch, refresh)"`. `null` is the active branch. */
-  read(branch: string | null, refresh: boolean): Promise<BranchWriteGuard>;
-  /** `"confirm main branch write (branch)"`. */
-  confirm(branch: string): Promise<BranchWriteGuard>;
+  /**
+   * `"get branch write guard (branch, refresh)"`. `null` is the active branch.
+   * `repository` names a submodule (GTC-FR-ZBAL); it is absent for the main one.
+   */
+  read(branch: string | null, refresh: boolean, repository?: string): Promise<BranchWriteGuard>;
+  /**
+   * `"confirm main branch write (branch)"`. `repository` names a submodule
+   * (MBW-FR-DKOY); it is absent for the main repository.
+   */
+  confirm(branch: string, repository?: string): Promise<BranchWriteGuard>;
   /**
    * The answer of a read that the reads know with no call, or `null`. The
    * backend reads know none. The default reads of the tests know every answer,
@@ -24,8 +30,8 @@ export interface BranchWriteGuardReads {
 
 /** The reads of the backend. */
 export const backendReads: BranchWriteGuardReads = {
-  read: (branch, refresh) => api.getBranchWriteGuard(branch, refresh),
-  confirm: (branch) => api.confirmMainBranchWrite(branch),
+  read: (branch, refresh, repository) => api.getBranchWriteGuard(branch, refresh, repository),
+  confirm: (branch, repository) => api.confirmMainBranchWrite(branch, repository),
 };
 
 /** The guard of a branch that is not a main branch. */
@@ -39,10 +45,11 @@ export const NOT_MAIN_GUARD: BranchWriteGuard = {
 
 /** Reads that answer every branch as one that is not a main branch. */
 export const notMainReads: BranchWriteGuardReads = {
-  read: (branch) => Promise.resolve({ ...NOT_MAIN_GUARD, branch: branch ?? "feature" }),
+  read: (branch, _refresh, repository) =>
+    Promise.resolve({ ...NOT_MAIN_GUARD, branch: branch ?? "feature", repository }),
   known: (branch) => ({ ...NOT_MAIN_GUARD, branch: branch ?? "feature" }),
-  confirm: (branch) =>
-    Promise.resolve({ ...NOT_MAIN_GUARD, branch, confirmed: true }),
+  confirm: (branch, repository) =>
+    Promise.resolve({ ...NOT_MAIN_GUARD, branch, confirmed: true, repository }),
 };
 
 let reads: BranchWriteGuardReads = backendReads;

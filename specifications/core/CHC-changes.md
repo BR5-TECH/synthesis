@@ -3,7 +3,7 @@
 **Spec code:** `CHC`
 
 ## Intent
-Backend module that computes what has changed in the project's Git repository and hands it to the Changes panel (`../ui/CHG-changes.md`) as a flat, fully-annotated change set. It answers two questions — what is modified but not yet committed, and what the current branch introduces relative to a target branch — and enriches every entry with the per-file line-count summary and the artifact-type classification the panel needs to group, tag, and filter without a second round-trip. It composes the classifier of `ASC-artifact-scanning.md` so a changed file carries exactly the type it carries in the Project panel, and it watches the repository so the panel stays live. Out of scope: this module is strictly read-only and exposes no way to alter the repository; every mutating Git operation the Changes panel performs — the commit it makes, the push that follows, and the rollback that returns a selection to `HEAD` — and the diff payload a Diff tab renders, all belong to `GTC-git.md`.
+Backend module that computes what has changed in the project's Git repositories — the main repository and its submodules (per `GSM-git-submodules.md`) — and hands it to the Changes panel (`../ui/CHG-changes.md`) as a flat, fully-annotated change set. It answers two questions — what is modified but not yet committed, and what the current branch introduces relative to a target branch — and enriches every entry with the per-file line-count summary and the artifact-type classification the panel needs to group, tag, and filter without a second round-trip. It composes the classifier of `ASC-artifact-scanning.md` so a changed file carries exactly the type it carries in the Project panel, and it watches the repository so the panel stays live. Out of scope: this module is strictly read-only and exposes no way to alter the repository; every mutating Git operation the Changes panel performs — the commit it makes, the push that follows, and the rollback that returns a selection to `HEAD` — and the diff payload a Diff tab renders, all belong to `GTC-git.md`.
 
 ## Contract surface
 Tauri commands — names match `../ui/CHG-changes.md` byte-for-byte:
@@ -23,7 +23,16 @@ What the Changes panel's Diff tab renders is **not** owned here either: that tab
 ```
 ChangeSet {
   comparison: Comparison,
-  entries: [ChangeEntry]      // flat; grouping into a tree is the UI's job
+  entries: [ChangeEntry],     // flat; grouping into a tree is the UI's job
+  repositories: [RepositoryInfo]  // the repository set, main repository first (GSM-git-submodules.md GSM-FR-VPAS)
+}
+
+RepositoryInfo {
+  path,                        // project-relative root; "" for the main repository
+  name,
+  parent?,                     // path of the parent repository; absent for the main repository
+  branch?,                     // current branch; absent when HEAD is detached
+  head_id?                     // full commit id at HEAD
 }
 
 Comparison =
@@ -34,6 +43,10 @@ ChangeEntry {
   id,                          // stable project-relative-path key (ASC-artifact-scanning.md ASC-FR-13)
   path,                        // project-relative path at its current location
   name,                        // basename
+  repository,                  // path of the RepositoryInfo that owns the entry (GSM-git-submodules.md GSM-FR-SIWR)
+  entry_kind: "file" | "submodule",  // "submodule" for a pointer entry (CHC-FR-EBLI)
+  previous_commit?,            // pointer entries only: the commit the comparison base records; absent for an added submodule
+  current_commit?,             // pointer entries only: the commit the submodule has checked out
   change_status: "added" | "modified" | "deleted" | "renamed" | "untracked",
   previous_path?,              // renamed entries only
   added_lines?,                // null when is_binary
@@ -76,12 +89,18 @@ Typed errors returned by these commands: `"not a git repository"`, `"unknown bra
 15. **CHC-FR-15** `list_branch_changes(target_branch)` returns a typed `"unknown branch"` error when `target_branch` does not resolve to a branch in the repository, and a typed `"no merge base"` error when the current branch and `target_branch` share no common ancestor.
 16. **CHC-FR-16** While a project is open, this module watches the repository's Git directory — `HEAD`, refs, and the index — and consumes the internal content-modification channel of `ASC-artifact-scanning.md` ASC-FR-15 for working-tree edits. A change on either source that could alter the current change set triggers a debounced `"changes updated"` event; multiple changes within the debounce window coalesce into a single event.
 16. **CHC-FR-VHAA** For a linked worktree, the watch of CHC-FR-16 also covers the common Git directory of the repository, which holds `refs/heads/` and `packed-refs`. A commit, a pull, or a ref write in another worktree is then a Git-metadata change of this worktree. `EMB-embeddings-index.md` EMB-FR-VQSK and EMB-FR-HTIQ consume this watch.
+16. **CHC-FR-EXTM** The watch of CHC-FR-16 also covers the Git directory of each submodule in the repository set, which its `.git` file names. A commit, a checkout or an index write in a submodule is a Git-metadata change.
 17. **CHC-FR-AADZ** A change to a working-tree path that `.gitignore` excludes triggers no `"changes updated"` event. Changes in the Git directory still count.
 17. **CHC-FR-17** Closing a project (per `PST-project-storage.md` PST-FR-14) tears down this module's watch for that project; no `"changes updated"` event fires after close, and no command touches the closed project's files.
 18. **CHC-FR-18** This module is read-only with respect to the repository. No command it exposes writes to the index, the object database, refs, or any file in the working tree, and none of them creates, deletes, or moves a branch. The two writes the Changes panel makes both go through `GTC-git.md` — the commit through GTC-FR-19 and the rollback of a checked selection through GTC-FR-23 — and each reaches this module only as the `"changes updated"` event that follows it (CHC-FR-16). Being read-only is what lets a rollback be described by this module immediately afterwards without its own computation having to be reconciled against a write it performed.
 19. **CHC-FR-19** Changing the project's active worktree (per `WTC-worktree-context.md` WTC-FR-08) tears this module's watch down on the outgoing content root exactly as CHC-FR-17 does and remounts it on the new one, so no `"changes updated"` event for the previous worktree reaches the panel afterwards and the next change set is computed against the new active worktree.
 20. **CHC-FR-20** `list_branch_changes(target_branch)` accepts a target that is checked out in another worktree of the repository and compares against it normally; the presence of a worktree for a branch neither qualifies nor disqualifies it as a comparison target. `list_comparison_branches()` likewise returns every candidate target regardless of whether it has a worktree, because the panel is choosing what to diff against rather than what to check out.
 
+20. **CHC-FR-TMNY** Both comparisons cover every repository of the repository set (per `GSM-git-submodules.md` GSM-FR-VPAS). `repositories` lists every member, also a member with no change. Each entry names its owner in `repository`.
+20. **CHC-FR-JFNC** `list_uncommitted_changes()` compares the working tree of each member against the `HEAD` of that member. A change inside a submodule is an entry of that submodule and never an entry of its parent.
+20. **CHC-FR-EBLI** A pointer change (per `GSM-git-submodules.md` GSM-FR-FCOF) is one entry of the parent with `entry_kind = "submodule"` at the submodule root path. Its `change_status` is `"modified"`, or `"added"` when the base records no commit for it. It carries `added_lines = 1`, `removed_lines` of 1 or 0 for an added one, and no artifact type.
+20. **CHC-FR-AIZV** In Branch mode the base of a submodule is the commit that the base of its parent records for that submodule. The base of the main repository is the merge-base of CHC-FR-04. A submodule that the parent base does not record gives its pointer entry and no file entries.
+20. **CHC-FR-RYNS** The artifact type of an entry inside a submodule comes from the path conventions relative to the root of that submodule (per `ASC-artifact-scanning.md` ASC-FR-LXOQ), so an entry carries the type it carries in the Project panel.
 21. **CHC-FR-21** `get_uncommitted_diff_totals()` returns the added-line and removed-line counts summed over exactly the change set `list_uncommitted_changes()` returns for the active worktree (CHC-FR-02, CHC-FR-03), together with the number of entries in it. Binary entries count toward `file_count` and toward neither line total, because no line counts exist for them (CHC-FR-08). It returns the typed `"not a git repository"` error under the same condition as every other command in this surface.
 22. **CHC-FR-22** `get_uncommitted_diff_totals()` is a standalone read: it neither requires nor is affected by any prior call to `list_uncommitted_changes()`, so `../ui/STB-status-bar.md` STB-FR-25 renders totals whether or not the Changes panel has ever been opened. A `"changes updated"` event (CHC-FR-16) signals that its result may have changed, exactly as it does for the two list commands, and it is read-only under CHC-FR-18 like the rest of the surface.
 23. **CHC-FR-QKHR** The change set and the repository watch are held per open project. Every command takes `project_id`. The `"changes updated"` event carries `project_id` and goes to the window of that project only. A project tab that is not in front keeps its watch running (`PWN-project-windows.md` PWN-FR-XBSI).

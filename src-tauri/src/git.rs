@@ -125,6 +125,22 @@ pub fn commit_paths_reported<S: LogSink + Clone + Send + 'static>(
                 serde_json::json!(outcome.committed_paths.len()),
             );
             log_ok(sink, buffer, LogLevel::Info, LOCAL, "commit created", fields);
+            // GSM-FR-WPKJ: each commit made in a repository of the set.
+            if outcome.repositories.len() > 1 {
+                for commit in &outcome.repositories {
+                    logging::log_info(
+                        sink,
+                        buffer,
+                        LOCAL,
+                        "commit created in a repository",
+                        log_fields! {
+                            "repository" => &commit.repository,
+                            "commit" => &commit.commit_id,
+                            "recordedCount" => commit.committed_paths.len(),
+                        },
+                    );
+                }
+            }
             Ok(outcome)
         }
         Err(error) => {
@@ -339,8 +355,13 @@ where
     // The check can read GitHub, so the command runs off the main thread.
     write_guard::off_main::run_write(app, "commit_paths", move |app| {
         let root = write_guard::off_main::project_root(&app)?;
-        // GTC-FR-EMLM: the main branch write check, before anything is written.
-        write_guard::commands::require_active_branch_write(&app, &root, "commit_paths")?;
+        // GTC-FR-EMLM, GTC-FR-OVSD: the main branch write check on each
+        // repository the commit writes, before anything is written.
+        // A path set that names no repository is refused by the write itself, in
+        // the order GTC-FR-20 gives.
+        let targets = commit_targets(&root, &paths)
+            .unwrap_or_else(|_| vec![(String::new(), root.to_path_buf())]);
+        write_guard::commands::require_repositories_write(&app, &targets, "commit_paths")?;
         let _sequence = write_guard::off_main::in_sequence();
         let outcome = commit_paths_reported(
             &app,
@@ -435,8 +456,13 @@ pub async fn push_current_branch(
     // parameters: a `State<'_, T>` borrows the invoke context and cannot cross
     // onto another thread, while the `AppHandle` can and reaches the same values.
     crate::project_scope::context::spawn_blocking(move || {
-        // GTC-FR-EMLM: the main branch write check, before anything is written.
-        write_guard::commands::require_active_branch_write(&app, &root, "push_current_branch")?;
+        // GTC-FR-EMLM, GTC-FR-OVSD: the main branch write check on each
+        // repository the push writes, before anything is written.
+        // A path set that names no repository is refused by the write itself, in
+        // the order GTC-FR-20 gives.
+        let targets =
+            push_targets(&root).unwrap_or_else(|_| vec![(String::new(), root.to_path_buf())]);
+        write_guard::commands::require_repositories_write(&app, &targets, "push_current_branch")?;
         let store = app.state::<GlobalSettingsStore>();
         let tokens = app.state::<GithubTokens>();
         let registry = app.project_store::<ProgressRegistry>();
@@ -445,7 +471,8 @@ pub async fn push_current_branch(
             // propagated: reporting must never take down the transfer.
             let _ = app.emit_project(name, payload);
         };
-        push_branch_at(
+        // GTC-FR-PQQV: every affected repository of the set, submodules first.
+        push_affected_at(
             &app,
             &logging::BUFFER,
             &emit,

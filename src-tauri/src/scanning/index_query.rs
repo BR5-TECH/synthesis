@@ -83,6 +83,23 @@ impl ProjectIndex {
         self.tree_node(rel)
     }
 
+    /// ASC-FR-YLGN: each folder the index marks as a repository boundary, with
+    /// its kind and how many direct children it holds, in path order. The
+    /// project index logs it, so a submodule that does not open in the tree
+    /// can be explained from the Logs panel.
+    pub fn nested_folders(&self) -> Vec<(String, super::repos::NestedRepo, usize)> {
+        let mut out: Vec<(String, super::repos::NestedRepo, usize)> = self
+            .nodes
+            .iter()
+            .filter_map(|(rel, node)| {
+                let kind = node.nested?;
+                Some((rel.clone(), kind, node.dirs.len() + node.files.len()))
+            })
+            .collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
+    }
+
     /// ASC-FR-KVIE: the direct children of the folder `rel`, in tree order.
     /// `None` when the index holds no folder at `rel`.
     pub fn children(&self, rel: &str) -> Option<Vec<TreeNode>> {

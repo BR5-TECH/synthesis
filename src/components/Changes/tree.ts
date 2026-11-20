@@ -26,14 +26,22 @@ export interface ChangeNode {
  *
  * `keyPrefix` namespaces the node keys so the same path under **Revisioned** and
  * under **Unrevisioned** keeps independent expand state.
+ *
+ * CHG-FR-EQYC: `root` is the project-relative root of the repository the
+ * entries belong to. The folder structure is built from the paths relative to
+ * it, while each node keeps its project-relative `path` and key. `""` is the
+ * project root.
  */
 export function buildChangeTree(
   entries: ChangeEntry[],
   keyPrefix: string,
+  root = "",
 ): ChangeNode[] {
   const roots: ChangeNode[] = [];
   // Folder nodes by path, so repeated visits to the same folder reuse one node.
   const folders = new Map<string, ChangeNode>();
+
+  const full = (relative: string) => (root === "" ? relative : `${root}/${relative}`);
 
   const folderAt = (path: string): ChangeNode[] => {
     if (path === "") return roots;
@@ -46,9 +54,9 @@ export function buildChangeTree(
       // Keys carry the node kind: a branch comparison can hold both a deleted
       // file `a` and a new file `a/b.md`, and two sibling nodes named `a` with
       // one key would collide in React and share expand state.
-      key: `${keyPrefix}d:${path}`,
+      key: `${keyPrefix}d:${full(path)}`,
       name,
-      path,
+      path: full(path),
       kind: "folder",
       children: [],
     };
@@ -58,8 +66,9 @@ export function buildChangeTree(
   };
 
   for (const entry of entries) {
-    const slash = entry.path.lastIndexOf("/");
-    const parent = slash === -1 ? "" : entry.path.slice(0, slash);
+    const relative = relativeToRoot(root, entry.path);
+    const slash = relative.lastIndexOf("/");
+    const parent = slash === -1 ? "" : relative.slice(0, slash);
     folderAt(parent).push({
       key: `${keyPrefix}f:${entry.path}`,
       name: entry.name,
@@ -80,6 +89,15 @@ export function buildChangeTree(
   };
   sort(roots);
   return roots;
+}
+
+/**
+ * CHG-FR-EQYC: `path` relative to the repository root `root`. A path outside
+ * the root comes back unchanged.
+ */
+export function relativeToRoot(root: string, path: string): string {
+  if (root === "") return path;
+  return path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path;
 }
 
 /** Whether an entry survives the two AND-combined filters (CHG-FR-14). */

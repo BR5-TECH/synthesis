@@ -116,6 +116,52 @@ where
     }
 }
 
+/// GTC-FR-OVSD / GSM-FR-GHFY: the check of a write to each repository in
+/// `targets` — `(project-relative root, checkout)` — on the branch its
+/// checkout holds, before the first write. The refusal of a submodule names it.
+pub(crate) fn require_repositories_write<R>(
+    app: &tauri::AppHandle<R>,
+    targets: &[(String, std::path::PathBuf)],
+    operation: &str,
+) -> Result<(), String>
+where
+    R: tauri::Runtime,
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    for (repository, checkout) in targets {
+        if let Err(e) = require_active_branch_write(app, checkout, operation) {
+            // GSM-FR-WPKJ: the record of the check does not know the
+            // repository, so a refusal of a submodule says which one.
+            if !repository.is_empty() && super::is_write_guard_refusal(&e) {
+                logging::log_warn(
+                    app,
+                    &logging::BUFFER,
+                    super::super::LOCAL,
+                    "main branch write refused in a submodule",
+                    crate::log_fields! { "repository" => repository, "operation" => operation },
+                );
+            }
+            return Err(super::refusal_in_repository(e, repository));
+        }
+    }
+    Ok(())
+}
+
+/// GTC-FR-ZBAL: the checkout of the member that `repository` names, or the
+/// content root for none. A path that is not a member is `"unknown repository"`.
+fn checkout_of(root: &Path, repository: Option<&str>) -> Result<std::path::PathBuf, String> {
+    let Some(repository) = repository.filter(|r| !r.is_empty()) else {
+        return Ok(root.to_path_buf());
+    };
+    let set = crate::changes::repo_set::RepoSet::open(root)?;
+    set.submodule_at(repository)
+        .and_then(|member| member.repo.workdir().map(Path::to_path_buf))
+        .ok_or_else(|| ERR_UNKNOWN_REPOSITORY.to_string())
+}
+
+/// GTC-FR-ZBAL: a `repository` that is not a member of the repository set.
+pub const ERR_UNKNOWN_REPOSITORY: &str = "unknown repository";
+
 /// GTC-FR-TTSV: read the guard of `branch` into the session memory, so that a
 /// later check of it reads no network. It refuses nothing.
 pub(crate) fn prime_branch_guard<R>(app: &tauri::AppHandle<R>, root: &Path, branch: Option<&str>)
@@ -199,13 +245,16 @@ fn project_root<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<crate::f
 pub async fn get_branch_write_guard<R: tauri::Runtime>(
     branch: Option<String>,
     refresh: bool,
+    repository: Option<String>,
     app: tauri::AppHandle<R>,
 ) -> Result<BranchWriteGuard, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    let root = project_root(&app)?;
+    let content_root = project_root(&app)?;
     crate::project_scope::context::spawn_blocking(move || {
+        let label = repository.clone().unwrap_or_default();
+        let root = checkout_of(&content_root, repository.as_deref())?;
         let branch = branch.filter(|name| !name.is_empty()).or_else(|| branch_at(&root));
         with_access(&app, &root, |session, access| {
             guard_for(
@@ -216,6 +265,7 @@ where
                 branch.as_deref().unwrap_or(""),
                 refresh,
             )
+            .in_repository(&label)
         })
         .ok_or_else(|| ERR_WRITE_GUARD_UNAVAILABLE.to_string())
     })
@@ -228,15 +278,19 @@ where
 #[tauri::command]
 pub async fn confirm_main_branch_write<R: tauri::Runtime>(
     branch: String,
+    repository: Option<String>,
     app: tauri::AppHandle<R>,
 ) -> Result<BranchWriteGuard, String>
 where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
-    let root = project_root(&app)?;
+    let content_root = project_root(&app)?;
     crate::project_scope::context::spawn_blocking(move || {
+        let label = repository.clone().unwrap_or_default();
+        let root = checkout_of(&content_root, repository.as_deref())?;
         with_access(&app, &root, |session, access| {
             confirm_write(&app, &logging::BUFFER, session, access, &branch)
+                .map(|guard| guard.in_repository(&label))
         })
         .unwrap_or_else(|| Err(ERR_WRITE_GUARD_UNAVAILABLE.to_string()))
     })

@@ -373,6 +373,7 @@ fn the_commands_read_the_active_branch_and_record_a_confirmation() {
     let read = tauri::async_runtime::block_on(get_branch_write_guard(
         None,
         false,
+        None,
         handle.clone(),
         Default::default(),
     ))
@@ -382,6 +383,7 @@ fn the_commands_read_the_active_branch_and_record_a_confirmation() {
 
     let confirmed = tauri::async_runtime::block_on(confirm_main_branch_write(
         current.clone(),
+        None,
         handle.clone(),
         Default::default(),
     ))
@@ -390,6 +392,7 @@ fn the_commands_read_the_active_branch_and_record_a_confirmation() {
     let again = tauri::async_runtime::block_on(get_branch_write_guard(
         Some(current.clone()),
         false,
+        None,
         handle,
         Default::default(),
     ))
@@ -408,6 +411,7 @@ fn the_guard_crosses_the_wire_in_camel_case() {
         protection_error: Some("github_unreachable".into()),
         is_main: true,
         confirmed: false,
+        repository: None,
     };
     assert_eq!(
         serde_json::to_value(&guard).unwrap(),

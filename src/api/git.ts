@@ -10,6 +10,8 @@ import type {
   ActiveRootState,
   BranchWriteGuard,
   CommitOutcome,
+  PartialCommit,
+  RepositoryCommit,
   RollbackOutcome,
   BranchOption,
   ChangeSet,
@@ -259,6 +261,44 @@ export const commitPaths = (
   expectedWorktree?: string,
 ) => invoke<CommitOutcome>("commit_paths", { message, paths, expectedWorktree });
 
+/** The typed code of the refusal of GTC-FR-TJPJ. */
+export const ERR_PARTIAL_COMMIT = "partial_commit";
+
+/**
+ * GTC-FR-TJPJ / GSM-FR-ZKEJ: the payload of a `partial_commit` refusal of
+ * `commitPaths`, or `null` when `error` is another refusal or carries no
+ * readable payload.
+ *
+ * The refusal has the `code: json` form of `worktree_identity_changed`. The
+ * commits it names stay made.
+ */
+export function partialCommit(error: unknown): PartialCommit | null {
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  const at = raw.indexOf(`${ERR_PARTIAL_COMMIT}:`);
+  if (at === -1) return null;
+  try {
+    const parsed = JSON.parse(
+      raw.slice(at + ERR_PARTIAL_COMMIT.length + 1).trim(),
+    ) as Partial<PartialCommit>;
+    if (typeof parsed.failed !== "string") return null;
+    const committed = Array.isArray(parsed.committed)
+      ? parsed.committed.filter(
+          (c): c is RepositoryCommit =>
+            typeof c?.repository === "string" && typeof c?.commitId === "string",
+        )
+      : [];
+    return {
+      committed,
+      failed: parsed.failed,
+      cause: typeof parsed.cause === "string" ? parsed.cause : "",
+    };
+  } catch {
+    // Not a JSON payload: the caller states the sentence that names no
+    // repository.
+    return null;
+  }
+}
+
 /**
  * GTC-FR-29 … GTC-FR-32: the active worktree's **complete and unclassified**
  * uncommitted state, each path carrying its staged status and its unstaged
@@ -414,9 +454,21 @@ export const refreshWorktreesAndBranches = () =>
  * GTC-FR-TTSV: whether `branch` is a main branch and whether the author
  * confirmed a write to it. `null` reads the branch of the active worktree.
  */
-export const getBranchWriteGuard = (branch: string | null, refresh: boolean) =>
-  invoke<BranchWriteGuard>("get_branch_write_guard", { branch, refresh });
+export const getBranchWriteGuard = (
+  branch: string | null,
+  refresh: boolean,
+  repository?: string,
+) =>
+  invoke<BranchWriteGuard>(
+    "get_branch_write_guard",
+    // GTC-FR-ZBAL: a submodule is named; the main repository is not.
+    repository ? { branch, refresh, repository } : { branch, refresh },
+  );
 
 /** GTC-FR-YWRZ: record the author's confirmation for the session. */
-export const confirmMainBranchWrite = (branch: string) =>
-  invoke<BranchWriteGuard>("confirm_main_branch_write", { branch });
+export const confirmMainBranchWrite = (branch: string, repository?: string) =>
+  invoke<BranchWriteGuard>(
+    "confirm_main_branch_write",
+    // GTC-FR-ZBAL, MBW-FR-DKOY: the confirmation of a submodule names it.
+    repository ? { branch, repository } : { branch },
+  );

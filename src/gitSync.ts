@@ -8,7 +8,28 @@
  * panel's branches section are the same operation, so a branch that is level
  * with its remote cannot be pushable from one of them and not the other.
  */
-import type { UpstreamSyncState } from "./types";
+import type { RepositorySyncState, UpstreamSyncState } from "./types";
+
+/** CHG-FR-37: whether one standing holds something to publish. */
+function standingPushable(state: {
+  hasRemote: boolean;
+  hasUpstream: boolean;
+  ahead: number | null;
+}): boolean {
+  if (!state.hasRemote) return false;
+  if (!state.hasUpstream) return true;
+  return (state.ahead ?? 0) > 0;
+}
+
+/**
+ * CHG-FR-KQWD: the repositories of the repository set, when the state lists
+ * more than one. `null` for a project with one repository, which keeps the
+ * rule of CHG-FR-37 on the top-level fields.
+ */
+function memberStates(state: UpstreamSyncState): RepositorySyncState[] | null {
+  const members = state.repositories ?? [];
+  return members.length > 1 ? members : null;
+}
 
 /**
  * CHG-FR-37: whether **Push** is offered, from the branch's standing against
@@ -22,9 +43,13 @@ import type { UpstreamSyncState } from "./types";
  * pushable, so a surface never offers a transfer it cannot describe.
  */
 export function canPush(state: UpstreamSyncState | null): boolean {
-  if (!state || !state.hasRemote) return false;
-  if (!state.hasUpstream) return true;
-  return (state.ahead ?? 0) > 0;
+  if (!state) return false;
+  // CHG-FR-KQWD: with more than one repository, one push reaches every
+  // affected repository (GSM-FR-REIT), so any pushable repository with a
+  // branch makes Push available. A detached `HEAD` never does.
+  const members = memberStates(state);
+  if (members) return members.some((m) => m.branch != null && standingPushable(m));
+  return standingPushable(state);
 }
 
 /** GIT-FR-QMYB: the sentence every Push control states while a push runs. */
@@ -62,6 +87,12 @@ export function pushUnavailableReason(
   if (running) return runningReason(operation);
   if (canPush(state)) return null;
   if (!state) return "The branch's standing against its remote is unknown.";
+  const members = memberStates(state);
+  if (members) {
+    if (members.every((m) => !m.hasRemote))
+      return "No repository of this project has a remote configured.";
+    return "Nothing to push — no repository on a branch holds commits its remote does not.";
+  }
   if (!state.hasRemote) return "This repository has no remote configured.";
   return "Nothing to push — the branch is level with its remote.";
 }

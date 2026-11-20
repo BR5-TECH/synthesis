@@ -27,6 +27,8 @@ export interface ScriptedReads extends BranchWriteGuardReads {
   reads: { branch: string | null; refresh: boolean }[];
   /** Each confirm command, as the fake backend received it. */
   confirms: string[];
+  /** The repository of each confirm command; absent for the main one. */
+  confirmRepositories: (string | undefined)[];
   /** The guard the next reads answer with, or an error to reject with. */
   answer: BranchWriteGuard | Error;
   /** An error the next confirms reject with. */
@@ -42,15 +44,20 @@ export interface ScriptedReads extends BranchWriteGuardReads {
  * surface that never sends the confirm never sees it.
  */
 export function scriptedReads(answer: BranchWriteGuard | Error = mainGuard()): ScriptedReads {
-  /** The branches the fake backend holds a confirmation for. */
+  /**
+   * The confirmations the fake backend holds, by repository and branch
+   * (GSM-FR-KGOP): a submodule's `main` is not the main repository's `main`.
+   */
   const recorded = new Set<string>();
+  const keyOf = (repository: string | undefined, branch: string) => `${repository ?? ""}|${branch}`;
   const answered = (guard: BranchWriteGuard): BranchWriteGuard => ({
     ...guard,
-    confirmed: guard.confirmed || recorded.has(guard.branch),
+    confirmed: guard.confirmed || recorded.has(keyOf(guard.repository, guard.branch)),
   });
   const reads: ScriptedReads = {
     reads: [],
     confirms: [],
+    confirmRepositories: [],
     answer,
     confirmError: null,
     read(branch, refresh) {
@@ -58,13 +65,14 @@ export function scriptedReads(answer: BranchWriteGuard | Error = mainGuard()): S
       const next = reads.answer;
       return next instanceof Error ? Promise.reject(next) : Promise.resolve(answered(next));
     },
-    confirm(branch) {
+    confirm(branch, repository) {
       reads.confirms.push(branch);
+      reads.confirmRepositories.push(repository);
       if (reads.confirmError) return Promise.reject(reads.confirmError);
       const base = reads.answer instanceof Error ? mainGuard({ branch }) : reads.answer;
-      const guard = { ...base, branch };
+      const guard = { ...base, branch, repository };
       // MBW-FR-JZME: a protected branch is recorded like any main branch.
-      recorded.add(branch);
+      recorded.add(keyOf(repository, branch));
       return Promise.resolve(answered(guard));
     },
   };

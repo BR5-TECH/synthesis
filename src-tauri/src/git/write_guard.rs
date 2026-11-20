@@ -64,6 +64,10 @@ pub struct BranchWriteGuard {
     pub is_main: bool,
     /// GTC-FR-YWRZ.
     pub confirmed: bool,
+    /// GTC-FR-ZBAL: the project-relative root of the submodule the guard is
+    /// of; `None` for the main repository.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
 }
 
 impl BranchWriteGuard {
@@ -76,7 +80,14 @@ impl BranchWriteGuard {
             protection_error: None,
             is_main: false,
             confirmed: false,
+            repository: None,
         }
+    }
+
+    /// GTC-FR-ZBAL: the guard of the submodule at `repository`.
+    pub fn in_repository(mut self, repository: &str) -> BranchWriteGuard {
+        self.repository = (!repository.is_empty()).then(|| repository.to_string());
+        self
     }
 }
 
@@ -88,6 +99,22 @@ pub fn refusal(code: &str, guard: &BranchWriteGuard) -> String {
 /// Whether `error` is the refusal of the check.
 pub fn is_write_guard_refusal(error: &str) -> bool {
     error.starts_with(ERR_MAIN_BRANCH_WRITE_UNCONFIRMED)
+}
+
+/// GTC-FR-OVSD: the refusal `error` with its guard naming the submodule at
+/// `repository`. Any other error, and a refusal of the main repository, stay
+/// as they are.
+pub fn refusal_in_repository(error: String, repository: &str) -> String {
+    if repository.is_empty() || !is_write_guard_refusal(&error) {
+        return error;
+    }
+    let Some((code, json)) = error.split_once(": ") else {
+        return error;
+    };
+    match serde_json::from_str::<BranchWriteGuard>(json) {
+        Ok(guard) => refusal(code, &guard.in_repository(repository)),
+        Err(_) => error,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -289,6 +316,7 @@ pub(crate) fn guard_for<S: LogSink + Clone + Send + 'static>(
         protection_error: read.error,
         is_main: is_default || read.protection == PROTECTION_PROTECTED,
         confirmed: session.is_confirmed(&key, branch),
+        repository: None,
     };
     if !fetched {
         return guard;

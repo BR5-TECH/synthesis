@@ -146,5 +146,6 @@ mod diff_totals;
 mod head_states;
 mod read_only;
 mod renames_and_ignores;
+mod submodules;
 mod watch_surface;
 mod wire_shapes;

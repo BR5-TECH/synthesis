@@ -84,7 +84,7 @@ beforeEach(() => {
   listError = null;
   // Two commits the remote does not have, so Push is offered by default and the
   // tests that are about authentication stay about authentication.
-  sync = { hasRemote: true, hasUpstream: true, ahead: 2, behind: 0 };
+  sync = { hasRemote: true, hasUpstream: true, ahead: 2, behind: 0, repositories: [] };
   outcome = { ok: true };
   handedOperation = null;
   branches = [
@@ -495,7 +495,7 @@ describe("Git panel Pull (GIT-FR-PLWD, GIT-FR-MRBQ)", () => {
   });
 
   it("GIT-FR-PLWD: is unavailable while the repository has no remote", async () => {
-    sync = { hasRemote: false, hasUpstream: false, ahead: null, behind: null };
+    sync = { hasRemote: false, hasUpstream: false, ahead: null, behind: null, repositories: [] };
     const pull = await openLogs();
     await waitFor(() => expect(pull).toBeDisabled());
     expect(pull).toHaveAttribute("title", "This repository has no remote configured.");
@@ -794,6 +794,7 @@ describe("the Logs section's Push control (GIT-FR-KLNK)", () => {
       hasUpstream: true,
       ahead: 0,
       behind: 0,
+      repositories: [],
     });
     await waitFor(() => expect(pushButton()).toBeDisabled());
     expect(pushButton()).toHaveAttribute(
@@ -813,6 +814,7 @@ describe("the Logs section's Push control (GIT-FR-KLNK)", () => {
       hasUpstream: true,
       ahead: 0,
       behind: 3,
+      repositories: [],
     });
     await waitFor(() => expect(pushButton()).toBeDisabled());
   });
@@ -823,6 +825,7 @@ describe("the Logs section's Push control (GIT-FR-KLNK)", () => {
       hasUpstream: false,
       ahead: null,
       behind: null,
+      repositories: [],
     });
     await waitFor(() => expect(pushButton()).toBeDisabled());
     expect(pushButton()).toHaveAttribute(
@@ -837,6 +840,7 @@ describe("the Logs section's Push control (GIT-FR-KLNK)", () => {
       hasUpstream: true,
       ahead: 2,
       behind: 0,
+      repositories: [],
     });
     await waitFor(() => expect(pushButton()).toBeEnabled());
     expect(pushButton()).not.toHaveAttribute("title");
@@ -847,6 +851,7 @@ describe("the Logs section's Push control (GIT-FR-KLNK)", () => {
       hasUpstream: false,
       ahead: null,
       behind: null,
+      repositories: [],
     });
     await waitFor(() => expect(pushButton()).toBeEnabled());
   });
@@ -859,6 +864,7 @@ describe("the Logs section's Push control (GIT-FR-KLNK)", () => {
       hasUpstream: true,
       ahead: 1,
       behind: 0,
+      repositories: [],
     });
     await waitFor(() => expect(pushButton()).toBeEnabled());
 
@@ -869,7 +875,7 @@ describe("the Logs section's Push control (GIT-FR-KLNK)", () => {
       ).toHaveLength(1),
     );
 
-    sync = { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0 };
+    sync = { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0, repositories: [] };
     await act(async () => {
       fireGitOperationFinished({ ok: true });
     });
@@ -882,11 +888,12 @@ describe("the Logs section's Push control (GIT-FR-KLNK)", () => {
       hasUpstream: true,
       ahead: 0,
       behind: 0,
+      repositories: [],
     });
     await waitFor(() => expect(pushButton()).toBeDisabled());
 
     // A commit made from the Changes panel announces itself on this channel.
-    sync = { hasRemote: true, hasUpstream: true, ahead: 1, behind: 0 };
+    sync = { hasRemote: true, hasUpstream: true, ahead: 1, behind: 0, repositories: [] };
     await act(async () => {
       handlers
         .filter(([n]) => n === "changes-updated")
@@ -903,6 +910,7 @@ describe("the Logs section's Push control (GIT-FR-KLNK)", () => {
       hasUpstream: true,
       ahead: 1,
       behind: 0,
+      repositories: [],
     });
     await waitFor(() => expect(pushButton()).toBeEnabled());
 

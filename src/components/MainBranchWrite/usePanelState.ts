@@ -55,7 +55,12 @@ export function usePanelState(options: {
       const mine = ++generation.current;
       setBusy(true);
       try {
-        const next = await guardReads().read(branch ?? guard?.branch ?? null, refresh);
+        // MBW-FR-DKOY: a guard of a submodule is read again in that submodule.
+        const next = await guardReads().read(
+          branch ?? guard?.branch ?? null,
+          refresh,
+          guard?.repository,
+        );
         if (!live.current || mine !== generation.current) return next;
         setGuard(next);
         setReadError(null);
@@ -68,7 +73,7 @@ export function usePanelState(options: {
         if (live.current) setBusy(false);
       }
     },
-    [branch, guard?.branch, write, surface],
+    [branch, guard?.branch, guard?.repository, write, surface],
   );
 
   const confirm = useCallback(async () => {
@@ -76,7 +81,8 @@ export function usePanelState(options: {
     setBusy(true);
     setConfirmError(null);
     try {
-      const next = await guardReads().confirm(guard.branch);
+      // MBW-FR-DKOY: the confirmation of a submodule names its repository.
+      const next = await guardReads().confirm(guard.branch, guard.repository);
       rememberConfirmation(next);
       logConfirmation("confirmed", write, guard.branch, surface);
       if (live.current) setGuard(next);

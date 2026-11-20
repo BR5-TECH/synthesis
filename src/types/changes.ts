@@ -46,12 +46,47 @@ export interface ChangeEntry {
   isBinary: boolean;
   artifactType?: ArtifactType;
   typeSource?: TypeSource;
+  /**
+   * CHC-FR-TMNY / GSM-FR-SIWR: the project-relative root of the repository that
+   * owns the entry. `""` is the main repository.
+   */
+  repository: string;
+  /**
+   * CHC-FR-EBLI: `"submodule"` for a pointer entry. Its path is the submodule
+   * root, and the parent repository owns it.
+   */
+  entryKind: ChangeEntryKind;
+  /** Pointer entries only: the commit the base records. Absent when added. */
+  previousCommit?: string;
+  /** Pointer entries only: the commit the submodule has checked out. */
+  currentCommit?: string;
+}
+
+/** CHC-FR-EBLI: a changed file, or the pointer of a submodule. */
+export type ChangeEntryKind = "file" | "submodule";
+
+/**
+ * GSM-FR-VPAS / CHC-FR-TMNY: one member of the repository set. The main
+ * repository is first, and the submodules follow in path order.
+ */
+export interface RepositoryInfo {
+  /** Project-relative root. `""` is the main repository. */
+  path: string;
+  name: string;
+  /** The path of the parent repository. Absent for the main repository. */
+  parent?: string;
+  /** The current branch. Absent when `HEAD` is detached. */
+  branch?: string;
+  /** The full commit id at `HEAD`. Absent when the branch has no commit. */
+  headId?: string;
 }
 
 /** A comparison plus its flat entry list; the UI builds the tree (CHC-FR-12). */
 export interface ChangeSet {
   comparison: Comparison;
   entries: ChangeEntry[];
+  /** CHC-FR-TMNY: every member of the repository set, also one with no change. */
+  repositories: RepositoryInfo[];
 }
 
 /** One option in the target-branch picker (CHC-FR-14 / CHG-FR-05). */
@@ -261,6 +296,28 @@ export type ChangesCommitAction = "commit" | "commit_and_push" | "push";
 export interface CommitOutcome {
   commitId: string;
   committedPaths: string[];
+  /** GTC-FR-CHEC: one item for each commit made, in the order made. */
+  repositories: RepositoryCommit[];
+}
+
+/** GTC-FR-CHEC: the commit made in one repository of the repository set. */
+export interface RepositoryCommit {
+  /** Project-relative root. `""` is the main repository. */
+  repository: string;
+  commitId: string;
+  /** Project-relative. */
+  committedPaths: string[];
+}
+
+/**
+ * GTC-FR-TJPJ / GSM-FR-ZKEJ: what the `partial_commit` refusal carries. The
+ * commits made before the failure stay.
+ */
+export interface PartialCommit {
+  committed: RepositoryCommit[];
+  /** The path of the repository whose commit failed. */
+  failed: string;
+  cause: string;
 }
 
 /**
@@ -404,6 +461,33 @@ export interface UpstreamSyncState {
   hasUpstream: boolean;
   ahead: number | null;
   behind: number | null;
+  /**
+   * GTC-FR-OQJB: one state for each member of the repository set. The
+   * top-level fields describe the main repository.
+   */
+  repositories: RepositorySyncState[];
+}
+
+/** GTC-FR-OQJB: the standing of one repository against its upstream. */
+export interface RepositorySyncState {
+  /** Project-relative root. `""` is the main repository. */
+  repository: string;
+  /** Absent when `HEAD` is detached. */
+  branch?: string;
+  hasRemote: boolean;
+  hasUpstream: boolean;
+  ahead: number | null;
+  behind: number | null;
+}
+
+/** GSM-FR-MJHC: why a push skipped a repository. */
+export type PushSkipReason = "detached_head" | "no_remote";
+
+/** GTC-FR-PQQV: what a push of the current branch did in each repository. */
+export interface PushSummary {
+  /** The repositories pushed, in the order pushed. */
+  pushed: string[];
+  skipped: { repository: string; reason: PushSkipReason }[];
 }
 
 /**
@@ -422,4 +506,6 @@ export interface GitOperationFinishedPayload {
   ok: boolean;
   /** The typed cause when `ok` is false. */
   error?: string;
+  /** GTC-FR-PQQV: a push only. What it pushed and what it skipped. */
+  pushSummary?: PushSummary;
 }

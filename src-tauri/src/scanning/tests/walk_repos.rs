@@ -222,3 +222,102 @@ fn git_boundaries_name_folders_of_touched_git_entries() {
     assert!(exclude_changed(&exclude, root));
     assert!(!exclude_changed(&Ok(vec![ev("a.md")]), root));
 }
+
+// ASC-FR-YLGN, ASC-FR-YSWU, LIB-FR-JZNT: a submodule that libgit2 cloned — a
+// `.git` file that names `.git/modules/<name>` of the parent — is a folder
+// with children, and its children are listed.
+#[test]
+fn a_real_submodule_is_a_folder_with_children() {
+    use crate::changes::repo_set::tests::fixture::Superproject;
+    let p = Superproject::new(&[("top.md", "top\n")]);
+    p.add_submodule("", "libs/sub", &[("src/a.md", "a\n"), ("readme.md", "r\n")]);
+    let root = crate::fs::RootFs::for_root(p.root());
+    let index = ProjectIndex::build(&root);
+    let libs = index.children("libs").expect("libs is a folder");
+    assert_eq!(libs.len(), 1);
+    assert_eq!(libs[0].path, "libs/sub");
+    assert_eq!(libs[0].nested_repo, Some(NestedRepo::Submodule));
+    assert_eq!(libs[0].has_children, Some(true));
+    let names: Vec<String> =
+        index.children("libs/sub").unwrap().into_iter().map(|n| n.path).collect();
+    assert_eq!(names, ["libs/sub/src", "libs/sub/readme.md"]);
+}
+
+// ASC-FR-UWMI, ASC-FR-JYXO, ASC-FR-YLGN: a submodule initialised while the
+// project is open turns from an empty, uninitialised folder into a submodule
+// folder with children, and the burst names the folders that changed.
+#[test]
+fn a_submodule_initialised_while_open_gets_its_children() {
+    use crate::changes::repo_set::tests::fixture::Superproject;
+    let p = Superproject::new(&[("top.md", "top\n")]);
+    p.add_submodule("", "libs/sub", &[("src/a.md", "a\n"), ("readme.md", "r\n")]);
+    let clone_dir = p.tmp.path().join("clone");
+    let clone = git2::Repository::clone(&p.root().to_string_lossy(), &clone_dir).unwrap();
+    let root = crate::fs::RootFs::for_root(&clone_dir);
+    let mut index = ProjectIndex::build(&root);
+    let before = index.children("libs").unwrap();
+    assert_eq!(before[0].nested_repo, Some(NestedRepo::Uninitialised));
+    assert_eq!(before[0].has_children, Some(false));
+
+    let mut submodule = clone.find_submodule("libs/sub").unwrap();
+    submodule.update(true, None).unwrap();
+    let burst: Vec<String> =
+        ["libs/sub", "libs/sub/readme.md", "libs/sub/src", "libs/sub/src/a.md"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+    let changed = index.apply(&root, &burst, false, &["libs/sub".to_string()]);
+    assert!(changed.contains(&"libs".to_string()), "{changed:?}");
+    let after = index.children("libs").unwrap();
+    assert_eq!(after[0].nested_repo, Some(NestedRepo::Submodule));
+    assert_eq!(after[0].has_children, Some(true));
+    assert_eq!(index.children("libs/sub").unwrap().len(), 2);
+}
+
+// ASC-FR-UWMI, ASC-FR-YLGN: however the watcher splits the events of a
+// submodule init into bursts — the boundary alone, the files alone, or both
+// in turn — the index ends with a submodule folder that holds its children.
+#[test]
+fn every_burst_shape_of_a_submodule_init_ends_with_a_submodule_folder() {
+    use crate::changes::repo_set::tests::fixture::Superproject;
+    let p = Superproject::new(&[("top.md", "top\n")]);
+    p.add_submodule("", "libs/sub", &[("src/a.md", "a\n"), ("readme.md", "r\n")]);
+    let files: Vec<String> = ["libs/sub/readme.md", "libs/sub/src", "libs/sub/src/a.md"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let boundary = vec!["libs/sub".to_string()];
+    // Each burst is (paths, boundaries).
+    type Burst = (Vec<String>, Vec<String>);
+    let shapes: [(&str, Vec<Burst>); 3] = [
+        ("boundary only", vec![(Vec::new(), boundary.clone())]),
+        ("files only", vec![(files.clone(), Vec::new())]),
+        ("boundary, then files", vec![(Vec::new(), boundary.clone()), (files.clone(), Vec::new())]),
+    ];
+    for (n, (shape, bursts)) in shapes.into_iter().enumerate() {
+        let clone_dir = p.tmp.path().join(format!("clone{n}"));
+        let clone = git2::Repository::clone(&p.root().to_string_lossy(), &clone_dir).unwrap();
+        let root = crate::fs::RootFs::for_root(&clone_dir);
+        let mut index = ProjectIndex::build(&root);
+        clone.find_submodule("libs/sub").unwrap().update(true, None).unwrap();
+        for (paths, boundaries) in bursts {
+            index.apply(&root, &paths, false, &boundaries);
+        }
+        let node = &index.children("libs").unwrap()[0];
+        assert_eq!(node.nested_repo, Some(NestedRepo::Submodule), "{shape}");
+        assert_eq!(node.has_children, Some(true), "{shape}");
+        assert_eq!(index.children("libs/sub").unwrap().len(), 2, "{shape}");
+        assert!(index.repo_roots.contains("libs/sub"), "{shape}");
+    }
+}
+
+// ASC-FR-YLGN: the index lists each repository boundary with its kind and
+// child count, which the project index logs.
+#[test]
+fn the_index_lists_its_repository_boundaries() {
+    use crate::changes::repo_set::tests::fixture::Superproject;
+    let p = Superproject::new(&[("top.md", "top\n")]);
+    p.add_submodule("", "libs/sub", &[("a.md", "a\n"), ("b.md", "b\n")]);
+    let index = ProjectIndex::build(&crate::fs::RootFs::for_root(p.root()));
+    assert_eq!(index.nested_folders(), [("libs/sub".to_string(), NestedRepo::Submodule, 2)]);
+}

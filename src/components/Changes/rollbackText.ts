@@ -26,6 +26,9 @@ export function rollbackFailureText(kind: string): string {
       return "lies outside the project";
     case "write_failed":
       return "could not be written";
+    // GTC-FR-DGJV: a submodule pointer is never written by a rollback.
+    case "submodule_pointer":
+      return "is a submodule pointer and cannot be rolled back";
     default:
       return kind;
   }

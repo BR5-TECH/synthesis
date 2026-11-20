@@ -57,6 +57,55 @@
   color: var(--fg-1);
 }
 
+/* CHG-FR-BYWJ / CHG-FR-UMCU: a repository group, above the two groups of
+   CHG-FR-09 of its repository. Its label carries the weight of the group rows,
+   and the branch after it is in the recessive meta treatment, in the mono
+   face, as a short commit id reads elsewhere. */
+.tree-row--repository .tree-row__name {
+  font-weight: var(--fw-semi);
+  color: var(--fg-1);
+}
+.tree-row__branch {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+}
+/* CHG-FR-GBTE: a pointer row shows the short ids of its two commits where a
+   file row shows its diffstat. The cell takes no box of its own
+   (`display: contents`), so its two parts are items of the row: the current id
+   never shrinks, and the previous id shares the leftover width with the name
+   and ellipsises first. So a narrow panel keeps `→ cur7` whole and the row
+   never grows wider than the panel. */
+.change-row__stat--pointer { display: contents; }
+.change-row__pointer-previous {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: calc(7ch + 1px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+}
+.change-row__pointer {
+  flex: none;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-2);
+}
+/* CHG-FR-AYTR: the checkbox of a pointer row that a submodule file implies is
+   checked and takes no input. */
+.change-check:disabled { opacity: 0.6; cursor: default; }
+
 /* The panel's inline states — the ones that stay in the tree's own region with
    every control above still present: an unresolvable target branch (CHG-FR-24) and a
    failed read. Distinguished by the `data-state` attribute so each reads
@@ -308,6 +357,15 @@
 }
 .changes-note[data-tone="error"] { color: var(--danger); }
 
+/* CHG-FR-NUZB: the repositories a push skipped, below the push note. */
+.changes-note__skipped {
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--fg-2);
+}
+.changes-note__skipped-repository { font-family: var(--font-mono); }
+
 /* CHG-FR-QLZO / CHG-FR-KIPM: the read-only Completed runs list below the
    footer. It never grows past five rows: the rows have one fixed height, so
    "five rows" is a length, and the list scrolls inside itself. The tree above
@@ -395,3 +453,43 @@
   white-space: nowrap;
 }
 
+
+/* CMW-FR-WZRQ: the repositories a commit is made in, above the file list, and
+   the list grouped by repository. A group label keeps the case of the path it
+   names, so it takes the weight of a label and not the capitals of one. */
+.commit-repositories {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+}
+.commit-repositories__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+}
+.commit-repositories__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-family: var(--font-mono);
+  color: var(--fg-1);
+}
+.commit-repositories__item svg { color: var(--fg-3); }
+.commit-files__group + .commit-files__group { margin-top: var(--sp-1); }
+.commit-files__group-label {
+  padding: 1px var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui-xs);
+  font-weight: var(--fw-semi);
+  color: var(--fg-2);
+}
+.commit-files__group-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

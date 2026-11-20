@@ -114,7 +114,10 @@ export function noteEditContext(next: string): void {
  * The surfaces call it with the guard that the confirmation answered.
  */
 export function rememberConfirmation(confirmed: BranchWriteGuard): void {
-  if (guard && guard.branch === confirmed.branch) guard = { ...guard, confirmed: true };
+  // GSM-FR-KGOP: a confirmation holds for one repository and one branch, so a
+  // submodule's `main` does not confirm the main repository's `main`.
+  const same = (guard?.repository ?? "") === (confirmed.repository ?? "");
+  if (guard && same && guard.branch === confirmed.branch) guard = { ...guard, confirmed: true };
 }
 
 /** Whether a read of the guard is under way. */

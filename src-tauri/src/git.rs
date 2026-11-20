@@ -125,6 +125,22 @@ pub fn commit_paths_reported<S: LogSink + Clone + Send + 'static>(
                 serde_json::json!(outcome.committed_paths.len()),
             );
             log_ok(sink, buffer, LogLevel::Info, LOCAL, "commit created", fields);
+            // GSM-FR-WPKJ: each commit made in a repository of the set.
+            if outcome.repositories.len() > 1 {
+                for commit in &outcome.repositories {
+                    logging::log_info(
+                        sink,
+                        buffer,
+                        LOCAL,
+                        "commit created in a repository",
+                        log_fields! {
+                            "repository" => &commit.repository,
+                            "commit" => &commit.commit_id,
+                            "recordedCount" => commit.committed_paths.len(),
+                        },
+                    );
+                }
+            }
             Ok(outcome)
         }
         Err(error) => {
@@ -445,7 +461,8 @@ pub async fn push_current_branch(
             // propagated: reporting must never take down the transfer.
             let _ = app.emit_project(name, payload);
         };
-        push_branch_at(
+        // GTC-FR-PQQV: every affected repository of the set, submodules first.
+        push_affected_at(
             &app,
             &logging::BUFFER,
             &emit,

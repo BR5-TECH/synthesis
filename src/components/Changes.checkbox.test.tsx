@@ -471,7 +471,7 @@ describe("further checkbox and action behaviour", () => {
     let release!: () => void;
     backend({
       uncommitted: changeSet([LIB]),
-      sync: { hasRemote: true, hasUpstream: true, ahead: 2, behind: 0 },
+      sync: { hasRemote: true, hasUpstream: true, ahead: 2, behind: 0, repositories: [] },
       prefs: { changesCommitAction: "push" },
     });
     const base = invokeMock.getMockImplementation()!;
@@ -502,7 +502,7 @@ describe("further checkbox and action behaviour", () => {
     );
     backend({
       uncommitted: changeSet([LIB]),
-      sync: { hasRemote: true, hasUpstream: false, ahead: null, behind: null },
+      sync: { hasRemote: true, hasUpstream: false, ahead: null, behind: null, repositories: [] },
       prefs: { changesCommitAction: "push" },
       fail: { push_current_branch: "github_token_selection_required" },
     });
@@ -524,7 +524,7 @@ describe("further checkbox and action behaviour", () => {
     // confirmed is a failure to report, not a reason to prompt again.
     backend({
       uncommitted: changeSet([LIB]),
-      sync: { hasRemote: true, hasUpstream: false, ahead: null, behind: null },
+      sync: { hasRemote: true, hasUpstream: false, ahead: null, behind: null, repositories: [] },
       prefs: { changesCommitAction: "push" },
       fail: { push_current_branch: "github_token_selection_required" },
     });
@@ -544,6 +544,7 @@ describe("further checkbox and action behaviour", () => {
       hasUpstream: true,
       ahead: 2,
       behind: 0,
+      repositories: [],
     };
     backend({
       uncommitted: changeSet([LIB]),
@@ -556,7 +557,7 @@ describe("further checkbox and action behaviour", () => {
     await waitFor(() => expect(calls("push_current_branch")).toHaveLength(1));
 
     // The push published the two commits, so there is nothing left to push.
-    sync = { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0 };
+    sync = { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0, repositories: [] };
     await act(async () => {
       listeners[GIT_OPERATION_FINISHED]?.({
         payload: { operation: "push", ok: true },
@@ -571,7 +572,7 @@ describe("further checkbox and action behaviour", () => {
     // github_token_selection_required" over the picker it is about to open.
     backend({
       uncommitted: changeSet([LIB]),
-      sync: { hasRemote: true, hasUpstream: false, ahead: null, behind: null },
+      sync: { hasRemote: true, hasUpstream: false, ahead: null, behind: null, repositories: [] },
       prefs: { changesCommitAction: "push" },
     });
     renderPanel();

@@ -63,6 +63,21 @@ pub(crate) fn project_index<R: tauri::Runtime>(
             "elapsed_ms" => started.elapsed().as_millis() as u64,
         },
     );
+    // ASC-FR-YLGN: each repository boundary the tree shows, and how much it
+    // holds, so a submodule that does not open can be explained.
+    for (path, kind, children) in index.nested_folders() {
+        crate::logging::log_info(
+            app,
+            &crate::logging::BUFFER,
+            &[crate::logging::Domain::Backend],
+            "nested repository indexed",
+            crate::log_fields! {
+                "path" => &path,
+                "kind" => format!("{kind:?}"),
+                "children" => children,
+            },
+        );
+    }
     Ok(index)
 }
 

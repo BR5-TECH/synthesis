@@ -6,7 +6,10 @@
  * `+added −removed` summary on every row and a checkbox on every row deciding
  * what the next commit carries. The tree's top level is two groups —
  * **Revisioned** then **Unrevisioned** (CHG-FR-09) — so one tick takes the whole
- * of either. Two mutually-exclusive modes serve two
+ * of either. With more than one repository — a project with git submodules —
+ * one repository group for each repository holds those two groups
+ * (CHG-FR-BYWJ), and a submodule's pointer is a row of its parent
+ * (CHG-FR-GBTE). Two mutually-exclusive modes serve two
  * questions: **Uncommitted** (CHG-FR-03), where committing happens, and
  * **Branch** against a configurable target (CHG-FR-04 / CHG-FR-05).
  *
@@ -17,7 +20,6 @@
  * belong to the bottom-panel Git surface.
  */
 import {
-  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -26,10 +28,6 @@ import {
 } from "react";
 import * as api from "../api";
 import { onChangesUpdated, onGitOperationFinished } from "../events";
-import {
-  loadAppPreferences,
-  patchAppPreferences,
-} from "../state/appPreferences";
 import { tokenErrorMessage } from "./GithubTokens";
 // One implementation of "is there anything to push", shared with the Git panel
 // so the two surfaces can never disagree about it (CHG-FR-37).
@@ -41,21 +39,30 @@ import {
 } from "../gitSync";
 import { useGitTransfer } from "../hooks/useGitTransfer";
 import { ChangesFooter } from "./Changes/ChangesFooter";
-import { CheckBox, ChangeRow, NodeCount } from "./Changes/ChangeRow";
-import { SAVE_FAILED_KIND, rollbackFailureText } from "./Changes/rollbackText";
+import { ChangesControls } from "./Changes/ChangesControls";
+import { ChangesNotes, type ChangesNote } from "./Changes/ChangesNotes";
+import { ChangeTreeBody } from "./Changes/RepositoryGroup";
 import {
-  buildChangeTree,
-  commitSetOf,
+  buildRepositoryGroups,
+  commitFileOf,
+  impliedPointerPaths,
+  isMultiRepository,
+  isPointer,
+  pushSkipLines,
+  repositoriesOf,
+  revealKeys,
+  toggleableFilesUnder,
+} from "./Changes/groups";
+import { SAVE_FAILED_KIND } from "./Changes/rollbackText";
+import {
   entryVisible,
-  folderCheckState,
   partitionEntries,
-  visibleFilesUnder,
   type ChangeNode,
 } from "./Changes/tree";
-import type { PullRequestSource } from "./CreatePullRequest/types";
 import type { CommitFile } from "./CommitMessageModal";
 import type { RollbackFile } from "./RollbackConfirm";
-import type { RollbackResult } from "../types";
+import type { ChangesProps } from "./Changes/props";
+import { useChangesPanelState } from "./Changes/usePanelState";
 import { logWarn } from "../logging";
 import {
   DEFAULT_TYPE_LENS,
@@ -66,7 +73,6 @@ import {
   type TypeLens,
 } from "../artifactTypes";
 import { Icon } from "./icons";
-import { SelectorRow, type SelectorPosition } from "./SelectorRow";
 import {
   markRevealConsumed,
   revealAlreadyConsumed,
@@ -83,26 +89,7 @@ import {
   comparisonLabel,
   diffScopeFor,
 } from "../comparison";
-import type {
-  BranchOption,
-  ChangeSet,
-  ChangesCommitAction,
-  ChangesMode,
-  CommitOutcome,
-  DiffTarget,
-  PanelRevealRequest,
-} from "../types";
-
-/**
- * CHG-FR-02 / SNV-FR-62: the mode selector's two positions. Module-level so its
- * identity is stable across renders — `SelectorRow` re-measures its fit when the
- * position list changes, and a fresh array every render would make that a
- * per-render cost for a list that never varies.
- */
-const MODE_POSITIONS: SelectorPosition<ChangesMode>[] = [
-  { value: "uncommitted", tag: "Uncommitted", title: "Uncommitted" },
-  { value: "branch", tag: "Branch", title: "Branch" },
-];
+import type { BranchOption, ChangeSet } from "../types";
 
 export { canPush };
 export {
@@ -115,77 +102,8 @@ export {
   visibleFilesUnder,
 } from "./Changes/tree";
 export type { ChangeNode, CheckState } from "./Changes/tree";
+export type { ChangesProps } from "./Changes/props";
 export { SAVE_FAILED_KIND, rollbackFailureText } from "./Changes/rollbackText";
-
-interface ChangesProps {
-  /** CHG-FR-18: open a Diff tab for a changed file under the active comparison. */
-  onOpenDiff: (target: DiffTarget) => void;
-  /**
-   * CHG-FR-39 / CHG-FR-41: open the commit message window carrying `files` and
-   * the changed files the filters are hiding (CHG-FR-48), and resolve with the
-   * **outcome** of the commit made from it — the commit and the paths it
-   * recorded — or `null` if it was dismissed or refused.
-   *
-   * The outcome rather than a bare `true` because the paths a commit recorded
-   * are what close the Diff tabs it has finished with (`TAB-tabs.md`
-   * TAB-FR-22), and re-deriving them from the set submitted here would miss a
-   * rename's previous location.
-   *
-   * The window is a modal action surface of the main window and is mutually
-   * exclusive with the other overlays (CMW-FR-01), so it is opened by the shell
-   * rather than mounted here.
-   */
-  onRequestCommitMessage?: (
-    files: CommitFile[],
-    hidden: CommitFile[],
-  ) => Promise<CommitOutcome | null>;
-  /**
-   * CHG-FR-59 – CHG-FR-63: confirm and perform a rollback of `files`, resolving
-   * with the backend's per-path outcome, or `null` if the confirmation was
-   * dismissed and nothing was done.
-   *
-   * Owned by the shell rather than mounted here for two reasons. The
-   * confirmation is a floating overlay and is mutually exclusive with the
-   * window's others (SNV-FR-56), like the commit message window; and the
-   * preparation and the reset either side of the call reach the artifact editing
-   * sessions and the tab strip (CHG-FR-60, CHG-FR-63), neither of which this
-   * panel owns. What comes back is the typed outcome, so this panel can clear
-   * exactly the checks the backend confirmed and report the rest (CHG-FR-65).
-   */
-  onRequestRollback?: (
-    files: RollbackFile[],
-    onConfirmed: () => void,
-  ) => Promise<RollbackResult | null>;
-  /**
-   * CHG-FR-45 / GHA-FR-16: a push blocked on token selection opens the picker,
-   * and resolves with whether one was chosen. The same shell-owned picker the
-   * Git panel opens.
-   */
-  onRequestGithubToken?: () => Promise<boolean>;
-  /** CHG-FR-UPFP: open the Create a PR window for the current branch. */
-  onCreatePullRequest?: (source: PullRequestSource) => void;
-  /** CHG-FR-45 / GHA-FR-19: no token is stored at all — route to where one is added. */
-  onOpenGlobalSettings?: () => void;
-  /**
-   * SNV-FR-67: hand each loaded change set's paths up to the shell, the way the
-   * Project panel hands up its tree.
-   *
-   * The shell has to know whether a Diff tab's file is in this comparison
-   * *before* it activates this panel to reveal it — a panel that is not mounted
-   * cannot answer, and switching to it first is the thing SNV-FR-67 forbids.
-   */
-  onChangeSetLoaded?: (paths: string[]) => void;
-  /**
-   * CHG-FR-54: a pending reveal-and-select, naming a changed file by its
-   * project-relative path, or null. Reached from the active tab being followed
-   * (SNV-FR-64 / SNV-FR-66) — a Diff tab naming the file half of the pair that
-   * identifies it (DFV-FR-04).
-   *
-   * A nonce rather than a bare path, so two consecutive requests for the same
-   * file both run.
-   */
-  reveal?: PanelRevealRequest | null;
-}
 
 export function Changes({
   reveal,
@@ -197,14 +115,19 @@ export function Changes({
   onCreatePullRequest,
   onOpenGlobalSettings,
 }: ChangesProps) {
-  const [mode, setMode] = useState<ChangesMode>("uncommitted");
-  const [targetBranch, setTargetBranch] = useState<string | null>(null);
+  // CHG-FR-07 / CHG-FR-34: the persisted mode, target branch, and action.
+  const {
+    mode,
+    setMode,
+    targetBranch,
+    setTargetBranch,
+    restored,
+    action,
+    selectAction,
+  } = useChangesPanelState();
   const [branches, setBranches] = useState<BranchOption[]>([]);
   const [changeSet, setChangeSet] = useState<ChangeSet | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // The persisted state has to land before the first list call, or the panel
-  // would fetch for the wrong mode and then immediately refetch.
-  const [restored, setRestored] = useState(false);
 
   // Expand state is the set of explicitly-collapsed folder keys, so folders
   // default to open and the state survives reloads (CHG-FR-17).
@@ -222,8 +145,6 @@ export function Changes({
    * worktree switch, which is what discards it there.
    */
   const [checked, setChecked] = useState<Set<string>>(new Set());
-  /** CHG-FR-34: the selected action, read on mount from user-global preferences. */
-  const [action, setAction] = useState<ChangesCommitAction>("commit");
   /**
    * CHG-FR-37 / CHG-FR-38 / GIT-FR-QMYB: the branch's standing against its
    * upstream and whether any push is running, read from the window's one push
@@ -239,9 +160,7 @@ export function Changes({
    * wide and line-shaped and belongs in the Git panel's output area, so nothing
    * here accumulates output.
    */
-  const [note, setNote] = useState<{ tone: "info" | "error"; text: string } | null>(
-    null,
-  );
+  const [note, setNote] = useState<ChangesNote | null>(null);
   /** CHG-FR-45: a missing token has no picker to open, so the note routes instead. */
   const [noteRoutesToSettings, setNoteRoutesToSettings] = useState(false);
   /**
@@ -274,50 +193,6 @@ export function Changes({
   const [rollbackFailures, setRollbackFailures] = useState<
     { path: string; kind: string }[]
   >([]);
-
-  // The mode + target the panel last wrote, so a value that merely arrived from
-  // the backend is never written straight back. Declared here, beside the state
-  // it guards, because the restore below seeds it.
-  const persisted = useRef<string | null>(null);
-
-  // CHG-FR-07: restore the persisted mode and target branch; on a project with
-  // none, CHG-FR-06 seeds the target from the repository's default branch.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      let restoredMode: ChangesMode = "uncommitted";
-      let restoredTarget: string | undefined;
-      try {
-        const state = await api.loadChangesPanelState();
-        if (cancelled) return;
-        restoredMode = state.mode;
-        restoredTarget = state.targetBranch;
-        setMode(state.mode);
-      } catch {
-        // A state that cannot be read leaves the panel on its defaults rather
-        // than blocking it; nothing here is worth an error banner.
-      }
-      if (!restoredTarget) {
-        try {
-          restoredTarget = await api.getDefaultBranch();
-        } catch {
-          // Not a repository, or no branches yet. The list call below surfaces
-          // the real reason inline.
-        }
-      }
-      if (cancelled) return;
-      // Seed the persistence guard with what the restore produced, so the
-      // restore itself writes nothing. A derived default is re-derivable from
-      // `get_default_branch` on the next open (CHG-FR-06), so only a choice the
-      // user actually makes is worth a write.
-      persisted.current = `${restoredMode} ${restoredTarget ?? ""}`;
-      if (restoredTarget) setTargetBranch(restoredTarget);
-      setRestored(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Every list request takes a ticket; only the newest one may commit its
   // result. Without this a slow Branch-mode call landing after a fast
@@ -397,46 +272,6 @@ export function Changes({
     };
   }, [mode, restored]);
 
-  // CHG-FR-07: persist mode + target per machine. Skipped until the restore has
-  // landed so the initial defaults never overwrite what was stored. Best-effort:
-  // a failed write must not break the panel.
-  useEffect(() => {
-    if (!restored) return;
-    const signature = `${mode} ${targetBranch ?? ""}`;
-    if (persisted.current === signature) return;
-    persisted.current = signature;
-    void api
-      .saveChangesPanelState({
-        mode,
-        targetBranch: targetBranch ?? undefined,
-      })
-      .catch(() => {});
-  }, [mode, targetBranch, restored]);
-
-  /**
-   * CHG-FR-34: the selected action is user-global, so it is one choice across
-   * every project and every worktree. Read on mount; a record that cannot be
-   * read leaves the panel on the **Commit** default rather than blocking it.
-   */
-  useEffect(() => {
-    let cancelled = false;
-    void loadAppPreferences().then((prefs) => {
-      if (!cancelled) setAction(prefs.changesCommitAction ?? "commit");
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const selectAction = (next: ChangesCommitAction) => {
-    // CHG-FR-35: an unavailable action is still selectable — the selection
-    // describes the author's habit rather than what the repository can do at
-    // this moment.
-    setAction(next);
-    // GSS-FR-20: a whole-record write that carries every other field through.
-    void patchAppPreferences({ changesCommitAction: next }).catch(() => {});
-  };
-
   const toggleFolder = (node: ChangeNode) => {
     setSelectedKey(node.key);
     setCollapsed((prev) => {
@@ -456,6 +291,8 @@ export function Changes({
     if (rollingBack) return;
     if (!node.entry || !changeSet) return;
     setSelectedKey(node.key);
+    // CHG-FR-GBTE: a pointer row is selected and opens no Diff tab.
+    if (isPointer(node.entry)) return;
     onOpenDiff({
       path: node.entry.path,
       name: node.entry.name,
@@ -498,8 +335,20 @@ export function Changes({
       ),
     [changeSet, typeFilter],
   );
-  const revisionedTree = buildChangeTree(revisioned, "r:");
-  const unrevisionedTree = buildChangeTree(unrevisioned, "u:");
+  /**
+   * CHG-FR-BYWJ / CHG-FR-IGSD: the repository set, and whether the tree holds
+   * one repository group for each repository with a visible changed file.
+   */
+  const repositories = useMemo(
+    () => repositoriesOf(changeSet?.repositories, changeSet?.entries ?? []),
+    [changeSet],
+  );
+  const multi = isMultiRepository(repositories);
+  // Read through a ref by the push listener, which subscribes once.
+  const repositoriesRef = useRef(repositories);
+  repositoriesRef.current = repositories;
+  const visibleEntries = [...revisioned, ...unrevisioned];
+  const groupModels = buildRepositoryGroups(visibleEntries, repositories);
 
   const revealPath = reveal?.id ?? null;
   const revealNonce = reveal?.nonce;
@@ -552,26 +401,22 @@ export function Changes({
       setTypeFilter("files");
     if (!matchesText(text, entry.name)) setText("");
 
-    const groupPrefix = entry.changeStatus === "untracked" ? "u:" : "r:";
-    const groupKey = entry.changeStatus === "untracked"
-      ? "unrevisioned"
-      : "revisioned";
     // Expansion here is the *removal* of collapse: this panel records which
     // nodes are collapsed rather than which are expanded, so opening an ancestor
-    // means dropping its key rather than adding one.
-    const opening = new Set<string>([groupKey]);
-    const segments = entry.path.split("/");
-    for (let i = 1; i < segments.length; i += 1)
-      opening.add(`${groupPrefix}d:${segments.slice(0, i).join("/")}`);
+    // means dropping its key rather than adding one. The repository group is
+    // one of them when the tree holds more than one (CHG-FR-BYWJ).
+    const { opening, fileKey } = revealKeys(
+      entry,
+      isMultiRepository(repositoriesOf(changeSet.repositories, changeSet.entries)),
+    );
     setCollapsed((prev) => {
       const next = new Set([...prev].filter((k) => !opening.has(k)));
       return next.size === prev.size ? prev : next;
     });
 
     // CHG-FR-54: what is selected is the file row, never a folder or a group.
-    const key = `${groupPrefix}f:${entry.path}`;
-    setSelectedKey(key);
-    scrollTarget.current = key;
+    setSelectedKey(fileKey);
+    scrollTarget.current = fileKey;
   }, [revealNonce, revealPath, changeSet, typeFilter, text]);
 
   /**
@@ -611,15 +456,30 @@ export function Changes({
   // commit the panel could make. CHG-FR-47: and the not-a-repository state
   // renders none, because there is nothing to commit to.
   const showChecks = mode === "uncommitted" && !notARepository;
-  const commitSet = commitSetOf([...revisioned, ...unrevisioned], checked);
+  /** CHG-FR-27: the rows both checked and visible. */
+  const checkedVisible = visibleEntries.filter((e) => checked.has(e.path));
+  /**
+   * CHG-FR-AYTR: the pointers a checked submodule file implies. Their rows
+   * render checked and inert, and a visible one joins the commit set, because
+   * the commit records it (GSM-FR-MPWK).
+   */
+  const impliedPointers = impliedPointerPaths(checkedVisible, repositories);
+  const commitEntries = visibleEntries.filter(
+    (e) => checked.has(e.path) || (isPointer(e) && impliedPointers.has(e.path)),
+  );
+  const commitSet: CommitFile[] = commitEntries.map((e) =>
+    commitFileOf(e, repositories),
+  );
   // CHG-FR-48: the changed files the active filters are hiding right now. The
   // default lens hides exactly the code and tests an artifact produces, so a
   // commit of the Spec alone would be a hand-off missing what it describes.
   // Only the hidden ones: a row the author can see and left unticked is a
-  // decision, not an oversight.
+  // decision, not an oversight. A pointer the commit records anyway
+  // (CHG-FR-AYTR) is not a question to ask.
   const hiddenFromCommit: CommitFile[] = (changeSet?.entries ?? [])
     .filter((e) => !entryVisible(e, typeFilter, text))
-    .map((e) => ({ path: e.path, untracked: e.changeStatus === "untracked" }));
+    .filter((e) => !(isPointer(e) && impliedPointers.has(e.path)))
+    .map((e) => commitFileOf(e, repositories));
 
   /**
    * CHG-FR-57: the rollback set is derived exactly as the commit set is — the
@@ -633,20 +493,15 @@ export function Changes({
    * paths the filters hide are never offered back (CHG-FR-48 is a commit's
    * concern): a rollback that leaves work behind has simply discarded less.
    */
-  const rollbackSet: RollbackFile[] = (() => {
-    const byPath = new Map(
-      (changeSet?.entries ?? []).map((e) => [e.path, e] as const),
-    );
-    return commitSet.map((f) => {
-      const entry = byPath.get(f.path);
-      return {
-        path: f.path,
-        previousPath: entry?.previousPath ?? null,
-        untracked: f.untracked,
-        deleted: entry?.changeStatus === "deleted",
-      };
-    });
-  })();
+  // CHG-FR-DGHI: a pointer row never joins the rollback set.
+  const rollbackSet: RollbackFile[] = checkedVisible
+    .filter((e) => !isPointer(e))
+    .map((e) => ({
+      path: e.path,
+      previousPath: e.previousPath ?? null,
+      untracked: e.changeStatus === "untracked",
+      deleted: e.changeStatus === "deleted",
+    }));
 
   // CHG-FR-36: Commit and Commit & Push are enabled only in Uncommitted mode
   // with a non-empty commit set — a clean working tree, a change set with
@@ -678,7 +533,8 @@ export function Changes({
     // CHG-FR-60: the file rows are inert while a rollback is being confirmed,
     // prepared, or executed — the set it is acting on must not move under it.
     if (rollingBack) return;
-    const paths = visibleFilesUnder(node).map((e) => e.path);
+    // CHG-FR-AYTR: an implied pointer row is inert, so a cascade passes it by.
+    const paths = toggleableFilesUnder(node, impliedPointers).map((e) => e.path);
     setChecked((prev) => {
       const s = new Set(prev);
       for (const p of paths) {
@@ -711,10 +567,17 @@ export function Changes({
       ) {
         return;
       }
+      // CHG-FR-NUZB: each repository the push skipped, with the reason. It is
+      // part of this note, so a later note never carries it.
+      const skipped = pushSkipLines(payload.pushSummary, repositoriesRef.current);
       setNote(
         payload.ok
-          ? { tone: "info", text: "Push complete." }
-          : { tone: "error", text: `Push failed: ${tokenErrorMessage(cause)}` },
+          ? { tone: "info", text: "Push complete.", skipped }
+          : {
+              tone: "error",
+              text: `Push failed: ${tokenErrorMessage(cause)}`,
+              skipped,
+            },
       );
     }).then((fn) => {
       if (cancelled) fn();
@@ -811,7 +674,10 @@ export function Changes({
    */
   const rollbackUnavailableReason = (): string | null => {
     const reasons: string[] = [];
-    if (rollbackSet.length === 0) reasons.push("no files are selected");
+    // CHG-FR-DGHI: every checked visible row is a pointer row.
+    if (rollbackSet.length === 0 && checkedVisible.length > 0)
+      reasons.push("a submodule pointer cannot be rolled back");
+    else if (rollbackSet.length === 0) reasons.push("no files are selected");
     if (typeFilter !== "files")
       reasons.push("the artifact lens must be All files");
     if (reasons.length === 0) return null;
@@ -925,36 +791,7 @@ export function Changes({
     }
   };
 
-  const renderNodes = (nodes: ChangeNode[], depth: number): React.ReactNode[] =>
-    nodes.flatMap((node) => {
-      const isFolder = node.kind === "folder";
-      const open = isFolder && !collapsed.has(node.key);
-      const rows: React.ReactNode[] = [
-        <ChangeRow
-          key={node.key}
-          node={node}
-          depth={depth}
-          open={open}
-          selected={selectedKey === node.key}
-          checkState={
-            showChecks
-              ? isFolder
-                ? folderCheckState(node, checked)
-                : checked.has(node.path)
-                  ? "checked"
-                  : "unchecked"
-              : null
-          }
-          onCheck={onCheck}
-          onToggle={toggleFolder}
-          onOpen={openDiff}
-        />,
-      ];
-      if (isFolder && open) rows.push(...renderNodes(node.children, depth + 1));
-      return rows;
-    });
-
-  const hasVisibleRows = revisionedTree.length > 0 || unrevisionedTree.length > 0;
+  const hasVisibleRows = visibleEntries.length > 0;
 
   /**
    * CHG-FR-23 / SNV-FR-60: the active mode's comparison yields no change at
@@ -972,35 +809,6 @@ export function Changes({
    */
   const filteredToNothing =
     !error && changeSet != null && changeSet.entries.length > 0 && !hasVisibleRows;
-
-  /**
-   * CHG-FR-09: the tree's top level is exactly these two groups, **Revisioned**
-   * first. Each is a node like any other for the cascade's purposes, so it
-   * carries the same tri-state its folders do and one tick takes everything
-   * visible beneath it (CHG-FR-28).
-   */
-  const groups: { node: ChangeNode; icon: React.ReactNode }[] = [
-    {
-      node: {
-        key: "revisioned",
-        name: "Revisioned",
-        path: "Revisioned",
-        kind: "folder",
-        children: revisionedTree,
-      },
-      icon: <Icon.Commit size={13} />,
-    },
-    {
-      node: {
-        key: "unrevisioned",
-        name: "Unrevisioned",
-        path: "Unrevisioned",
-        kind: "folder",
-        children: unrevisionedTree,
-      },
-      icon: <Icon.Diamond size={13} />,
-    },
-  ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -1038,85 +846,19 @@ export function Changes({
           reaches for Branch mode. The two controls that do narrow — the text
           filter and the lens — go, per SNV-FR-60. */}
       {!notARepository && (
-      <div className="panel-controls">
-        {!emptyChangeSet && (
-          <div className="search-input" style={{ height: 24 }}>
-            <Icon.Search size={12} />
-            <input
-              placeholder="Filter changes…"
-              aria-label="Filter changes"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
-          </div>
-        )}
-
-        {/* CHG-FR-02: the two mutually-exclusive modes, in the one selector
-            form SNV-FR-62 gives every panel. The branch picker rides beside the
-            row rather than in it: it names *what* Branch mode compares against
-            rather than being a position of the mode selector itself. */}
-        {/* Centred as one group rather than leaving the toggle to centre
-            itself: inside this row the selector is content-sized, so it is the
-            wrapper that has width to distribute — and in Branch mode the
-            picker beside it is part of what the author reads as one control. */}
-        <div
-          style={{
-            display: "flex",
-            gap: 4,
-            alignItems: "center",
-            justifyContent: "center",
-            minWidth: 0,
-          }}
-        >
-          <SelectorRow
-            label="Comparison mode"
-            positions={MODE_POSITIONS}
-            value={mode}
-            onChange={setMode}
-          />
-          {/* CHG-FR-05: shown in Branch mode only. */}
-          {mode === "branch" && (
-            <>
-              <span style={{ fontSize: "var(--fs-ui-xs)", color: "var(--fg-3)" }}>
-                against
-              </span>
-              <select
-                className="select select--sm"
-                aria-label="Target branch"
-                value={targetBranch ?? ""}
-                onChange={(e) => setTargetBranch(e.target.value)}
-              >
-                {/* A persisted branch that no longer exists is still shown as
-                    the current value, so the picker never silently retargets
-                    the comparison (CHG-FR-27). */}
-                {targetBranch != null &&
-                  !branches.some((b) => b.name === targetBranch) && (
-                    <option value={targetBranch}>{targetBranch}</option>
-                  )}
-                {branches.map((b) => (
-                  <option key={b.name} value={b.name}>
-                    {b.name}
-                    {b.isDefault ? " (default)" : ""}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
-        </div>
-
-        {/* CHG-FR-14: the lens, on the terms LIB-FR-19 states — it offers the
-            types this comparison actually touched. Absent while the change set
-            is empty: SNV-FR-60 leaves nothing beside the block for it to
-            narrow. */}
-        {!emptyChangeSet && (
-          <SelectorRow
-            label="Filter by type"
-            positions={lensPositions}
-            value={typeFilter}
-            onChange={setTypeFilter}
-          />
-        )}
-      </div>
+        <ChangesControls
+          emptyChangeSet={emptyChangeSet}
+          text={text}
+          onText={setText}
+          mode={mode}
+          onMode={setMode}
+          targetBranch={targetBranch}
+          onTargetBranch={setTargetBranch}
+          branches={branches}
+          lensPositions={lensPositions}
+          typeFilter={typeFilter}
+          onTypeFilter={setTypeFilter}
+        />
       )}
 
       <div
@@ -1174,92 +916,34 @@ export function Changes({
           </PanelFilteredState>
         )}
 
-        {/* CHG-FR-09: the two top-level groups, each carrying its own folder
-            nesting, **Revisioned** first. A group holding a visible file always
-            renders its own label — the tree has no flattened form in which
-            changed files sit at the top level — and CHG-FR-16 hides a group
-            entirely when nothing inside it is currently visible. */}
-        {groups.map(({ node, icon }) => {
-          if (node.children.length === 0) return null;
-          const open = !collapsed.has(node.key);
-          return (
-            <Fragment key={node.key}>
-              <div
-                className="tree-row tree-row--group"
-                style={{ paddingLeft: 4 }}
-                data-selected={selectedKey === node.key}
-                onClick={() => toggleFolder(node)}
-              >
-                {showChecks && (
-                  <CheckBox
-                    state={folderCheckState(node, checked)}
-                    label={`Include ${node.name}`}
-                    onChange={(next) => onCheck(node, next)}
-                  />
-                )}
-                <span className="tree-row__caret">
-                  {open ? <Icon.Caret size={12} /> : <Icon.CaretRight size={12} />}
-                </span>
-                <span className="tree-row__icon">{icon}</span>
-                <span className="tree-row__name tree-row__name--counted">
-                  {node.name}
-                </span>
-                {/* CHG-FR-50: a group states the total of everything it holds,
-                    so **Revisioned** answers how much of this session's work
-                    Git already tracks before either spine is opened. */}
-                <NodeCount node={node} />
-              </div>
-              {open && renderNodes(node.children, 1)}
-            </Fragment>
-          );
-        })}
+        {/* CHG-FR-09 / CHG-FR-BYWJ: the groups of each repository, each
+            carrying its own folder nesting, **Revisioned** first. A group
+            holding a visible file always renders its own label — the tree has
+            no flattened form in which changed files sit at the top level — and
+            CHG-FR-16 hides a group entirely when nothing inside it is
+            currently visible. */}
+        <ChangeTreeBody
+          models={groupModels}
+          multi={multi}
+          ctx={{
+            collapsed,
+            selectedKey,
+            showChecks,
+            checked,
+            impliedPointers,
+            onCheck,
+            onToggle: toggleFolder,
+            onOpen: openDiff,
+          }}
+        />
       </div>
 
-      {/* CHG-FR-43 / CHG-FR-46: what the panel says about a push. The output
-          itself is wide and line-shaped and renders in the Git panel's push/pull
-          output area, not here. */}
-      {note && (
-        <div className="changes-note" data-tone={note.tone} role="status">
-          {note.text}
-          {/* CHG-FR-45: no token is stored at all, so there is nothing to choose
-              between and the note routes to where one is added (GHA-FR-19). */}
-          {noteRoutesToSettings && onOpenGlobalSettings && (
-            <>
-              {" "}
-              <button
-                className="btn btn--ghost btn--sm"
-                onClick={() => onOpenGlobalSettings()}
-              >
-                Open Global settings → GitHub
-              </button>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* CHG-FR-65: what a rollback could not reach, above the count row. No
-          success state is shown alongside it — a rollback in which any path
-          failed is not a rollback that succeeded. */}
-      {!notARepository && rollbackFailures.length > 0 && (
-        <div className="changes-rollback-failures" role="status">
-          <div className="changes-rollback-failures__summary">
-            <Icon.Warning size={12} />
-            {rollbackFailures.length}{" "}
-            {rollbackFailures.length === 1 ? "file" : "files"} could not be
-            rolled back:
-          </div>
-          <ul className="changes-rollback-failures__list">
-            {rollbackFailures.map((f) => (
-              <li key={`${f.path}:${f.kind}`}>
-                <span className="changes-rollback-failures__path">{f.path}</span>
-                <span className="changes-rollback-failures__cause">
-                  {rollbackFailureText(f.kind)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <ChangesNotes
+        note={note}
+        routesToSettings={noteRoutesToSettings}
+        onOpenGlobalSettings={onOpenGlobalSettings}
+        rollbackFailures={notARepository ? [] : rollbackFailures}
+      />
 
       {/* CHG-FR-55: how many files are selected, on a row of its own between
           the tree and the footer. Uncommitted mode alone — Branch mode has no

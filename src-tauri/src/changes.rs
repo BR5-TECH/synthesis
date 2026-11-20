@@ -18,8 +18,7 @@
 //! Grouping into a folder tree and the **Unrevisioned** group are deliberately
 //! absent (CHC-FR-12): `entries` is flat and the UI assembles the tree.
 
-use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use git2::{BranchType, Delta, Diff, DiffFindOptions, DiffOptions, Oid, Repository};
@@ -28,7 +27,13 @@ use serde::Serialize;
 
 use crate::progress::{self, ProgressRegistry};
 use crate::project::ProjectState;
-use crate::scanning::{self, ArtifactType, TypeSource};
+use crate::scanning::{ArtifactType, TypeSource};
+
+mod compute;
+pub mod repo_set;
+
+pub use compute::{branch_change_set, uncommitted_change_set};
+pub use repo_set::RepositoryInfo;
 
 // ---------------------------------------------------------------------------
 // Typed errors (CHC contract surface)
@@ -77,6 +82,15 @@ pub enum ChangeStatus {
     Untracked,
 }
 
+/// Whether an entry is a file or a submodule pointer (CHC-FR-EBLI).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EntryKind {
+    #[default]
+    File,
+    Submodule,
+}
+
 /// One changed file. `added_lines` / `removed_lines` are `null` for binary
 /// content — counts are never fabricated (CHC-FR-08).
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -89,6 +103,18 @@ pub struct ChangeEntry {
     pub path: String,
     /// Basename.
     pub name: String,
+    /// The project-relative root of the repository that owns the entry
+    /// (CHC-FR-TMNY); `""` for the main repository.
+    pub repository: String,
+    /// CHC-FR-EBLI: `submodule` for a pointer entry.
+    pub entry_kind: EntryKind,
+    /// Pointer entries only: the commit the base records. Absent for an added
+    /// submodule.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous_commit: Option<String>,
+    /// Pointer entries only: the commit the submodule has checked out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_commit: Option<String>,
     pub change_status: ChangeStatus,
     /// Renamed entries only (CHC-FR-09).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -108,6 +134,13 @@ pub struct ChangeEntry {
 pub struct ChangeSet {
     pub comparison: Comparison,
     pub entries: Vec<ChangeEntry>,
+    /// CHC-FR-TMNY: every member of the repository set, the main repository
+    /// first.
+    pub repositories: Vec<RepositoryInfo>,
+    /// GSM-FR-FRLZ: initialised submodules that could not be opened, with the
+    /// cause. The commands log them; they are not part of the payload.
+    #[serde(skip)]
+    pub unopened: Vec<(String, String)>,
 }
 
 /// One candidate comparison target for the panel's picker (CHC-FR-14).
@@ -291,158 +324,6 @@ pub fn map_status(delta: Delta) -> Option<ChangeStatus> {
     }
 }
 
-/// A change as Git sees it, before project-relative mapping and classification.
-#[derive(Clone, Debug, PartialEq)]
-struct RawChange {
-    /// Repository-relative current path.
-    path: String,
-    /// Repository-relative pre-rename path (renames/copies only).
-    previous_path: Option<String>,
-    status: ChangeStatus,
-    added: u32,
-    removed: u32,
-    is_binary: bool,
-}
-
-/// Walk a diff into per-file changes with line counts.
-///
-/// Rename detection runs first (CHC-FR-09), then a single `foreach` pass
-/// accumulates insertions and deletions per path. Binary deltas produce no line
-/// callbacks, so their counts stay unset and are reported as `null`
-/// (CHC-FR-08). The counting rule of CHC-FR-07 falls out of the diff itself: an
-/// added or untracked file is all `+`, a deleted file is all `-`, and a modified
-/// or renamed one is its unified diff against the comparison base.
-fn collect_changes(diff: &mut Diff<'_>) -> Result<Vec<RawChange>, String> {
-    find_renames(diff)?;
-
-    // Both callbacks need to write; `foreach` hands each out as a separate
-    // `&mut dyn FnMut`, so the shared accumulators go behind `RefCell`.
-    let stats: RefCell<BTreeMap<String, (u32, u32)>> = RefCell::new(BTreeMap::new());
-    let binary: RefCell<BTreeSet<String>> = RefCell::new(BTreeSet::new());
-
-    let key_of = |delta: &git2::DiffDelta<'_>| -> Option<String> {
-        delta.new_file().path().or_else(|| delta.old_file().path()).map(to_forward)
-    };
-
-    {
-        let mut file_cb = |_delta: git2::DiffDelta<'_>, _progress: f32| true;
-        let mut binary_cb = |delta: git2::DiffDelta<'_>, _bin: git2::DiffBinary<'_>| {
-            if let Some(k) = key_of(&delta) {
-                binary.borrow_mut().insert(k);
-            }
-            true
-        };
-        let mut line_cb = |delta: git2::DiffDelta<'_>,
-                           _hunk: Option<git2::DiffHunk<'_>>,
-                           line: git2::DiffLine<'_>| {
-            let Some(k) = key_of(&delta) else { return true };
-            let mut stats = stats.borrow_mut();
-            let counts = stats.entry(k).or_insert((0, 0));
-            match line.origin() {
-                '+' => counts.0 += 1,
-                '-' => counts.1 += 1,
-                _ => {}
-            }
-            true
-        };
-        diff.foreach(&mut file_cb, Some(&mut binary_cb), None, Some(&mut line_cb))
-            .map_err(|e| format!("failed to read diff: {e}"))?;
-    }
-
-    let stats = stats.into_inner();
-    let binary = binary.into_inner();
-
-    let mut out = Vec::new();
-    for delta in diff.deltas() {
-        let Some(status) = map_status(delta.status()) else {
-            continue;
-        };
-        let Some(path) = key_of(&delta) else { continue };
-        let previous_path = if status == ChangeStatus::Renamed {
-            delta.old_file().path().map(to_forward).filter(|p| *p != path)
-        } else {
-            None
-        };
-        // `foreach` populates the delta's BINARY flag while generating each
-        // patch; the binary callback above is the belt to that brace.
-        let is_binary = binary.contains(&path)
-            || delta.flags().is_binary()
-            || delta.new_file().is_binary()
-            || delta.old_file().is_binary();
-        let (added, removed) = stats.get(&path).copied().unwrap_or((0, 0));
-        out.push(RawChange { path, previous_path, status, added, removed, is_binary });
-    }
-    Ok(out)
-}
-
-// ---------------------------------------------------------------------------
-// Classification (CHC-FR-10 / CHC-FR-11)
-// ---------------------------------------------------------------------------
-
-/// Turn raw Git changes into contract entries: map every path into the project's
-/// coordinate system, classify it with the Library's own classifier so a changed
-/// file carries exactly the type the Library shows (CHC-FR-10), and key it by
-/// the stable id of ASC-FR-13 (CHC-FR-11).
-///
-/// A deleted path is classified from path convention and stored assignments
-/// only — the content tiebreak of ASC-FR-04 needs a file that is no longer on
-/// disk, so no content read is attempted for it (CHC-FR-10).
-fn to_entries(root: &crate::fs::RootFs, prefix: &str, raw: Vec<RawChange>) -> Vec<ChangeEntry> {
-    let assignments = scanning::load_assignments(root);
-
-    // Project-relative paths whose file is gone, so the content tiebreak is
-    // skipped for them rather than attempted and failed.
-    let deleted: BTreeSet<String> = raw
-        .iter()
-        .filter(|r| r.status == ChangeStatus::Deleted)
-        .filter_map(|r| to_project_rel(prefix, &r.path))
-        .collect();
-
-    let root_owned = root.to_path_buf();
-    let content = move |rel: &str| -> scanning::ContentFacts {
-        if deleted.contains(rel) {
-            return scanning::ContentFacts::default();
-        }
-        if !rel.to_ascii_lowercase().ends_with(".md") {
-            return scanning::ContentFacts::default();
-        }
-        let path = root_owned.join(rel);
-        if !path.is_file() {
-            return scanning::ContentFacts::default();
-        }
-        match root.read_text(path) {
-            Ok(text) => scanning::read_content_facts(&text),
-            Err(_) => scanning::ContentFacts::default(),
-        }
-    };
-
-    let mut entries: Vec<ChangeEntry> = raw
-        .into_iter()
-        .filter_map(|r| {
-            let path = to_project_rel(prefix, &r.path)?;
-            let previous_path = r.previous_path.as_deref().and_then(|p| to_project_rel(prefix, p));
-            let (artifact_type, type_source) =
-                scanning::classify_file(&path, &assignments, &content);
-            let name = path.rsplit('/').next().unwrap_or(&path).to_string();
-            Some(ChangeEntry {
-                id: path.clone(),
-                name,
-                change_status: r.status,
-                previous_path,
-                added_lines: if r.is_binary { None } else { Some(r.added) },
-                removed_lines: if r.is_binary { None } else { Some(r.removed) },
-                is_binary: r.is_binary,
-                artifact_type,
-                type_source,
-                path,
-            })
-        })
-        .collect();
-    // Flat and deterministic (CHC-FR-12): no grouping, no untracked separation.
-    entries.sort_by(|a, b| a.path.cmp(&b.path));
-    entries
-}
-
 // ---------------------------------------------------------------------------
 // Branch resolution (CHC-FR-04 / FR-05 / FR-13 / FR-14 / FR-15)
 // ---------------------------------------------------------------------------
@@ -464,13 +345,6 @@ pub fn resolve_branch_commit(repo: &Repository, name: &str) -> Result<Oid, Strin
         }
     }
     Err(ERR_UNKNOWN_BRANCH.to_string())
-}
-
-/// The commit the working tree sits on. A detached `HEAD` resolves here exactly
-/// like an attached one — the checked-out commit stands in for the branch tip
-/// when computing the merge-base (CHC-FR-05).
-fn head_commit(repo: &Repository) -> Option<Oid> {
-    repo.head().ok()?.peel_to_commit().ok().map(|c| c.id())
 }
 
 /// The project's **primary remote** — `"origin"` when it exists, otherwise the
@@ -528,59 +402,6 @@ fn current_branch_name(repo: &Repository) -> Option<String> {
 /// each alphabetical. Pure so the ordering is pinned by a test.
 fn branch_sort_key(name: &str, remote: bool) -> (u8, String) {
     (u8::from(remote), name.to_string())
-}
-
-// ---------------------------------------------------------------------------
-// Change-set computation
-// ---------------------------------------------------------------------------
-
-/// CHC-FR-03: the working tree against `HEAD`. Staged and unstaged
-/// modifications are both included and reported identically — the returned
-/// entries carry no index state, because the consuming panel is read-only.
-pub fn uncommitted_change_set(root: &crate::fs::RootFs) -> Result<ChangeSet, String> {
-    let repo = open_repo(root)?;
-    let prefix = project_prefix(&repo, root);
-    let mut opts = diff_options();
-    scope_to_project(&mut opts, &prefix);
-    // An unborn HEAD (a repository with no commits) has no tree; diffing
-    // against `None` reports the whole working tree as new, which is correct.
-    let tree =
-        head_commit(&repo).and_then(|oid| repo.find_commit(oid).ok()).and_then(|c| c.tree().ok());
-    let mut diff = repo
-        .diff_tree_to_workdir_with_index(tree.as_ref(), Some(&mut opts))
-        .map_err(|e| format!("failed to diff working tree: {e}"))?;
-    let raw = collect_changes(&mut diff)?;
-    Ok(ChangeSet { comparison: Comparison::Uncommitted, entries: to_entries(root, &prefix, raw) })
-}
-
-/// CHC-FR-04: the working tree against the merge-base of the current branch and
-/// `target_branch`. The result therefore holds every change the current branch
-/// introduces — committed and uncommitted alike — and nothing from commits that
-/// landed on `target_branch` after that merge-base.
-pub fn branch_change_set(
-    root: &crate::fs::RootFs,
-    target_branch: &str,
-) -> Result<ChangeSet, String> {
-    let repo = open_repo(root)?;
-    let prefix = project_prefix(&repo, root);
-    let target = resolve_branch_commit(&repo, target_branch)?;
-    let head = head_commit(&repo).ok_or_else(|| ERR_NO_MERGE_BASE.to_string())?;
-    let base = repo.merge_base(head, target).map_err(|_| ERR_NO_MERGE_BASE.to_string())?;
-    let base_tree =
-        repo.find_commit(base).and_then(|c| c.tree()).map_err(|_| ERR_NO_MERGE_BASE.to_string())?;
-    let mut opts = diff_options();
-    scope_to_project(&mut opts, &prefix);
-    let mut diff = repo
-        .diff_tree_to_workdir_with_index(Some(&base_tree), Some(&mut opts))
-        .map_err(|e| format!("failed to diff against merge base: {e}"))?;
-    let raw = collect_changes(&mut diff)?;
-    Ok(ChangeSet {
-        comparison: Comparison::Branch {
-            target_branch: target_branch.to_string(),
-            merge_base: base.to_string(),
-        },
-        entries: to_entries(root, &prefix, raw),
-    })
 }
 
 /// CHC-FR-14: the local and remote-tracking branches available as comparison
@@ -668,6 +489,34 @@ pub fn is_git_meta_rel(rel: &str) -> bool {
         || rel.starts_with("refs/")
 }
 
+/// CHC-FR-EXTM: true for a path inside the Git directory of a submodule, which
+/// the parent keeps below `modules/<name>/`, whose change could alter the
+/// change set. A submodule name can hold `/`, so the path matches on what it
+/// ends with, by the rules of [`is_git_meta_rel`].
+pub fn is_submodule_git_meta_rel(rel: &str) -> bool {
+    let Some(rest) = rel.strip_prefix("modules/") else {
+        return false;
+    };
+    if rest.ends_with(".lock") {
+        return false;
+    }
+    ["/HEAD", "/ORIG_HEAD", "/MERGE_HEAD", "/index", "/packed-refs"]
+        .iter()
+        .any(|leaf| rest.ends_with(leaf))
+        || (rest.contains("/refs/") && !rest.contains("/logs/"))
+}
+
+/// CHC-FR-EXTM: the last `.git` folder of `path` and the part of `path` after
+/// it, when there is one: the path inside the Git directory of a checkout that
+/// holds it.
+fn embedded_git_rel(path: &Path) -> Option<(std::path::PathBuf, String)> {
+    let parts: Vec<_> = path.components().collect();
+    let at = parts.iter().rposition(|c| c.as_os_str() == ".git")?;
+    let dot_git: std::path::PathBuf = parts[..=at].iter().collect();
+    let rest: std::path::PathBuf = parts[at + 1..].iter().collect();
+    Some((dot_git, to_forward(&rest)))
+}
+
 /// The Git directory the watcher must observe in addition to the project root,
 /// or `None` when watching the root already covers it.
 ///
@@ -711,10 +560,19 @@ pub fn changes_change_count(
     let mut seen = BTreeSet::new();
     for ev in events {
         let Ok(rel) = ev.path.strip_prefix(git_dir) else {
+            // CHC-FR-EXTM: a submodule that keeps its own `.git` folder in its
+            // checkout writes its metadata there.
+            // The `.git` folder of the repository itself, which a linked
+            // worktree's Git directory is below, is not such a checkout.
+            if let Some((dot_git, rel)) = embedded_git_rel(&ev.path) {
+                if !git_dir.starts_with(&dot_git) && is_git_meta_rel(&rel) {
+                    seen.insert(to_forward(&ev.path));
+                }
+            }
             continue;
         };
         let rel = to_forward(rel);
-        if is_git_meta_rel(&rel) {
+        if is_git_meta_rel(&rel) || is_submodule_git_meta_rel(&rel) {
             seen.insert(rel);
         }
     }
@@ -768,6 +626,20 @@ pub fn list_uncommitted_changes(
         Some(root.to_path_buf()),
         || uncommitted_change_set(&root),
     )
+    .inspect(|set| log_unopened(&app, set))
+}
+
+/// GSM-FR-FRLZ: one `WARN` record for each submodule that could not be opened.
+fn log_unopened(app: &tauri::AppHandle, set: &ChangeSet) {
+    for (path, cause) in &set.unopened {
+        crate::logging::log_warn(
+            app,
+            &crate::logging::BUFFER,
+            &[crate::logging::Domain::Backend],
+            "a submodule could not be opened",
+            crate::log_fields! { "repository" => path, "cause" => cause },
+        );
+    }
 }
 
 #[project_scope_macros::project_scoped]
@@ -787,6 +659,7 @@ pub fn list_branch_changes(
         Some(root.to_path_buf()),
         || branch_change_set(&root, &target_branch),
     )
+    .inspect(|set| log_unopened(&app, set))
 }
 
 /// CHC-FR-21 / CHC-FR-22: the diff summary `../ui/STB-status-bar.md` STB-FR-25
@@ -834,6 +707,7 @@ pub fn list_comparison_branches(
 pub mod tests_support {
     use super::*;
     use crate::fs as fsa;
+    use std::collections::BTreeMap;
     use std::path::PathBuf;
 
     /// Content hash of every file under `root`, `.git` included, so a write to

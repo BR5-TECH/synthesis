@@ -300,13 +300,72 @@ pub struct UpstreamSyncState {
     pub has_upstream: bool,
     pub ahead: Option<usize>,
     pub behind: Option<usize>,
+    /// GTC-FR-OQJB: one state for each member of the repository set, the main
+    /// repository first.
+    pub repositories: Vec<RepositorySyncState>,
 }
 
-/// GTC-FR-21: read the active worktree's branch against its upstream. Makes no
-/// network request and writes nothing.
+/// GTC-FR-OQJB: the standing of one repository of the set.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepositorySyncState {
+    /// The project-relative root of the repository; `""` for the main one.
+    pub repository: String,
+    /// The current branch; absent when `HEAD` is detached or unborn.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    pub has_remote: bool,
+    pub has_upstream: bool,
+    pub ahead: Option<usize>,
+    pub behind: Option<usize>,
+}
+
+impl RepositorySyncState {
+    /// GSM-FR-REIT: the push of the current branch publishes something — the
+    /// branch holds commits its upstream does not, or it has a remote and no
+    /// upstream.
+    pub fn is_affected(&self) -> bool {
+        self.branch.is_some()
+            && self.has_remote
+            && (!self.has_upstream || self.ahead.is_some_and(|n| n > 0))
+    }
+}
+
+/// GTC-FR-21 / GTC-FR-OQJB: read the branch of each repository of the active
+/// worktree against its upstream. Makes no network request and writes nothing.
 pub fn upstream_sync_state(root: &Path) -> Result<UpstreamSyncState, String> {
-    let repo = changes::open_repo(root)?;
-    let has_remote = changes::primary_remote_name(&repo).is_some();
+    let set = crate::changes::repo_set::RepoSet::open(root)?;
+    let mut repositories = Vec::with_capacity(set.members.len());
+    for (i, member) in set.members.iter().enumerate() {
+        // A submodule whose state cannot be read reads as one with nothing to
+        // push, so it does not hide the state of the main repository.
+        let state = match repository_sync_state(&member.repo) {
+            Ok(state) => state,
+            Err(_) if i > 0 => UpstreamSyncState::default(),
+            Err(e) => return Err(e),
+        };
+        repositories.push(RepositorySyncState {
+            repository: member.path.clone(),
+            branch: member.branch(),
+            has_remote: state.has_remote,
+            has_upstream: state.has_upstream,
+            ahead: state.ahead,
+            behind: state.behind,
+        });
+    }
+    let main = repositories[0].clone();
+    Ok(UpstreamSyncState {
+        has_remote: main.has_remote,
+        has_upstream: main.has_upstream,
+        ahead: main.ahead,
+        behind: main.behind,
+        repositories,
+    })
+}
+
+/// GTC-FR-21: the current branch of `repo` against its upstream.
+pub(crate) fn repository_sync_state(repo: &git2::Repository) -> Result<UpstreamSyncState, String> {
+    let has_remote = changes::primary_remote_name(repo).is_some();
     let mut state = UpstreamSyncState { has_remote, ..UpstreamSyncState::default() };
 
     // A detached HEAD tracks nothing, and neither does an unborn branch.

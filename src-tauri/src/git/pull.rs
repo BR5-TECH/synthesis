@@ -273,6 +273,7 @@ impl<'a> PullOutput<'a> {
                 operation: OPERATION_PULL.to_string(),
                 ok,
                 error,
+                push_summary: None,
             })
             .unwrap_or_default(),
         );

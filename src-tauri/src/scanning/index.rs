@@ -374,7 +374,7 @@ impl ProjectIndex {
             !b.is_empty()
                 && self.nodes.get(b).is_some_and(|n| n.kind == NodeKind::Folder)
                 && repos::is_repo_root(root, b) != self.repo_roots.contains(b)
-        });
+        }) || self.boundary_moved_above(root, paths);
         if attribution
             || boundary_moved
             || paths.len() > REBUILD_THRESHOLD
@@ -444,6 +444,30 @@ impl ProjectIndex {
             }
         }
         changed.into_iter().collect()
+    }
+
+    /// ASC-FR-UWMI, ASC-FR-YLGN: whether a repository boundary above a path of
+    /// the burst moved. The watcher can deliver the files of a submodule
+    /// checkout in a burst that holds no event for its `.git` entry, so each
+    /// folder above a path that is a repository root, or an uninitialised
+    /// submodule, is checked on disk.
+    fn boundary_moved_above(&self, root: &RootFs, paths: &[String]) -> bool {
+        let mut checked: BTreeSet<&str> = BTreeSet::new();
+        for rel in paths {
+            let mut dir = parent_of(rel);
+            while !dir.is_empty() && checked.insert(dir) {
+                let marked = self.repo_roots.contains(dir)
+                    || self
+                        .nodes
+                        .get(dir)
+                        .is_some_and(|n| n.nested == Some(NestedRepo::Uninitialised));
+                if marked && repos::is_repo_root(root, dir) != self.repo_roots.contains(dir) {
+                    return true;
+                }
+                dir = parent_of(dir);
+            }
+        }
+        false
     }
 
     /// Bring the node of one path in line with the disk.

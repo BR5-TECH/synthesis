@@ -4,6 +4,7 @@
 //! One part of `../tests/mod.rs`, which holds the fixture these run against.
 
 use super::*;
+use crate::scanning;
 
 // -----------------------------------------------------------------------
 // CHC-FR-10 / CHC-FR-11 — classification and ids
@@ -143,8 +144,8 @@ fn entries_are_a_single_flat_list_with_no_folders_or_untracked_grouping() {
     // The untracked entry sits in the same list as the modified one.
     let json = serde_json::to_value(&set).unwrap();
     assert!(json.get("entries").unwrap().is_array());
-    assert!(
-        json.as_object().unwrap().len() == 2,
-        "only `comparison` and `entries`, no separate untracked collection"
-    );
+    // CHC-FR-TMNY: `repositories` lists the repository set; it holds no entry.
+    let mut keys: Vec<&String> = json.as_object().unwrap().keys().collect();
+    keys.sort();
+    assert_eq!(keys, ["comparison", "entries", "repositories"], "no separate untracked collection");
 }

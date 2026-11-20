@@ -20,9 +20,11 @@ import type {
   PanelRevealRequest,
   PullRequestHeadState,
   PullRequestSummary,
+  RepositoryInfo,
   UpstreamSyncState,
 } from "../types";
 import type { PullRequestSource } from "../components/CreatePullRequest/types";
+import { otherCommand } from "./invokeMocks";
 import { pickSelector } from "./selectors";
 
 // ---------------------------------------------------------------------------
@@ -41,6 +43,8 @@ export function change(
     addedLines: 1,
     removedLines: 0,
     isBinary: false,
+    repository: "",
+    entryKind: "file",
     ...over,
   };
 }
@@ -66,12 +70,17 @@ export const HOOK = change("src/hooks/useEditHistory.ts", {
   removedLines: 12,
 });
 
-export function changeSet(entries: ChangeEntry[], targetBranch?: string): ChangeSet {
+export function changeSet(
+  entries: ChangeEntry[],
+  targetBranch?: string,
+  repositories: RepositoryInfo[] = [{ path: "", name: "acme", branch: "feature/x" }],
+): ChangeSet {
   return {
     comparison: targetBranch
       ? { kind: "branch", targetBranch, mergeBase: "abc123" }
       : { kind: "uncommitted" },
     entries,
+    repositories,
   };
 }
 
@@ -87,6 +96,13 @@ export interface Backend {
   prefs?: Record<string, unknown>;
   /** Command name -> error message, for the inline-state tests. */
   fail?: Record<string, string>;
+  /**
+   * Reject a command no case answers, and answer `append_log_records`, as a
+   * strict mock does. Off by default, so older tests keep their answers.
+   */
+  strict?: boolean;
+  /** GTC-FR-19 / GTC-FR-TJPJ: what `commit_paths` answers. */
+  commit?: (args?: Record<string, unknown>) => unknown;
   /**
    * CHG-FR-QLZO: the completed runs of a branch. Absent answers none, so a test
    * that is not about the list renders no list.
@@ -148,6 +164,7 @@ export function makeBackend(invokeMock: Mock) {
                 hasUpstream: true,
                 ahead: 0,
                 behind: 0,
+                repositories: [],
               });
         case "load_app_preferences":
           return { theme: "system", ...(config.prefs ?? {}) };
@@ -207,7 +224,14 @@ export function makeBackend(invokeMock: Mock) {
             ? config.branchChanges()
             : (config.branchChanges ??
                 changeSet([SPEC], String(args?.targetBranch ?? "main")));
+        case "append_log_records":
+          return undefined;
+        case "commit_paths":
+          if (config.commit) return config.commit(args);
+          if (config.strict) return otherCommand(cmd);
+          return undefined;
         default:
+          if (config.strict) return otherCommand(cmd);
           return undefined;
       }
     });
@@ -241,7 +265,11 @@ export const onOpenDiff = vi.fn();
  * window — the commit and the paths it recorded (GTC-FR-19) — or null when it
  * was dismissed or refused.
  */
-export const COMMITTED: CommitOutcome = { commitId: "c0ffee", committedPaths: [] };
+export const COMMITTED: CommitOutcome = {
+  commitId: "c0ffee",
+  committedPaths: [],
+  repositories: [],
+};
 export let onRequestCommitMessage: Mock<
   (files: CommitFile[], hidden: CommitFile[]) => Promise<CommitOutcome | null>
 >;

@@ -35,7 +35,7 @@ fn the_git_writes_run_the_check() {
     let git = include_str!("../../git.rs");
     let active = "require_active_branch_write";
     assert_checked_before(git, "commit_paths", active, "commit_paths_reported(");
-    assert_checked_before(git, "push_current_branch", active, "push_branch_at(");
+    assert_checked_before(git, "push_current_branch", active, "push_affected_at(");
     let named = "require_branch_write(&app, &root, Some(&branch)";
     assert_checked_before(git, "push_branch", named, "push_named_branch_at(");
     let pull = include_str!("../pull.rs");
@@ -176,4 +176,19 @@ fn the_library_writes_and_the_accepts_run_the_check() {
 /// a thread of its own.
 fn off_main_thread_sync(source: &str, name: &str) -> bool {
     source.contains(&format!("#[tauri::command(async)]\npub fn {name}("))
+}
+
+// GSM-FR-GHFY: the main branch write check runs once, on the branch of the
+// main repository; the commit and the push of a submodule do not run it.
+#[test]
+fn submodule_writes_run_no_main_branch_check() {
+    let push = include_str!("../push.rs");
+    assert!(!body_of(push, "push_affected_inner").contains("write_guard"));
+    let commit = include_str!("../commit.rs");
+    assert!(!body_of(commit, "commit_in_member").contains("write_guard"));
+    let git = include_str!("../../git.rs");
+    assert_eq!(
+        body_of(git, "push_current_branch").matches("require_active_branch_write").count(),
+        1
+    );
 }

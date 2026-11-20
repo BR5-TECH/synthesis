@@ -5,6 +5,7 @@ use std::path::Path;
 use git2::Repository;
 use serde::Serialize;
 
+use crate::changes::repo_set::{Member, RepoSet};
 use crate::changes::{self};
 
 use super::*;
@@ -35,6 +36,8 @@ pub const ROLLBACK_PERMISSION_DENIED: &str = "permission_denied";
 pub const ROLLBACK_WRITE_FAILED: &str = "write_failed";
 /// `HEAD` holds no such path and the working tree does not either.
 pub const ROLLBACK_NOT_FOUND: &str = "not_found";
+/// GTC-FR-DGJV / GSM-FR-PQZX: a submodule pointer is not rolled back.
+pub const ROLLBACK_SUBMODULE_POINTER: &str = "submodule_pointer";
 
 /// What became of one selected entry (GTC-FR-25).
 ///
@@ -215,8 +218,60 @@ pub fn rollback_named_paths(
         return Err(ERR_NO_PATHS_SELECTED.to_string());
     }
 
-    let repo = changes::open_repo(root)?;
-    let prefix = changes::project_prefix(&repo, root);
+    // GTC-FR-DGJV: each path is rolled back in the repository that owns it. The
+    // order of the outcome is the order of the request (`RollbackOutcome`).
+    let set = RepoSet::open(root)?;
+    let mut slots: Vec<Option<RollbackEntryOutcome>> = vec![None; paths.len()];
+    let mut groups: Vec<Vec<usize>> = vec![Vec::new(); set.members.len()];
+    for (i, path) in paths.iter().enumerate() {
+        if set.submodule_at(path).is_some() {
+            slots[i] = Some(pointer_refusal(path));
+        } else {
+            groups[set.owner_index(path)].push(i);
+        }
+    }
+    let mut index_errors = Vec::new();
+    for (member, group) in set.members.iter().zip(&groups) {
+        if group.is_empty() {
+            continue;
+        }
+        let named: Vec<String> = group.iter().map(|i| paths[*i].clone()).collect();
+        let (entries, index_error) = rollback_in_member(root, member, &named)?;
+        for (i, entry) in group.iter().zip(entries) {
+            slots[*i] = Some(entry);
+        }
+        index_errors.extend(index_error);
+    }
+    let entries = slots.into_iter().flatten().collect();
+    let index_error = (!index_errors.is_empty()).then(|| index_errors.join("; "));
+    Ok((RollbackOutcome { entries }, index_error))
+}
+
+/// GSM-FR-PQZX: the outcome of a pointer path, for which nothing is written.
+fn pointer_refusal(path: &str) -> RollbackEntryOutcome {
+    RollbackEntryOutcome {
+        id: path.to_string(),
+        path: path.to_string(),
+        previous_path: None,
+        outcome: String::new(),
+        restored_paths: Vec::new(),
+        removed_paths: Vec::new(),
+        failures: vec![PathFailure {
+            path: path.to_string(),
+            kind: ROLLBACK_SUBMODULE_POINTER.to_string(),
+        }],
+    }
+    .settle()
+}
+
+/// GTC-FR-23 – GTC-FR-28 in one repository of the set: `paths` are the
+/// project-relative paths that `member` owns.
+fn rollback_in_member(
+    root: &crate::fs::RootFs,
+    member: &Member,
+    paths: &[String],
+) -> Result<(Vec<RollbackEntryOutcome>, Option<String>), String> {
+    let repo = &member.repo;
     let workdir = repo
         .workdir()
         .ok_or_else(|| "the repository has no working directory".to_string())?
@@ -229,7 +284,7 @@ pub fn rollback_named_paths(
     let mut specs = Vec::with_capacity(paths.len());
     for (i, path) in paths.iter().enumerate() {
         match crate::fs::resolve_under(root, path) {
-            Ok(_) => specs.push(repo_pathspec(&prefix, path)),
+            Ok(_) => specs.push(member.to_repo(path)),
             Err(_) => {
                 escaped[i] = true;
                 // A placeholder keeps `specs` index-aligned with `paths`; it is
@@ -239,7 +294,7 @@ pub fn rollback_named_paths(
         }
     }
 
-    let plans = plan_rollback(&repo, &prefix, &specs)?;
+    let plans = plan_rollback(repo, &member.prefix, &specs)?;
     let mut index = repo.index().map_err(|e| format!("failed to open the index: {e}"))?;
     let mut index_dirty = false;
     let mut entries = Vec::with_capacity(paths.len());
@@ -294,7 +349,7 @@ pub fn rollback_named_paths(
                 // caller must be told both identities of a rename it is about to
                 // act on, even one it holds no session for.
                 let reported_previous =
-                    project_relative(&prefix, previous).unwrap_or_else(|| previous.clone());
+                    member.to_project(previous).unwrap_or_else(|| previous.clone());
                 entry.previous_path = Some(reported_previous.clone());
                 steps.push((RollbackStep::Restore, previous.as_str(), reported_previous));
                 steps.push((RollbackStep::Remove, spec, path.clone()));
@@ -308,7 +363,7 @@ pub fn rollback_named_paths(
                 // that as restored would tell it to discard an in-memory buffer
                 // on the strength of a path nothing was done to (GTC-FR-25).
                 let on_disk = root.file_info(workdir.join(spec)).is_ok();
-                let in_head = matches!(head_blob(&repo, spec), Ok(Some(_)));
+                let in_head = matches!(head_blob(repo, spec), Ok(Some(_)));
                 if on_disk || in_head {
                     entry.restored_paths.push(path.clone());
                 } else {
@@ -323,7 +378,7 @@ pub fn rollback_named_paths(
         for (step, step_spec, reported) in steps {
             match step {
                 RollbackStep::Restore => {
-                    match restore_one(&repo, root, &workdir, step_spec, &mut index) {
+                    match restore_one(repo, root, &workdir, step_spec, &mut index) {
                         Ok(true) => {
                             index_dirty = true;
                             entry.restored_paths.push(reported);
@@ -368,7 +423,7 @@ pub fn rollback_named_paths(
     // The consequence of a failed flush is cosmetic by comparison: the working
     // tree is correct, and the paths read as staged until the next index write.
     let index_error = if index_dirty { index.write().err().map(|e| e.to_string()) } else { None };
-    Ok((RollbackOutcome { entries }, index_error))
+    Ok((entries, index_error))
 }
 
 /// Write `HEAD`'s content back at `spec` and make the index agree, discarding

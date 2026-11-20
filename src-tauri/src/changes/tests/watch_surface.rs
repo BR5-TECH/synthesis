@@ -171,3 +171,50 @@ fn a_linked_worktree_batch_is_counted_once() {
     assert_eq!(changes_change_count(&[], &batch, Some(&git_dir)), 1);
     assert_eq!(common_dir_change_count(&batch, Some(&common)), 1);
 }
+
+// CHC-FR-EXTM: the metadata of a submodule Git directory below `modules/`
+// counts; its locks, logs, objects and configuration do not.
+#[test]
+fn submodule_git_meta_rel_covers_the_metadata_below_modules() {
+    for rel in [
+        "modules/libs/sub/HEAD",
+        "modules/libs/sub/index",
+        "modules/libs/sub/ORIG_HEAD",
+        "modules/libs/sub/packed-refs",
+        "modules/libs/sub/refs/heads/main",
+        "modules/libs/sub/modules/inner/HEAD",
+    ] {
+        assert!(is_submodule_git_meta_rel(rel), "{rel}");
+    }
+    for rel in [
+        "modules/libs/sub/index.lock",
+        "modules/libs/sub/refs/heads/main.lock",
+        "modules/libs/sub/logs/refs/heads/main",
+        "modules/libs/sub/objects/ab/cd",
+        "modules/libs/sub/FETCH_HEAD",
+        "modules/libs/sub/config",
+        "HEAD",
+        "refs/heads/main",
+    ] {
+        assert!(!is_submodule_git_meta_rel(rel), "{rel}");
+    }
+}
+
+// CHC-FR-EXTM: a commit in a submodule — below `modules/` of the Git
+// directory, or in a `.git` folder of its own checkout — is a Git-metadata
+// change, and one path counts once.
+#[test]
+fn changes_change_count_counts_submodule_metadata_once() {
+    use notify_debouncer_mini::{DebouncedEvent, DebouncedEventKind};
+    let root = PathBuf::from("/tmp/proj");
+    let git_dir = root.join(".git");
+    let ev = |path: PathBuf| DebouncedEvent { path, kind: DebouncedEventKind::Any };
+    let batch = Ok(vec![
+        ev(git_dir.join("modules/libs/sub/HEAD")),
+        ev(git_dir.join("modules/libs/sub/HEAD")),
+        ev(git_dir.join("modules/libs/sub/objects/ab/cd")),
+        ev(root.join("vendor/own/.git/index")),
+        ev(root.join("vendor/own/.git/objects/ab/cd")),
+    ]);
+    assert_eq!(changes_change_count(&[], &batch, Some(&git_dir)), 2);
+}

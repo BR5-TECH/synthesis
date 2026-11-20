@@ -1389,6 +1389,70 @@ const changeEntries = [
   },
 ];
 
+/**
+ * CHC-FR-TMNY / GSM-FR-VPAS: the repository set of the demo project. One
+ * seeded submodule, `vendor/design-kit`, on a detached HEAD, so the Changes
+ * panel renders its repository groups (CHG-FR-BYWJ). `?noSubmodule` gives the
+ * main repository alone, and the panel renders no repository group
+ * (CHG-FR-IGSD).
+ */
+const SUBMODULE_PATH = "vendor/design-kit";
+function harnessRepositories() {
+  const main = { path: "", name: "acme", branch: "main", headId: "4f2a10c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3" };
+  if (harnessFlag("noSubmodule")) return [main];
+  return [
+    main,
+    {
+      path: SUBMODULE_PATH,
+      name: "design-kit",
+      parent: "",
+      headId: "9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d",
+    },
+  ];
+}
+
+/**
+ * The change set of the demo project: the main repository's entries, then a
+ * changed file of the submodule and the pointer of the submodule in the main
+ * repository (CHC-FR-EBLI). The pointer has no artifact type, so it shows
+ * under the **All files** lens alone.
+ */
+function harnessChangeEntries() {
+  const own = changeEntries.map((e) => ({ repository: "", entryKind: "file", ...e }));
+  if (harnessFlag("noSubmodule")) return own;
+  return [
+    ...own,
+    {
+      id: `${SUBMODULE_PATH}/specifications/ui/TKN-tokens.md`,
+      path: `${SUBMODULE_PATH}/specifications/ui/TKN-tokens.md`,
+      name: "TKN-tokens.md",
+      changeStatus: "modified",
+      addedLines: 6,
+      removedLines: 2,
+      isBinary: false,
+      // CHC-FR-RYNS: typed from the path relative to the submodule root, so
+      // the default lens shows it.
+      artifactType: "spec",
+      typeSource: "inferred",
+      repository: SUBMODULE_PATH,
+      entryKind: "file",
+    },
+    {
+      id: SUBMODULE_PATH,
+      path: SUBMODULE_PATH,
+      name: "design-kit",
+      changeStatus: "modified",
+      addedLines: 1,
+      removedLines: 1,
+      isBinary: false,
+      repository: "",
+      entryKind: "submodule",
+      previousCommit: "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
+      currentCommit: "9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d",
+    },
+  ];
+}
+
 const human = {
   kind: "human",
   login: "raver119",
@@ -10507,13 +10571,22 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       // them by flag — `?notARepo` and `?noChanges` on the URL.
       if (harnessFlag("notARepo")) throw "not a git repository";
       if (harnessFlag("noChanges"))
-        return { comparison: { kind: "uncommitted" }, entries: [] };
-      return { comparison: { kind: "uncommitted" }, entries: changeEntries };
+        return {
+          comparison: { kind: "uncommitted" },
+          entries: [],
+          repositories: harnessRepositories(),
+        };
+      return {
+        comparison: { kind: "uncommitted" },
+        entries: harnessChangeEntries(),
+        repositories: harnessRepositories(),
+      };
     case "list_branch_changes":
       if (harnessFlag("notARepo")) throw "not a git repository";
       return {
         comparison: { kind: "branch", targetBranch: a.targetBranch ?? "main", mergeBase: "4f2a10c" },
-        entries: harnessFlag("noChanges") ? [] : changeEntries.slice(0, 3),
+        entries: harnessFlag("noChanges") ? [] : harnessChangeEntries().slice(0, 3),
+        repositories: harnessRepositories(),
       };
     case "get_default_branch":
       return "main";
@@ -10602,10 +10675,26 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       // GRV-FR-36: the commit that answers a start preflight is what the next
       // `start_graduation` finds the worktree clean after.
       if (a.expectedWorktree) graduationWorktreeCommitted = true;
-      return {
-        commitId: "a1b2c3d",
-        committedPaths: Array.isArray(a.paths) ? a.paths.map(String) : [],
-      };
+      {
+        // GTC-FR-CHEC: one commit in each repository that owns a named path,
+        // the deepest first. The main repository records the new pointer of
+        // a committed submodule (GSM-FR-MPWK).
+        const paths = Array.isArray(a.paths) ? a.paths.map(String) : [];
+        const inSubmodule = paths.filter((p) => p.startsWith(`${SUBMODULE_PATH}/`));
+        const inMain = paths.filter((p) => !p.startsWith(`${SUBMODULE_PATH}/`));
+        const repositories = [];
+        if (inSubmodule.length > 0)
+          repositories.push({ repository: SUBMODULE_PATH, commitId: "b2c3d4e", committedPaths: inSubmodule });
+        const mainPaths =
+          inSubmodule.length > 0 && !inMain.includes(SUBMODULE_PATH) ? [...inMain, SUBMODULE_PATH] : inMain;
+        if (mainPaths.length > 0)
+          repositories.push({ repository: "", commitId: "a1b2c3d", committedPaths: mainPaths });
+        return {
+          commitId: "a1b2c3d",
+          committedPaths: [...inSubmodule, ...mainPaths],
+          repositories,
+        };
+      }
 
     // GTC-FR-29 … GTC-FR-32: the single working-tree status primitive. No UI
     // consumer of its own — the graduation start preflight reads it through
@@ -10625,6 +10714,18 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       const paths = Array.isArray(a.paths) ? a.paths.map(String) : [];
       const entryFor = (p: string) => {
         const change = changeEntries.find((e) => e.path === p);
+        // GTC-FR-DGJV: a pointer path is never written.
+        if (p === SUBMODULE_PATH) {
+          return {
+            id: p,
+            path: p,
+            previousPath: null,
+            outcome: "failed",
+            restoredPaths: [],
+            removedPaths: [],
+            failures: [{ path: p, kind: "submodule_pointer" }],
+          };
+        }
         if (p.includes("fails-rollback")) {
           return {
             id: p,
@@ -10671,7 +10772,22 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return { entries: paths.map(entryFor) };
     }
     case "get_upstream_sync_state":
-      return { hasRemote: true, hasUpstream: true, ahead: 2, behind: 1 };
+      // GTC-FR-OQJB: one state for each repository. The submodule is on a
+      // detached HEAD, so it never makes Push available (CHG-FR-KQWD).
+      return {
+        hasRemote: true,
+        hasUpstream: true,
+        ahead: 2,
+        behind: 1,
+        repositories: harnessRepositories().map((r) => ({
+          repository: r.path,
+          ...(r.branch ? { branch: r.branch } : {}),
+          hasRemote: true,
+          hasUpstream: r.path === "",
+          ahead: r.path === "" ? 2 : null,
+          behind: r.path === "" ? 1 : null,
+        })),
+      };
     case "push_current_branch":
       return undefined;
     // GTC-FR-NEIW / CPR-FR-ODTB: the head branch is not on the remote until

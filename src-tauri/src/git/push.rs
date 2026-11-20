@@ -7,6 +7,7 @@ use std::time::Instant;
 use git2::{BranchType, Repository};
 use serde::Serialize;
 
+use crate::changes::repo_set::RepoSet;
 use crate::changes::{self};
 use crate::github_tokens::{self, GithubTokens};
 use crate::global_settings::GlobalSettingsStore;
@@ -50,7 +51,48 @@ pub struct GitOperationFinished {
     /// (GTC-FR-11).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// GTC-FR-PQQV: what the push of the current branch pushed and skipped.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub push_summary: Option<PushSummary>,
 }
+
+/// GTC-FR-PQQV: the repositories that a push of the current branch pushed, in
+/// the order pushed, and the ones it skipped.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PushSummary {
+    pub pushed: Vec<String>,
+    pub skipped: Vec<SkippedRepository>,
+}
+
+/// GSM-FR-MJHC: one repository that the push skipped, and why.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkippedRepository {
+    pub repository: String,
+    /// `detached_head` or `no_remote`.
+    pub reason: String,
+}
+
+/// GSM-FR-REIT: the sync state of one member of the set.
+fn member_sync_state(
+    member: &crate::changes::repo_set::Member,
+) -> Result<RepositorySyncState, String> {
+    let state = repository_sync_state(&member.repo)?;
+    Ok(RepositorySyncState {
+        repository: member.path.clone(),
+        branch: member.branch(),
+        has_remote: state.has_remote,
+        has_upstream: state.has_upstream,
+        ahead: state.ahead,
+        behind: state.behind,
+    })
+}
+
+/// GSM-FR-MJHC: the skip reason of a submodule with a detached `HEAD`.
+pub const SKIP_DETACHED_HEAD: &str = "detached_head";
+/// GSM-FR-MJHC: the skip reason of a submodule with no remote.
+pub const SKIP_NO_REMOTE: &str = "no_remote";
 
 /// The `"push"` operation name both event payloads carry.
 pub const OPERATION_PUSH: &str = "push";
@@ -148,9 +190,114 @@ where
     push_finished(emit, push_inner(sink, buffer, emit, registry, access, Some(branch)))
 }
 
+/// GTC-FR-PQQV: push each affected repository of the set of the checkout at
+/// `access.root`, the deepest first and the main repository last
+/// (GSM-FR-REIT). A failure stops the run (GSM-FR-GTPI). One terminal event
+/// carries what was pushed and skipped.
+pub fn push_affected_at<S>(
+    sink: &S,
+    buffer: &'static LogBuffer,
+    emit: &impl Fn(&str, serde_json::Value),
+    registry: &ProgressRegistry,
+    access: GithubAccess<'_>,
+) -> Result<(), String>
+where
+    S: ProgressSink + LogSink + Clone + Send + 'static,
+{
+    let mut summary = PushSummary::default();
+    let outcome = push_affected_inner(sink, buffer, emit, registry, access, &mut summary);
+    finished_with(emit, outcome, Some(summary))
+}
+
+fn push_affected_inner<S>(
+    sink: &S,
+    buffer: &'static LogBuffer,
+    emit: &impl Fn(&str, serde_json::Value),
+    registry: &ProgressRegistry,
+    access: GithubAccess<'_>,
+    summary: &mut PushSummary,
+) -> Result<(), String>
+where
+    S: ProgressSink + LogSink + Clone + Send + 'static,
+{
+    let set = RepoSet::open(access.root)
+        .inspect_err(|e| log_failure(sink, buffer, TRANSFER, MSG_PUSH_FAILED, e, Fields::new()))?;
+    if !set.has_submodules() {
+        // A project with no submodule pushes its branch as it always did, its
+        // own failures included.
+        push_inner(sink, buffer, emit, registry, access, None)?;
+        summary.pushed.push(String::new());
+        return Ok(());
+    }
+    for i in set.deepest_first() {
+        let member = &set.members[i];
+        let label = log_fields! { "repository" => &member.path };
+        // A member whose state cannot be read stops the run with a record
+        // that names it: a parent pushed past it could record a pointer that
+        // its remote does not hold (GSM-FR-GTPI).
+        let state = match member_sync_state(member) {
+            Ok(state) => state,
+            Err(e) => {
+                log_failure(sink, buffer, TRANSFER, MSG_PUSH_FAILED, &e, label);
+                return Err(e);
+            }
+        };
+        let skip = if state.branch.is_none() {
+            Some(SKIP_DETACHED_HEAD)
+        } else if !state.has_remote {
+            Some(SKIP_NO_REMOTE)
+        } else {
+            None
+        };
+        if let Some(reason) = skip {
+            // GSM-FR-WPKJ: each skip is logged with the repository path.
+            logging::log_info(
+                sink,
+                buffer,
+                TRANSFER,
+                "push skipped a repository",
+                log_fields! { "repository" => &member.path, "reason" => reason },
+            );
+            summary.skipped.push(SkippedRepository {
+                repository: member.path.clone(),
+                reason: reason.to_string(),
+            });
+            continue;
+        }
+        // GSM-FR-REIT: a repository with nothing to publish is not pushed.
+        if !state.is_affected() {
+            continue;
+        }
+        let root = if member.is_main() { Some(access.root) } else { member.repo.workdir() };
+        let Some(root) = root else { continue };
+        logging::log_info(sink, buffer, TRANSFER, "pushing a repository", label.clone());
+        let checkout = GithubAccess { root, ..access };
+        if let Err(e) = push_inner(sink, buffer, emit, registry, checkout, None) {
+            // GSM-FR-WPKJ, GSM-FR-GTPI: the repository that stopped the run.
+            // The error stays the typed cause: the panel reads its code to
+            // route a token failure (CHG-FR-43), and `pushed` says how far the
+            // run came.
+            log_failure(sink, buffer, TRANSFER, MSG_PUSH_FAILED, &e, label);
+            return Err(e);
+        }
+        // GSM-FR-WPKJ: each push made in a repository.
+        logging::log_info(sink, buffer, TRANSFER, "pushed a repository", label);
+        summary.pushed.push(member.path.clone());
+    }
+    Ok(())
+}
+
 fn push_finished(
     emit: &impl Fn(&str, serde_json::Value),
     outcome: Result<(), String>,
+) -> Result<(), String> {
+    finished_with(emit, outcome, None)
+}
+
+fn finished_with(
+    emit: &impl Fn(&str, serde_json::Value),
+    outcome: Result<(), String>,
+    push_summary: Option<PushSummary>,
 ) -> Result<(), String> {
     // GTC-FR-04: exactly one terminal event, whatever the outcome.
     emit(
@@ -159,6 +306,7 @@ fn push_finished(
             operation: OPERATION_PUSH.to_string(),
             ok: outcome.is_ok(),
             error: outcome.as_ref().err().cloned(),
+            push_summary,
         })
         .unwrap_or_default(),
     );

@@ -31,6 +31,7 @@ const AHEAD: UpstreamSyncState = {
   hasUpstream: true,
   ahead: 2,
   behind: 0,
+  repositories: [],
 };
 
 beforeEach(() => {
@@ -113,7 +114,7 @@ describe("enablement from the upstream state (GIT-FR-XXLE, CHG-FR-37)", () => {
   });
 
   it("GIT-FR-XXLE, CHG-FR-37 is available for a branch with a remote and no upstream yet", async () => {
-    sync = { hasRemote: true, hasUpstream: false, ahead: null, behind: null };
+    sync = { hasRemote: true, hasUpstream: false, ahead: null, behind: null, repositories: [] };
     renderControl();
     await waitAvailable();
   });
@@ -121,17 +122,17 @@ describe("enablement from the upstream state (GIT-FR-XXLE, CHG-FR-37)", () => {
   it.each([
     [
       "level with its upstream",
-      { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0 },
+      { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0, repositories: [] },
       "Nothing to push — the branch is level with its remote.",
     ],
     [
       "behind its upstream only",
-      { hasRemote: true, hasUpstream: true, ahead: 0, behind: 3 },
+      { hasRemote: true, hasUpstream: true, ahead: 0, behind: 3, repositories: [] },
       "Nothing to push — the branch is level with its remote.",
     ],
     [
       "with no remote",
-      { hasRemote: false, hasUpstream: false, ahead: null, behind: null },
+      { hasRemote: false, hasUpstream: false, ahead: null, behind: null, repositories: [] },
       "This repository has no remote configured.",
     ],
   ] as [string, UpstreamSyncState, string][])(
@@ -155,7 +156,7 @@ describe("enablement from the upstream state (GIT-FR-XXLE, CHG-FR-37)", () => {
   );
 
   it("GIT-FR-XXLE re-reads the state when a commit lands and when a push finishes", async () => {
-    sync = { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0 };
+    sync = { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0, repositories: [] };
     renderControl();
     await waitUnavailable();
 
@@ -163,7 +164,7 @@ describe("enablement from the upstream state (GIT-FR-XXLE, CHG-FR-37)", () => {
     await act(async () => bus.emit("changes-updated", {}));
     await waitAvailable();
 
-    sync = { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0 };
+    sync = { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0, repositories: [] };
     await act(async () =>
       bus.emit(GIT_OPERATION_FINISHED, { operation: "push", ok: true }),
     );
@@ -188,7 +189,7 @@ describe("keyboard and accessible states (GIT-FR-CNQO)", () => {
   });
 
   it("GIT-FR-CNQO keeps an unavailable control focusable and makes it start nothing", async () => {
-    sync = { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0 };
+    sync = { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0, repositories: [] };
     renderControl();
     await waitUnavailable();
     const user = userEvent.setup();
@@ -201,7 +202,7 @@ describe("keyboard and accessible states (GIT-FR-CNQO)", () => {
   });
 
   it("GIT-FR-CNQO keeps the same icon, grayed out, while unavailable", async () => {
-    sync = { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0 };
+    sync = { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0, repositories: [] };
     renderControl();
     await waitUnavailable();
     // The state attribute drives the grayed-out icon in the stylesheet; the
@@ -227,7 +228,7 @@ describe("keyboard and accessible states (GIT-FR-CNQO)", () => {
   });
 
   it("GIT-FR-CNQO renders the reason bubble where the hover and focus styles find it", async () => {
-    sync = { hasRemote: false, hasUpstream: false, ahead: null, behind: null };
+    sync = { hasRemote: false, hasUpstream: false, ahead: null, behind: null, repositories: [] };
     renderControl();
     await waitUnavailable();
     const visible = document.querySelector(".push-control__reason");

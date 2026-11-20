@@ -155,7 +155,7 @@ describe("the footer action control", () => {
   it("CHG-FR-35, CHG-FR-36, CHG-FR-37 makes Push selectable once the branch has something to publish", async () => {
     backend({
       uncommitted: changeSet([]),
-      sync: { hasRemote: true, hasUpstream: true, ahead: 2, behind: 0 },
+      sync: { hasRemote: true, hasUpstream: true, ahead: 2, behind: 0, repositories: [] },
     });
     renderPanel();
     await screen.findByText("No changes.");
@@ -178,7 +178,7 @@ describe("the footer action control", () => {
     // replaced; only the primary button is disabled.
     backend({
       uncommitted: changeSet([]),
-      sync: { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0 },
+      sync: { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0, repositories: [] },
       prefs: { changesCommitAction: "push" },
     });
     renderPanel();
@@ -247,7 +247,7 @@ describe("the footer action control", () => {
   it("CHG-FR-49, CHG-FR-35, CHG-FR-36 follows the selected action, not the commit set", async () => {
     backend({
       uncommitted: changeSet([LIB]),
-      sync: { hasRemote: true, hasUpstream: true, ahead: 2, behind: 0 },
+      sync: { hasRemote: true, hasUpstream: true, ahead: 2, behind: 0, repositories: [] },
       prefs: { changesCommitAction: "push" },
     });
     renderPanel();
@@ -281,10 +281,10 @@ describe("the footer action control", () => {
 
   it("CHG-FR-37 enables Push from the branch's standing against its upstream", async () => {
     const cases: [Partial<UpstreamSyncState>, boolean][] = [
-      [{ hasRemote: true, hasUpstream: true, ahead: 0, behind: 0 }, false],
-      [{ hasRemote: true, hasUpstream: true, ahead: 2, behind: 0 }, true],
-      [{ hasRemote: true, hasUpstream: false, ahead: null, behind: null }, true],
-      [{ hasRemote: false, hasUpstream: false, ahead: null, behind: null }, false],
+      [{ hasRemote: true, hasUpstream: true, ahead: 0, behind: 0, repositories: [] }, false],
+      [{ hasRemote: true, hasUpstream: true, ahead: 2, behind: 0, repositories: [] }, true],
+      [{ hasRemote: true, hasUpstream: false, ahead: null, behind: null, repositories: [] }, true],
+      [{ hasRemote: false, hasUpstream: false, ahead: null, behind: null, repositories: [] }, false],
     ];
     for (const [sync, enabled] of cases) {
       cleanup();
@@ -310,6 +310,7 @@ describe("the footer action control", () => {
       hasUpstream: true,
       ahead: 0,
       behind: 0,
+      repositories: [],
     };
     backend({
       uncommitted: changeSet([LIB]),
@@ -320,7 +321,7 @@ describe("the footer action control", () => {
     await waitFor(() => expect(primary()).toBeDisabled());
 
     // A commit lands elsewhere; the branch is now ahead.
-    sync = { hasRemote: true, hasUpstream: true, ahead: 1, behind: 0 };
+    sync = { hasRemote: true, hasUpstream: true, ahead: 1, behind: 0, repositories: [] };
     await act(async () => {
       listeners[CHANGES_UPDATED]?.({ payload: { changeCount: 1 } });
     });
@@ -443,7 +444,7 @@ describe("committing and pushing", () => {
   it("CHG-FR-43 invokes the push and renders only its outcome, with no output area", async () => {
     backend({
       uncommitted: changeSet([LIB]),
-      sync: { hasRemote: true, hasUpstream: true, ahead: 2, behind: 0 },
+      sync: { hasRemote: true, hasUpstream: true, ahead: 2, behind: 0, repositories: [] },
       prefs: { changesCommitAction: "push" },
     });
     const { container } = renderPanel();
@@ -488,7 +489,7 @@ describe("committing and pushing", () => {
     let attempts = 0;
     backend({
       uncommitted: changeSet([LIB]),
-      sync: { hasRemote: true, hasUpstream: false, ahead: null, behind: null },
+      sync: { hasRemote: true, hasUpstream: false, ahead: null, behind: null, repositories: [] },
       prefs: { changesCommitAction: "push" },
     });
     invokeMock.mockImplementation(async (cmd: string) => {
@@ -501,7 +502,7 @@ describe("committing and pushing", () => {
       if (cmd === "get_default_branch") return "main";
       if (cmd === "list_uncommitted_changes") return changeSet([LIB]);
       if (cmd === "get_upstream_sync_state")
-        return { hasRemote: true, hasUpstream: false, ahead: null, behind: null };
+        return { hasRemote: true, hasUpstream: false, ahead: null, behind: null, repositories: [] };
       if (cmd === "load_app_preferences")
         return { theme: "system", changesCommitAction: "push" };
       return undefined;
@@ -520,7 +521,7 @@ describe("committing and pushing", () => {
     onRequestGithubToken.mockResolvedValue(false);
     backend({
       uncommitted: changeSet([LIB]),
-      sync: { hasRemote: true, hasUpstream: false, ahead: null, behind: null },
+      sync: { hasRemote: true, hasUpstream: false, ahead: null, behind: null, repositories: [] },
       prefs: { changesCommitAction: "push" },
       fail: { push_current_branch: "github_token_selection_required" },
     });
@@ -538,7 +539,7 @@ describe("committing and pushing", () => {
   it("CHG-FR-45 routes to Global settings when no token is stored at all", async () => {
     backend({
       uncommitted: changeSet([LIB]),
-      sync: { hasRemote: true, hasUpstream: false, ahead: null, behind: null },
+      sync: { hasRemote: true, hasUpstream: false, ahead: null, behind: null, repositories: [] },
       prefs: { changesCommitAction: "push" },
       fail: { push_current_branch: "github_token_missing" },
     });
@@ -561,7 +562,7 @@ describe("committing and pushing", () => {
       uncommitted: () => changeSet(entries),
       prefs: { changesCommitAction: "commit_and_push" },
       fail: { push_current_branch: "remote rejected the push" },
-      sync: { hasRemote: true, hasUpstream: true, ahead: 1, behind: 0 },
+      sync: { hasRemote: true, hasUpstream: true, ahead: 1, behind: 0, repositories: [] },
     });
     renderPanel();
     await waitFor(() => expect(primary()).toHaveTextContent("Commit & Push"));
@@ -640,7 +641,7 @@ describe("dismissing the action dropdown", () => {
     // it is reached.
     backend({
       uncommitted: changeSet([LIB]),
-      sync: { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0 },
+      sync: { hasRemote: true, hasUpstream: true, ahead: 0, behind: 0, repositories: [] },
     });
     renderPanel();
     await screen.findByText(/files selected/);
@@ -686,7 +687,7 @@ describe("dismissing the action dropdown", () => {
   it("stays open for a click on its own trigger or inside the menu", async () => {
     backend({
       uncommitted: changeSet([LIB]),
-      sync: { hasRemote: true, hasUpstream: true, ahead: 2, behind: 0 },
+      sync: { hasRemote: true, hasUpstream: true, ahead: 2, behind: 0, repositories: [] },
     });
     renderPanel();
     await screen.findByText(/files selected/);

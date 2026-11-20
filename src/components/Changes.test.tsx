@@ -515,6 +515,7 @@ describe("canPush (CHG-FR-37)", () => {
       hasUpstream: true,
       ahead: 0,
       behind: 0,
+      repositories: [],
       ...over,
     });
     // Level with the upstream, and behind it, are both nothing to publish.

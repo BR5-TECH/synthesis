@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import { logDebug, logError, logInfo } from "../logging";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import {
+  applyPickerWindowChrome,
+  keepPickerWindowSize,
+} from "./pickerWindowChrome";
 
 import { Icon } from "./icons";
 import { AppIcon } from "./AppIcon";
@@ -31,125 +34,7 @@ interface ProjectPickerProps {
   presentation?: "window" | "modal";
 }
 
-// Fixed outer size of the picker window (spec PPK-FR-09 / PPK-FR-10 / PPK-FR-11).
-// These must match `src-tauri/tauri.conf.json` — Tauri opens the window at
-// the configured size, and re-applying it here pins the dimensions in case
-// the OS window manager attempted to grow or maximize the window before
-// our `setMaximizable(false)`/`setResizable(false)` calls landed.
-// The right column is rendered at natural size; the left column absorbs the
-// remaining width. The picker CSS (kit.css) is tuned so both columns fit
-// inside these dimensions with no scrolling other than the recent list.
-export const PICKER_WINDOW_WIDTH = 800;
-export const PICKER_WINDOW_HEIGHT = 600;
-
-type PickerWindow = ReturnType<typeof getCurrentWindow>;
-
-// Upper bound (ms) on how long we wait for the OS to finish leaving full-screen
-// before sizing/centering the picker. On macOS `setFullscreen(false)` resolves
-// when the call is dispatched, not when the Space-exit animation completes, and
-// a `setSize`/centering applied mid-transition is silently discarded by the
-// window manager — leaving the picker mis-sized and off-center, the exact
-// failure SNV-FR-27 prevents. We resolve as soon as the post-exit resize fires;
-// this ceiling only bounds the wait if no resize is observed.
-const FULLSCREEN_EXIT_SETTLE_MS = 800;
-
-// Leave OS full-screen and wait for the window to actually settle out of it.
-// Leaving full-screen changes the outer size, so the platform emits a resize;
-// we await that (with the ceiling above as a fallback) so the fixed size and
-// centering that follow land on a normal window. Best-effort and self-cleaning:
-// the resize listener and timer are always torn down, even if setFullscreen
-// rejects on a platform that does not support it.
-async function exitFullscreen(w: PickerWindow): Promise<void> {
-  let resolveSettled!: () => void;
-  const settled = new Promise<void>((resolve) => {
-    resolveSettled = resolve;
-  });
-  let unlisten: (() => void) | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let done = false;
-  const finish = () => {
-    if (done) return;
-    done = true;
-    if (timer) clearTimeout(timer);
-    if (unlisten) {
-      try {
-        unlisten();
-      } catch {
-        // ignore teardown failures
-      }
-    }
-    resolveSettled();
-  };
-  try {
-    if (typeof w.onResized === "function") {
-      try {
-        // Subscribe before toggling so the post-exit resize is never missed.
-        unlisten = await w.onResized(() => finish());
-      } catch {
-        // resize subscription unavailable — rely on the timeout fallback
-      }
-    }
-    timer = setTimeout(finish, FULLSCREEN_EXIT_SETTLE_MS);
-    await w.setFullscreen(false);
-    await settled;
-  } finally {
-    finish();
-  }
-}
-
-async function applyPickerWindowChrome(): Promise<void> {
-  try {
-    const w = getCurrentWindow();
-    // SNV-FR-27: the picker is never presented inside an OS full-screen space.
-    // When File → Close Project (SNV-FR-25) is activated while the shared main
-    // window is in native full-screen, the window is still full-screen as the
-    // picker reclaims it. Leave full-screen first so the fixed size (PPK-FR-09)
-    // and centering (PPK-FR-12) applied below land on a normal window rather
-    // than being swallowed by the full-screen space. This is distinct from the
-    // maximized handling below — full-screen is a separate OS window state, and
-    // a window cannot be unmaximized while still full-screen, so it goes first.
-    if (typeof w.isFullscreen === "function") {
-      try {
-        if (await w.isFullscreen()) await exitFullscreen(w);
-      } catch {
-        // some platforms reject before the window is fully created; fall
-        // through so the fixed size and centering below still apply
-      }
-    }
-    // Order: ensure not maximized, drop resize/maximize affordances, then
-    // pin the outer size. setResizable(false) on its own does not always
-    // disable the OS maximize control, so we also clear maximizable.
-    if (typeof w.isMaximized === "function") {
-      try {
-        if (await w.isMaximized()) await w.unmaximize();
-      } catch {
-        // ignore — some platforms reject before window is fully created
-      }
-    }
-    if (typeof w.setMaximizable === "function") {
-      try {
-        await w.setMaximizable(false);
-      } catch {
-        // some platforms (e.g. Linux/wayland) may not support this
-      }
-    }
-    await w.setResizable(false);
-    await w.setSize(
-      new LogicalSize(PICKER_WINDOW_WIDTH, PICKER_WINDOW_HEIGHT),
-    );
-    // PPK-FR-12: center the picker on the active display. At launch the Rust
-    // setup hook already centers, but when the picker is re-shown within a
-    // session — after closing (SNV-FR-25) or switching (OVW-FR-11) a project —
-    // the shared window still sits at the main shell's last position. The fixed
-    // size has just been pinned above, so re-centering now lands correctly. The
-    // backend computes the active display from the cursor and never reads a
-    // persisted position (PPK-FR-12). Best-effort: swallow if unavailable.
-    await api.centerPicker().catch(() => {});
-  } catch {
-    // Outside the Tauri runtime (tests, plain Vite dev), these APIs reject.
-    // The picker still renders; window chrome is a no-op in that environment.
-  }
-}
+export { PICKER_WINDOW_HEIGHT, PICKER_WINDOW_WIDTH } from "./pickerWindowChrome";
 
 export function formatRelative(iso: string, now: Date = new Date()): string {
   const t = Date.parse(iso);
@@ -234,7 +119,22 @@ export function ProjectPicker({
     // PPK-FR-GMYH: the modal leaves the window of its project as it is.
     if (presentation === "modal") return;
     // PPK-FR-09 / PPK-FR-10 / PPK-FR-11: picker uses a fixed, non-resizable window.
-    void applyPickerWindowChrome();
+    // PPK-FR-TBNQ: after that, keep the fixed size until the picker unmounts.
+    let cancelled = false;
+    let stopKeeping: (() => void) | undefined;
+    void (async () => {
+      await applyPickerWindowChrome();
+      if (cancelled) return;
+      const stop = await keepPickerWindowSize();
+      // The effect may have been cleaned up while the subscription was
+      // pending; then its cleanup never saw this guard.
+      if (cancelled) stop();
+      else stopKeeping = stop;
+    })();
+    return () => {
+      cancelled = true;
+      stopKeeping?.();
+    };
   }, [presentation]);
 
   useEffect(() => {

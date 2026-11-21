@@ -1,6 +1,6 @@
 /**
  * The Terminals feature through the shell: the activity-bar toggle, the panel,
- * the New terminal dialog, and the Terminal tab, with the real panel and the
+ * the New terminal menu, and the Terminal tab, with the real panel and the
  * real tab strip over a mocked backend.
  *
  * `TRM-terminals.md`; `SNV-shell-navigation.md` SNV-FR-PULG, SNV-FR-66;
@@ -16,6 +16,7 @@ import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
 import { resetLogBufferForTest } from "./logging";
 import { resetPanelReveals } from "./state/panelReveal";
 import { defaultInvoke, enterIde, resetAppFixture, tabLabels } from "./test/appFixtures";
+import { FakeTerminal } from "./test/ghosttyMock";
 import type { TerminalSummary, TerminalTarget } from "./types";
 
 const invokeMock = vi.fn();
@@ -141,6 +142,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   resetLogBufferForTest();
 });
 
@@ -154,16 +156,19 @@ async function openPanelAndCreate() {
   await userEvent.click(within(activityBar()).getByRole("button", { name: "Terminals" }));
   expect(await screen.findByText("No terminals")).toBeInTheDocument();
   await userEvent.click(screen.getAllByRole("button", { name: "New terminal" })[0]);
-  await screen.findByRole("group", { name: "Kind" });
-  await userEvent.click(screen.getByRole("button", { name: "Create" }));
+  const menu = await screen.findByRole("menu", { name: "New terminal" });
+  await userEvent.click(await within(menu).findByRole("menuitem", { name: "Host shell" }));
   await waitFor(() => expect(tabLabels()).toContain("Host shell 1"));
 }
 
 describe("Terminals through the shell", () => {
   it("SNV-FR-PULG, TRM-FR-LAZH, TRM-FR-FYYB, TAB-FR-VKPS: the toggle opens the panel, and a created terminal opens in its tab", async () => {
+    const focus = vi.spyOn(FakeTerminal.prototype, "focus");
     render(<App />);
     await enterIde();
     await openPanelAndCreate();
+    // TRM-FR-FYYB: the new tab takes the focus.
+    await waitFor(() => expect(focus).toHaveBeenCalled());
     expect(within(activityBar()).getByRole("button", { name: "Terminals" })).toHaveAttribute("data-active", "true");
     expect(document.querySelector(".terminal-view [data-fake-terminal]")).not.toBeNull();
     expect(named("create_terminal")[0].args).toMatchObject({ kind: "host_shell", target: TARGET.target });

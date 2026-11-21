@@ -59,6 +59,7 @@ export function resetTerminalFixtures(): void {
   invokeMock.mockClear();
   listenMock.mockClear();
   FakeChannel.last = null;
+  nextId = 1;
 }
 
 let nextId = 1;

@@ -18,12 +18,13 @@ A pinned terminal shows a pin mark and is first in its group. A warning mark sho
 
 ## Open a terminal
 
-1. Select **New terminal** in the panel header.
-2. Select the target: the active worktree, another worktree, or a work stream.
-3. Select the kind. A kind that is not available is grey and shows the reason.
-4. Select **Create**.
+1. Select **New terminal** in the panel header. A menu opens under the button.
+2. To open a terminal in the active worktree, select a kind at the top of the menu.
+3. To open a terminal in another worktree or in a work stream, move to its entry under the separator, and then select a kind in its submenu.
 
-The new terminal opens in a tab.
+A kind that is not available is grey and shows the reason. The new terminal opens in a tab.
+
+With the keyboard, use the Up and Down arrow keys to move, the Right arrow key to open a submenu, the Left arrow key to close it, and Enter to select. Escape closes the menu.
 
 ### Kinds
 

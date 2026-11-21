@@ -3,7 +3,8 @@
  * TRM-FR-LAZH … TRM-FR-OCSN).
  *
  * It lists every terminal session of the project window, grouped by target,
- * and opens a session's tab on a click. The row context menu pins and closes
+ * and opens a session's tab on a click. New terminal opens the New terminal
+ * menu under the button that was activated. The row context menu pins and closes
  * sessions, and a close that ends a running process asks first.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -32,7 +33,7 @@ import type { PanelRevealRequest, TerminalSummary } from "../../types";
 import { Icon } from "../icons";
 import { EMPTY_BODY_CLASS, PanelEmptyState } from "../PanelEmptyState";
 import { EndTerminalsConfirm } from "./EndTerminalsConfirm";
-import { NewTerminalDialog } from "./NewTerminalDialog";
+import { NewTerminalMenu } from "./NewTerminalMenu";
 import { TerminalRowMenu, type TerminalMenuChoice } from "./TerminalRowMenu";
 
 export interface TerminalsPanelProps {
@@ -82,10 +83,10 @@ export function TerminalsPanel({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newAnchor, setNewAnchor] = useState<HTMLElement | null>(null);
   const [pending, setPending] = useState<PendingClose | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
-  const newButtonRef = useRef<HTMLButtonElement | null>(null);
+  const headerButton = useRef<HTMLButtonElement | null>(null);
   const atLimit = sessions.length >= MAX_TERMINALS;
 
   // TRM-FR-RCCE / SNV-FR-66: a Terminal tab that became active selects its row.
@@ -116,13 +117,20 @@ export function TerminalsPanel({
 
   const openMenu = (id: string, x: number, y: number) => {
     onOverlayOpening?.();
+    setNewAnchor(null);
     setMenu({ id, x, y });
   };
 
-  const openDialog = () => {
+  /** TRM-FR-JINY: a second activation of the same button closes the menu. */
+  const toggleNewMenu = (anchor: HTMLElement) => {
+    if (newAnchor === anchor) {
+      setNewAnchor(null);
+      return;
+    }
     if (atLimit) return;
     onOverlayOpening?.();
-    setDialogOpen(true);
+    setMenu(null);
+    setNewAnchor(anchor);
   };
 
   /** TRM-FR-JJEY: a close that ends a running session asks first. */
@@ -164,13 +172,15 @@ export function TerminalsPanel({
   const newButton = (
     <span className="terminals-panel__new-wrap" title={newTitle}>
       <button
-        ref={newButtonRef}
+        ref={headerButton}
         type="button"
         className="icon-btn terminals-panel__new"
         aria-label="New terminal"
+        aria-haspopup="menu"
+        aria-expanded={newAnchor !== null && newAnchor === headerButton.current}
         aria-description={atLimit ? newTitle : undefined}
         disabled={atLimit}
-        onClick={openDialog}
+        onClick={(e) => toggleNewMenu(e.currentTarget)}
       >
         <Icon.Plus size={14} aria-hidden="true" />
       </button>
@@ -194,7 +204,7 @@ export function TerminalsPanel({
                 : {
                     label: "New terminal",
                     icon: <Icon.Plus size={12} aria-hidden="true" />,
-                    onClick: () => openDialog(),
+                    onClick: (e) => toggleNewMenu(e.currentTarget),
                   }
             }
           >
@@ -305,12 +315,16 @@ export function TerminalsPanel({
         />
       )}
 
-      {dialogOpen && (
-        <NewTerminalDialog
-          returnFocus={newButtonRef.current}
-          onClose={() => setDialogOpen(false)}
+      {newAnchor && (
+        <NewTerminalMenu
+          anchor={newAnchor}
+          onClose={(restoreFocus) => {
+            const anchor = newAnchor;
+            setNewAnchor(null);
+            if (restoreFocus) anchor.focus();
+          }}
           onCreated={(session) => {
-            setDialogOpen(false);
+            setNewAnchor(null);
             open(session);
           }}
         />

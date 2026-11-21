@@ -349,8 +349,20 @@ export function hideTerminalView(id: string): void {
   views.get(id)?.host.remove();
 }
 
+/**
+ * Puts the focus on the terminal of a tab (TRM-FR-FYYB). A terminal that is
+ * still starting takes the focus when it is ready, if its tab still shows it.
+ */
 export function focusTerminalView(id: string): void {
-  views.get(id)?.term?.focus();
+  const entry = views.get(id);
+  if (!entry) return;
+  if (entry.term) {
+    entry.term.focus();
+    return;
+  }
+  void entry.starting?.then(() => {
+    if (views.get(id) === entry && entry.host.isConnected) entry.term?.focus();
+  });
 }
 
 /** The `start` of a view, so a test can wait for the attach. */

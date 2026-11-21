@@ -300,7 +300,8 @@ describe("useShellSession teardown flush (EDT-FR-33)", () => {
     // chrome's worktree selector makes when a project opens (WTS-FR-03); and
     // `open_artifact_by_id`, the type read of a tab opened with no type
     // (TAB-FR-SZGD); and `get_delivery_source`, the read of the delivery
-    // source an open project makes (LIB-FR-JTXR).
+    // source an open project makes (LIB-FR-JTXR); and `list_terminals`, the
+    // read of the Terminals list an open project makes (TRM-FR-LAZH).
     const order = invokeMock.mock.calls
       .map((c) => c[0])
       .filter(
@@ -309,7 +310,8 @@ describe("useShellSession teardown flush (EDT-FR-33)", () => {
           cmd !== "set_find_menu_state" &&
           cmd !== "get_active_worktree" &&
           cmd !== "open_artifact_by_id" &&
-          cmd !== "get_delivery_source",
+          cmd !== "get_delivery_source" &&
+          cmd !== "list_terminals",
       );
     expect(order).toEqual([
       "save_artifact_contents",

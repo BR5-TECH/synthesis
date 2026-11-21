@@ -169,7 +169,7 @@ pub fn env_file_text(
 /// DVC-FR-QGUT: the folder under the application data folder that holds the
 /// generated config and the env files of one scope. `data` is the application
 /// data folder, or the folder a test names in its place.
-fn scope_folder(data: &Path, scope_key: &str) -> PathBuf {
+pub(super) fn scope_folder(data: &Path, scope_key: &str) -> PathBuf {
     use sha2::{Digest, Sha256};
     let digest = Sha256::digest(scope_key.as_bytes());
     let short: String = digest.iter().take(8).map(|b| format!("{b:02x}")).collect();
@@ -178,7 +178,7 @@ fn scope_folder(data: &Path, scope_key: &str) -> PathBuf {
 
 /// DVC-FR-QGUT: a path that the `--mount` form of a config cannot carry. The
 /// form separates its fields with commas.
-fn unmountable(path: &str) -> bool {
+pub(super) fn unmountable(path: &str) -> bool {
     path.contains(',') || path.contains('\n')
 }
 
@@ -412,7 +412,7 @@ impl AgentCliExecutor {
 }
 
 /// DVC-FR-DCQG: an owner-only mode for the scope folder and its env files.
-fn restrict_to_owner(path: &Path, mode: u32) {
+pub(super) fn restrict_to_owner(path: &Path, mode: u32) {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

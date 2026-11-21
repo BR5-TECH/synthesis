@@ -520,6 +520,10 @@ export function AppShell(props: AppShellProps) {
             onDocumentsRemoved={s.closeTabsForRemovedDocuments}
             // DPN-FR-ZMBQ / SNV-FR-56: the Add documents choice is an overlay.
             onOverlayOpening={closeOtherOverlays}
+            terminals={{
+              activeWorktreePath: s.activeWorktree?.path ?? null,
+              onOpenTerminal: s.openTerminalTab,
+            }}
           />
           {/* SNV-FR-33: the drag handle on the panel's inner edge. */}
           <PanelResizer

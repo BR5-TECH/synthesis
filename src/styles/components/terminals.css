@@ -1,0 +1,308 @@
+/* TRM-terminals.md: the Terminals panel, the New terminal dialog, and the
+   Terminal tab. */
+
+.terminals-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+.terminals-panel__new-wrap { display: inline-flex; }
+
+.terminals-panel__list {
+  outline: none;
+  padding: var(--sp-1) 0;
+}
+
+/* TRM-FR-EAUY: a group header names the target, its branch, and its role. */
+.terminals-group + .terminals-group { margin-top: var(--sp-2); }
+.terminals-group__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px var(--sp-3) 2px;
+  color: var(--fg-3);
+  font-size: var(--fs-ui-xs);
+  min-width: 0;
+}
+.terminals-group__name {
+  color: var(--fg-2);
+  font-weight: var(--fw-semi);
+  /* TRM-FR-EAUY: the name gives way last; the branch shrinks first. */
+  flex: 0 1 auto;
+  min-width: min(8ch, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.terminals-group__branch {
+  font-family: var(--font-mono);
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.terminals-group__role {
+  margin-left: auto;
+  flex: none;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  font-size: calc(var(--fs-ui-xs) * 0.9);
+}
+
+/* TRM-FR-BEYN: two lines — label and state, then kind and place. */
+.terminal-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 4px var(--sp-3) 4px 6px;
+  cursor: pointer;
+  border-radius: var(--r-xs);
+  margin: 0 4px;
+  outline: none;
+}
+.terminal-row:hover { background: var(--bg-hover); }
+.terminal-row[aria-selected="true"] { background: var(--bg-active); }
+.terminal-row:focus-visible { box-shadow: var(--shadow-focus); }
+
+/* TRM-FR-DYKW: the pinned marker sits in space every row reserves. */
+.terminal-row__marks {
+  flex: none;
+  width: 12px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+.terminal-row__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.terminal-row__line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+}
+.terminal-row__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.terminal-row__detail {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.terminal-row__state {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+}
+.terminal-row__state::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fg-4);
+}
+.terminal-row__state[data-state="running"] { color: var(--ok); }
+.terminal-row__state[data-state="running"]::before { background: var(--ok); }
+.terminal-row__state[data-state="starting"] { color: var(--accent); }
+.terminal-row__state[data-state="starting"]::before {
+  background: var(--accent);
+  animation: terminal-pulse 1.2s ease-in-out infinite;
+}
+.terminal-row__state[data-state="target_gone"] { color: var(--danger); }
+.terminal-row__state[data-state="target_gone"]::before { background: var(--danger); }
+.terminal-row[data-state="target_gone"] .terminal-row__label {
+  color: var(--fg-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--fg-4);
+}
+
+/* TRM-FR-CTGK: the busy mark. */
+.terminal-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--warn);
+  font-size: var(--fs-ui-xs);
+  flex: none;
+}
+
+@keyframes terminal-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .terminal-row__state[data-state="starting"]::before { animation: none; }
+}
+
+/* TRM-FR-JINY: the New terminal dialog. */
+.new-terminal { width: min(520px, calc(100vw - 48px)); }
+.new-terminal__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  max-height: min(60vh, 520px);
+  overflow: auto;
+}
+.new-terminal__group {
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  margin: 0;
+  padding: var(--sp-1) var(--sp-2) var(--sp-2);
+}
+.new-terminal__group legend {
+  padding: 0 4px;
+  font-size: var(--fs-ui-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-3);
+  font-weight: var(--fw-semi);
+}
+.new-terminal__option {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px 2px;
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+  cursor: pointer;
+  border-radius: var(--r-xs);
+}
+.new-terminal__option:hover { background: var(--bg-hover); }
+.new-terminal__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.new-terminal__meta {
+  color: var(--fg-3);
+  font-size: var(--fs-ui-xs);
+  white-space: nowrap;
+}
+.new-terminal__meta:last-child,
+.new-terminal__option > .new-terminal__meta:nth-of-type(2) { margin-left: auto; }
+/* TRM-FR-HJUD: a kind that is not available keeps its reason visible. */
+.new-terminal__option[data-unavailable="true"] { cursor: default; color: var(--fg-3); }
+.new-terminal__option[data-unavailable="true"]:hover { background: transparent; }
+.new-terminal__option[data-unavailable="true"] .new-terminal__meta { color: var(--fg-3); font-style: italic; }
+.new-terminal__warning {
+  margin: 0;
+  padding: 6px var(--sp-2);
+  border-radius: var(--r-sm);
+  background: var(--warn-soft);
+  color: var(--fg-1);
+  font-size: var(--fs-ui-sm);
+}
+.new-terminal__error { margin: 0; color: var(--danger); font-size: var(--fs-ui-sm); }
+
+/* TRM-FR-XBVB: the Terminal tab. */
+.terminal-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-canvas);
+}
+.terminal-tab__surface {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.terminal-view {
+  position: absolute;
+  inset: 0;
+  padding: 6px 8px;
+  overflow: hidden;
+}
+.terminal-view__host { width: 100%; height: 100%; }
+.terminal-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 5px var(--sp-3);
+  font-size: var(--fs-ui-sm);
+  border-bottom: 1px solid var(--border-1);
+}
+.terminal-banner--busy { background: var(--warn-soft); color: var(--fg-1); }
+.terminal-banner--busy svg { color: var(--warn); flex: none; }
+.terminal-banner--gone { background: var(--danger-soft); color: var(--fg-1); }
+.terminal-banner--gone svg { color: var(--danger); flex: none; }
+.terminal-tab__starting {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-1);
+  color: var(--fg-2);
+  font-size: var(--fs-ui-xs);
+  box-shadow: var(--shadow-2);
+}
+.terminal-tab__spinner {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: terminal-pulse 1.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .terminal-tab__spinner { animation: none; }
+}
+.terminal-tab__exit {
+  padding: 5px var(--sp-3);
+  border-top: 1px solid var(--border-1);
+  font-family: var(--font-source-family);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-3);
+  background: var(--bg-panel);
+}
+.terminal-tab__gone-output {
+  padding: var(--sp-4);
+  color: var(--fg-3);
+  font-size: var(--fs-ui-sm);
+}
+.terminal-tab__gone-output p { margin: 0 0 var(--sp-2); }
+
+/* TRM-FR-DPWA: the state marker of a Terminal tab. */
+.tab__terminal-state {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: calc(var(--fs-ui-xs) * 0.9);
+  line-height: 1.5;
+  color: var(--fg-3);
+  background: var(--bg-sunken);
+  white-space: nowrap;
+}
+.tab__terminal-state[data-state="target_gone"] { color: var(--danger); background: var(--danger-soft); }
+
+/* Hooks that the components name; each one keeps the shared look of its base class. */
+.end-terminals { width: min(440px, calc(100vw - 48px)); }
+.terminal-menu { min-width: 220px; }
+.terminals-panel__new { flex: none; }
+.terminal-row__pin {
+  display: inline-flex;
+  width: 10px;
+  flex: none;
+  color: var(--fg-3);
+}
+
+/* TRM-FR-EAUY: the icons of a group header keep their size. */
+.terminals-group__head svg { flex: none; }

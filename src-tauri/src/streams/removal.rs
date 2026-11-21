@@ -32,6 +32,11 @@ pub(super) fn end_stream<R: tauri::Runtime>(
     stream_id: &str,
 ) -> Result<(), String> {
     let update = update_record::remove_update(fs, store, stream_id);
+    // WKS-FR-QCGS: the stream's terminal sessions end as a gone target.
+    crate::terminals::service::end_for_target(
+        app,
+        &crate::terminals::model::TargetRef::WorkStream { stream_id: stream_id.to_string() },
+    );
     // EAC-FR-ABHG: the stream has ended, so its sandbox VM stops.
     crate::tools::agent_exec::sandbox::stop_scope_in_background(
         app,

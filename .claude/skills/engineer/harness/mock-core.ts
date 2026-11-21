@@ -7,6 +7,7 @@ import {
   githubPollingInvoke,
 } from "./mock-github-polling";
 import { documentsInvoke, setDocumentTypes, typeSourceAt } from "./mock-documents";
+import { terminalsInvoke } from "./mock-terminals";
 import { embeddingsInvoke } from "./mock-embeddings";
 import { mcpInvoke } from "./mock-mcp";
 import { gitPanelInvoke } from "./mock-git-panel";
@@ -8481,6 +8482,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
   }
   const documents = documentsInvoke(cmd, a);
   if (documents !== NOT_HANDLED) return documents;
+  // TRS-terminal-sessions.md: the terminal commands live in their own module.
+  const terminals = terminalsInvoke(cmd, a);
+  if (terminals !== NOT_HANDLED) return terminals;
   // EMB-embeddings-index.md: the Indexing sections and the Semantic search mode.
   const embeddings = embeddingsInvoke(cmd, a);
   if (embeddings !== NOT_HANDLED) return embeddings;

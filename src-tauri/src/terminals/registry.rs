@@ -1,0 +1,221 @@
+//! The sessions of one project (TRS-FR-AYCY, TRS-FR-LRYH, TRS-FR-TEHT).
+//!
+//! The registry is in memory only. A new application process starts with an
+//! empty one, and a project close empties it.
+
+use std::sync::{Arc, Mutex, MutexGuard};
+
+use super::model::*;
+use super::session::{Session, SessionSpec};
+
+/// TRS-FR-AYCY: the most sessions one project holds, in every state.
+pub const MAX_SESSIONS: usize = 16;
+
+#[derive(Default)]
+pub struct Registry {
+    inner: Mutex<RegistryInner>,
+}
+
+#[derive(Default)]
+struct RegistryInner {
+    sessions: Vec<Arc<Session>>,
+    next_sequence: u64,
+}
+
+/// What a new session is, before the registry gives it an id and a label.
+pub struct NewSession {
+    pub target: TargetRef,
+    pub target_name: String,
+    pub branch: Option<String>,
+    pub kind: TerminalKind,
+    pub vendor: Option<CliVendor>,
+    pub runs_in: RunsIn,
+    pub busy_run_id: Option<String>,
+    pub initial_state: TerminalState,
+}
+
+/// TRS-FR-LRYH: the name a label starts with.
+pub fn label_name(kind: TerminalKind, vendor: Option<CliVendor>) -> &'static str {
+    match (kind, vendor) {
+        (TerminalKind::HostShell, _) => "Host shell",
+        (TerminalKind::ContainerShell, _) => "Container shell",
+        (TerminalKind::MicrosandboxShell, _) => "Microsandbox shell",
+        (TerminalKind::AgentCli, Some(vendor)) => vendor.display_name(),
+        (TerminalKind::AgentCli, None) => "Agent CLI",
+    }
+}
+
+/// TRS-FR-LRYH: the lowest positive number no other label of the name holds.
+pub fn next_label(name: &str, existing: &[String]) -> String {
+    let prefix = format!("{name} ");
+    let mut n = 1u32;
+    loop {
+        let candidate = format!("{prefix}{n}");
+        if !existing.iter().any(|label| label == &candidate) {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
+impl Registry {
+    fn lock(&self) -> MutexGuard<'_, RegistryInner> {
+        self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Adds a session. Refuses past the limit with `terminal_limit_reached`.
+    pub fn add(
+        &self,
+        id: String,
+        created_at: String,
+        new: NewSession,
+    ) -> Result<Arc<Session>, TerminalError> {
+        let mut inner = self.lock();
+        if inner.sessions.len() >= MAX_SESSIONS {
+            return Err(TerminalError::new("terminal_limit_reached"));
+        }
+        let labels: Vec<String> = inner.sessions.iter().map(|s| s.spec.label.clone()).collect();
+        let label = next_label(label_name(new.kind, new.vendor), &labels);
+        let sequence = inner.next_sequence;
+        inner.next_sequence += 1;
+        let session = Arc::new(Session::new(
+            SessionSpec {
+                id,
+                label,
+                target: new.target,
+                target_name: new.target_name,
+                branch: new.branch,
+                kind: new.kind,
+                vendor: new.vendor,
+                runs_in: new.runs_in,
+                created_at,
+                sequence,
+            },
+            new.initial_state,
+            new.busy_run_id,
+        ));
+        inner.sessions.push(session.clone());
+        Ok(session)
+    }
+
+    pub fn get(&self, id: &str) -> Result<Arc<Session>, TerminalError> {
+        self.lock()
+            .sessions
+            .iter()
+            .find(|s| s.spec.id == id)
+            .cloned()
+            .ok_or_else(|| TerminalError::new("unknown_terminal"))
+    }
+
+    pub fn remove(&self, id: &str) -> Option<Arc<Session>> {
+        let mut inner = self.lock();
+        let index = inner.sessions.iter().position(|s| s.spec.id == id)?;
+        Some(inner.sessions.remove(index))
+    }
+
+    /// Every session, in creation order.
+    pub fn all(&self) -> Vec<Arc<Session>> {
+        self.lock().sessions.clone()
+    }
+
+    /// Takes every session out, for a project close (TRS-FR-OTLH).
+    pub fn drain(&self) -> Vec<Arc<Session>> {
+        std::mem::take(&mut self.lock().sessions)
+    }
+
+    pub fn summaries(&self) -> Vec<TerminalSummary> {
+        self.all().iter().map(|s| s.summary()).collect()
+    }
+
+    pub fn for_target(&self, target: &TargetRef) -> Vec<Arc<Session>> {
+        self.all().into_iter().filter(|s| &s.spec.target == target).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn host(path: &str) -> NewSession {
+        NewSession {
+            target: TargetRef::Worktree { path: path.into() },
+            target_name: "repo".into(),
+            branch: None,
+            kind: TerminalKind::HostShell,
+            vendor: None,
+            runs_in: RunsIn::Host,
+            busy_run_id: None,
+            initial_state: TerminalState::Running,
+        }
+    }
+
+    // TRS-FR-AYCY: the 17th session is refused.
+    #[test]
+    fn refuses_past_sixteen_sessions() {
+        let registry = Registry::default();
+        for i in 0..MAX_SESSIONS {
+            registry.add(format!("t{i}"), String::new(), host("/r")).unwrap();
+        }
+        let err = registry.add("t16".into(), String::new(), host("/r")).err().unwrap();
+        assert_eq!(err.code, "terminal_limit_reached");
+        assert_eq!(registry.all().len(), MAX_SESSIONS);
+    }
+
+    // TRS-FR-AYCY: an ended session still counts, and a removed one does not.
+    #[test]
+    fn ended_sessions_count_and_removed_ones_do_not() {
+        let registry = Registry::default();
+        for i in 0..MAX_SESSIONS {
+            let s = registry.add(format!("t{i}"), String::new(), host("/r")).unwrap();
+            s.process_ended(Some(0), EndReason::ProcessExited);
+        }
+        assert!(registry.add("x".into(), String::new(), host("/r")).is_err());
+        registry.remove("t3");
+        assert!(registry.add("x".into(), String::new(), host("/r")).is_ok());
+    }
+
+    // TRS-FR-LRYH: labels take the lowest free number for their name.
+    #[test]
+    fn labels_take_the_lowest_free_number() {
+        let registry = Registry::default();
+        let a = registry.add("a".into(), String::new(), host("/r")).unwrap();
+        let b = registry.add("b".into(), String::new(), host("/r")).unwrap();
+        assert_eq!(a.spec.label, "Host shell 1");
+        assert_eq!(b.spec.label, "Host shell 2");
+        registry.remove("a");
+        let c = registry.add("c".into(), String::new(), host("/r")).unwrap();
+        assert_eq!(c.spec.label, "Host shell 1");
+        let mut agent = host("/r");
+        agent.kind = TerminalKind::AgentCli;
+        agent.vendor = Some(CliVendor::Codex);
+        let d = registry.add("d".into(), String::new(), agent).unwrap();
+        assert_eq!(d.spec.label, "Codex 1");
+    }
+
+    // TRS-FR-TEHT, TRS-FR-OTLH: a drain takes every session out.
+    #[test]
+    fn drain_empties_the_registry() {
+        let registry = Registry::default();
+        registry.add("a".into(), String::new(), host("/r")).unwrap();
+        assert_eq!(registry.drain().len(), 1);
+        assert!(registry.summaries().is_empty());
+    }
+
+    // TRS-FR-RKAW: sessions are found by target.
+    #[test]
+    fn finds_sessions_by_target() {
+        let registry = Registry::default();
+        registry.add("a".into(), String::new(), host("/one")).unwrap();
+        registry.add("b".into(), String::new(), host("/two")).unwrap();
+        let found = registry.for_target(&TargetRef::Worktree { path: "/two".into() });
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].spec.id, "b");
+    }
+
+    // TRS-FR-YYER: an unknown id is a typed error.
+    #[test]
+    fn an_unknown_id_is_a_typed_error() {
+        let registry = Registry::default();
+        assert_eq!(registry.get("nope").err().unwrap().code, "unknown_terminal");
+    }
+}

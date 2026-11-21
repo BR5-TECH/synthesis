@@ -235,6 +235,8 @@ pub(super) fn finish_exit_for<R: tauri::Runtime>(
     }
     if exit_decision(answer == ExitAnswer::Quit, gate) {
         shut_down_projects(app);
+        // TRS-FR-OTLH: every terminal session ends before the process goes.
+        crate::terminals::service::end_all(app);
         // EAC-FR-ABHG: the runs are stopped, so every sandbox VM stops before
         // the process goes.
         crate::tools::agent_exec::sandbox::stop_all_before_exit(app);

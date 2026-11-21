@@ -55,6 +55,7 @@ mod devcontainer_launch;
 pub mod devcontainer_pool;
 mod docker_in_docker;
 pub mod image_probe;
+pub mod interactive;
 mod launch;
 mod launch_env;
 mod launch_outcome;

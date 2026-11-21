@@ -98,6 +98,8 @@ fn close_project_in_scope<R: tauri::Runtime>(
     // EAC-FR-ABHG: the runs are stopped, so the sandbox VMs of this project stop
     // with it. The VMs of the other open projects go on.
     crate::tools::agent_exec::sandbox::stop_project_in_background(&app, project.slot_key());
+    // TRS-FR-OTLH: every terminal session of this project ends with it.
+    crate::terminals::service::end_for_project(&app);
     // GPP-FR-DATH: the polling session ends with the project, so a project
     // opened again starts a new session with nothing reported.
     crate::github_polling::end_session(&app);

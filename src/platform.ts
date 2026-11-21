@@ -16,3 +16,16 @@ export function platformOf(navigatorPlatform: string): Platform {
 export function markPlatform(root: HTMLElement, navigatorPlatform: string): void {
   root.dataset.platform = platformOf(navigatorPlatform);
 }
+
+/**
+ * TRM-FR-DQYZ: whether this window runs on Windows, where the Terminals
+ * surface is not offered.
+ */
+export function isWindowsPlatform(navigatorPlatform: string = globalThis.navigator?.platform ?? ""): boolean {
+  return /^win/i.test(navigatorPlatform);
+}
+
+/** TRM-FR-DHEM: whether this window runs on macOS. */
+export function isMacPlatform(navigatorPlatform: string = globalThis.navigator?.platform ?? ""): boolean {
+  return /mac/i.test(navigatorPlatform);
+}

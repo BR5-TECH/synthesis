@@ -120,7 +120,8 @@ export type PanelSurface =
   | "notes"
   | "comments"
   | "changes"
-  | "drafts";
+  | "drafts"
+  | "terminals";
 
 /**
  * A request that a vertical panel reveal and select one item — expanding its

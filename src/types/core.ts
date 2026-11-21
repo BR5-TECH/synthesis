@@ -220,8 +220,14 @@ export interface Tab {
     | "document"
     | "pdf"
     | "draftPreview"
-    | "openspecChange";
+    | "openspecChange"
+    | "terminal";
   dirty?: boolean;
+  /**
+   * TAB-FR-VKPS: the terminal session a Terminal tab shows. The tab is
+   * identified by it, names no path, and holds no editing session.
+   */
+  terminalId?: string;
   // The backend artifact id (project-relative path, ASC-FR-13) when this tab
   // was opened from a real filesystem node. Present -> the Editor loads/saves
   // live via the backend; absent (e.g. a Dashboard canned row) -> mock content.

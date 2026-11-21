@@ -610,9 +610,18 @@ impl SandboxRuntime for MicrosandboxRuntime {
             let _ = Sandbox::remove(vm).await;
         })
     }
+
+    fn attach_interactive<'a>(
+        &'a self,
+        vm: &'a str,
+        process: super::InteractiveVmProcess,
+    ) -> BoxFuture<'a, Result<crate::terminals::process::ProcessHandle, String>> {
+        Box::pin(interactive::attach(&self.vms, vm, process))
+    }
 }
 
 mod daemon;
+mod interactive;
 
 #[cfg(test)]
 mod tests {

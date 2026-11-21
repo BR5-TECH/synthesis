@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { TerminalTabMark } from "./Terminals/TerminalTabMark";
 import { Icon } from "./icons";
 import type { Tab, TabCloseScope } from "../types";
 import { HOME_TAB_TARGET } from "../types";
@@ -479,6 +480,9 @@ export function TabStrip({
                 ) : t.kind === "draftPreview" ? (
                   // TAB-FR-CIGU: a viewer of a proposed draft, not a draft's tab.
                   <Icon.Doc size={12} data-icon="draft-preview" />
+                ) : t.kind === "terminal" ? (
+                  // TAB-FR-VKPS: a Terminal tab shows one terminal session.
+                  <Icon.TerminalPrompt size={12} data-icon="terminal" />
                 ) : t.kind === "openspecChange" ? (
                   // OCW-FR-DMGL: a reader of one OpenSpec change.
                   <Icon.Diff size={12} data-icon="openspec-change" />
@@ -486,6 +490,7 @@ export function TabStrip({
                   <Icon.Settings size={12} />
                 )}
                 <span className="tab__label">{t.label}</span>
+                {t.kind === "terminal" && t.terminalId && <TerminalTabMark terminalId={t.terminalId} />}
                 {/* OCW-FR-XUJN: a change on a stream names the stream beside it. */}
                 {t.openspecChange?.streamName && (
                   <span className="tab__label-detail">· {t.openspecChange.streamName}</span>

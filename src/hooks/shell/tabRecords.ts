@@ -59,6 +59,15 @@ export function documentTabId(documentId: string): string {
 }
 
 /**
+ * TAB-FR-VKPS: a Terminal tab's id, derived from the terminal id. One id per
+ * terminal keeps a terminal to one tab, and a path removal (TAB-FR-19) cannot
+ * reach it, because it names no path (TAB-FR-JFZR).
+ */
+export function terminalTabId(terminalId: string): string {
+  return `terminal:${terminalId}`;
+}
+
+/**
  * CMP-FR-11 / CMT-FR-36: the surface an arriving fragment discussion has to land
  * on — one that marks its fragment (CMT-FR-02).
  *

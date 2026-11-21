@@ -5,6 +5,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { useTerminalPins, useTerminalTabs } from "./shell/useTerminalTabs";
 import * as api from "./../api";
 import { EditSessionStore } from "../state/editSessions";
 import { setExportSessions } from "../state/exportDialog";
@@ -441,17 +442,19 @@ export function useShellSession(stores: ShellSessionStores = {}) {
    * read the same rule the close will run by without a fresh function on every
    * render re-deciding enablement it has already decided.
    */
+  // TAB-FR-KIIW: a Terminal tab is pinned while its session is.
+  const shownPinnedTabs = useTerminalPins(tabs, pinnedTabs);
   const massCloseTargets = useCallback(
     (scope: TabCloseScope, targetId: string): string[] =>
-      eligibleMassCloseTargets(tabs, pinnedTabs, scope, targetId),
-    [tabs, pinnedTabs],
+      eligibleMassCloseTargets(tabs, shownPinnedTabs, scope, targetId),
+    [tabs, shownPinnedTabs],
   );
 
   // TAB-FR-10 / TAB-FR-34 / TAB-FR-38: the closes and pins the author performs.
-  const { closeTab, setTabPinned, closeTabGroup } = createTabStripActions({
+  const { closeTab, setTabPinned: setStripTabPinned, closeTabGroup } = createTabStripActions({
     tabsRef,
     activeTab,
-    pinnedTabs,
+    pinnedTabs: shownPinnedTabs,
     setPinnedTabs,
     setTabs,
     setActiveTab,
@@ -462,6 +465,15 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     searches,
     specMap,
     massCloseTargets,
+  });
+  // TAB-FR-VKPS / TAB-FR-JFZR / TAB-FR-KIIW: the Terminal tabs.
+  const { openTerminalTab, setTabPinned } = useTerminalTabs({
+    active: screen === "ide",
+    tabs,
+    setTabs,
+    activateTab,
+    closeTab,
+    setTabPinned: setStripTabPinned,
   });
   // LIB-FR-JTXR / MDL-FR-EFQF / SMP-FR-SWUL: the delivery source, the routing
   // of its Flow file, and the Map tab's dirty indicator.
@@ -869,8 +881,9 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     closeTab,
     // TAB-FR-34 / TAB-FR-35: the pinned set the strip draws, and the two menu
     // actions that change it. Session state throughout — nothing records it.
-    pinnedTabs,
+    pinnedTabs: shownPinnedTabs,
     setTabPinned,
+    openTerminalTab,
     // TAB-FR-37 / TAB-FR-38 / TAB-FR-39: the mass closes, and the eligible set
     // the menu reads to decide which of them can act.
     massCloseTargets,

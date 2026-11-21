@@ -84,6 +84,7 @@ pub mod stamp;
 pub mod statistics;
 pub mod storage_floor;
 pub mod streams;
+pub mod terminals;
 pub mod text_hunks;
 pub mod tls;
 pub mod tools;
@@ -204,6 +205,8 @@ pub fn run() {
             // NTD-FR-DMYR: first, so a click that launched the application
             // reaches the notification delegate.
             notifications::install(app.handle());
+            // TRS-FR-RKAW: the watch of each terminal session's target.
+            terminals::service::start_watch(app.handle());
             // VOP-FR-BSNY.
             voice_ai::start_watchdog(app.handle().clone());
             // AGC-FR-NBZN: the turn builders find a stream's working copy.
@@ -406,6 +409,16 @@ pub fn run() {
             github_polling::open_github_task_issue,
             streams::create_work_stream,
             streams::list_work_streams,
+            terminals::commands::list_terminal_targets,
+            terminals::commands::list_terminals,
+            terminals::commands::create_terminal,
+            terminals::commands::attach_terminal,
+            terminals::commands::detach_terminal,
+            terminals::commands::write_terminal_input,
+            terminals::commands::resize_terminal,
+            terminals::commands::acknowledge_terminal_output,
+            terminals::commands::set_terminal_pinned,
+            terminals::commands::close_terminal,
             streams::list_removed_work_streams,
             streams::dismiss_removed_work_stream,
             streams::get_work_stream,
@@ -756,6 +769,8 @@ pub fn run() {
                     api.prevent_exit();
                     return;
                 }
+                // TRS-FR-OTLH: no terminal process outlives the application.
+                terminals::service::end_all(app);
                 // NTD-FR-12: the exit is going ahead, so the notification centre
                 // must not be left holding banners from a process that no longer
                 // exists — one of those clicked later would raise a relaunched

@@ -165,6 +165,17 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // Work streams (WKS-work-streams.md / WSS-work-stream-selector.md).
     "create_work_stream",
     "list_work_streams",
+    // TRS-terminal-sessions.md
+    "list_terminal_targets",
+    "list_terminals",
+    "create_terminal",
+    "attach_terminal",
+    "detach_terminal",
+    "write_terminal_input",
+    "resize_terminal",
+    "acknowledge_terminal_output",
+    "set_terminal_pinned",
+    "close_terminal",
     "list_removed_work_streams",
     "dismiss_removed_work_stream",
     "get_work_stream",

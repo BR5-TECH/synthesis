@@ -1,4 +1,5 @@
 import type { OpenableArtifact, Tab } from "../types";
+import { TerminalTab } from "./Terminals/TerminalTab";
 import { DraftPreviewView } from "./DraftPreview";
 import type { EditSessionStore } from "../state/editSessions";
 import type { DraftSessionStore } from "../state/draftSessions";
@@ -283,6 +284,9 @@ function ViewportSurface({
         onOpenArtifact={onOpenArtifact}
       />
     );
+  // TAB-FR-VKPS / TRM-FR-XBVB: one terminal session, keyed on its id.
+  if (activeT?.kind === "terminal" && activeT.terminalId)
+    return <TerminalTab key={activeT.id} terminalId={activeT.terminalId} />;
   if (activeT?.kind === "pdf" && activeT.documentId)
     return <PdfViewer key={activeT.id} documentId={activeT.documentId} />;
   if (activeT?.kind === "flow")

@@ -3,7 +3,7 @@
 **Spec code:** `EAC`
 
 ## Intent
-The execution boundary a loop crosses to make an agentic CLI do one turn of work. Handed an existing directory and a structured task, this tool resolves the project's own CLI-kind agentic integration, resolves the image that project commits for that vendor, launches a container from it through the Docker backend the machine is configured to reach, with the directory mounted as its working tree, hands the task to the agent on stdin, and returns one normalized result: what the process did, and — where the process completed cleanly and the agent answered in the protocol — the agent's own report of the turn. Where the author's isolation is Microsandbox and the launch belongs to a graduation run, the agent runs instead as a process inside a micro VM that the run's queue shares, booted from the same image, so that a rogue agent is contained by a hardware boundary rather than by a container alone. It exists so that every future loop drives an agent the same way rather than each one growing its own process handling, its own credential path, and its own idea of what a reply looks like. The boundary is deliberately narrow: this tool decides nothing about *what* the agent should do and verifies nothing about what it did. A valid response envelope is the agent's account of its turn, never proof that a file changed, that a suite passed, or that the work is finished; inspecting the execution directory afterwards is the caller's job and always was. Out of scope: creating, switching, publishing, or deleting a Git worktree or branch, all of which belong to whichever loop owns the directory it supplies; choosing the integration, the model, or the reasoning effort, which `../core/AIC-agentic-integrations.md` resolves and no caller here may override or supply; holding a loop's state machine, its retry policy, its review decisions, or its session persistence; executing an API-kind integration or OpenCode, neither of which has a pinned execution protocol to invoke; the wire protocol of each executable vendor — its argument grammar, its stdin transport, its structured output, its exit statuses, and its session mechanism — each of which belongs to that vendor's own specification, `../infra/CCP-claude-code-cli-protocol.md` for Claude Code and `../infra/CDX-codex-cli-protocol.md` for Codex, and neither of which is restated here; authoring the shipped vendor images and the contract every image an agent runs in must satisfy, which are `../infra/AVI-agent-vendor-images.md`'s; configuring which image a project runs and building it, which is `../core/PSS-project-settings-storage.md`'s; and configuring and verifying the Docker backend, which is `../core/GSS-global-settings-storage.md`'s and which this tool reads rather than probes.
+The execution boundary a loop crosses to make an agentic CLI do one turn of work. Handed an existing directory and a structured task, this tool resolves the project's own CLI-kind agentic integration, resolves the image that project commits for that vendor, launches a container from it through the Docker backend the machine is configured to reach, with the directory mounted as its working tree, hands the task to the agent on stdin, and returns one normalized result: what the process did, and — where the process completed cleanly and the agent answered in the protocol — the agent's own report of the turn. Where the author's isolation is Microsandbox and the launch belongs to a graduation run, the agent runs instead as a process inside a micro VM that the run's queue shares, booted from the same image, so that a rogue agent is contained by a hardware boundary rather than by a container alone. Beside the turn, it offers one **interactive launch**: the author's own terminal session in the same environment a turn would use, which runs no task and parses nothing (per `../core/TRS-terminal-sessions.md`). It exists so that every future loop drives an agent the same way rather than each one growing its own process handling, its own credential path, and its own idea of what a reply looks like. The boundary is deliberately narrow: this tool decides nothing about *what* the agent should do and verifies nothing about what it did. A valid response envelope is the agent's account of its turn, never proof that a file changed, that a suite passed, or that the work is finished; inspecting the execution directory afterwards is the caller's job and always was. Out of scope: creating, switching, publishing, or deleting a Git worktree or branch, all of which belong to whichever loop owns the directory it supplies; choosing the integration, the model, or the reasoning effort, which `../core/AIC-agentic-integrations.md` resolves and no caller here may override or supply; holding a loop's state machine, its retry policy, its review decisions, or its session persistence; running a turn of an API-kind integration or of OpenCode, neither of which has a pinned execution protocol to invoke; the wire protocol of each executable vendor — its argument grammar, its stdin transport, its structured output, its exit statuses, and its session mechanism — each of which belongs to that vendor's own specification, `../infra/CCP-claude-code-cli-protocol.md` for Claude Code and `../infra/CDX-codex-cli-protocol.md` for Codex, and neither of which is restated here; authoring the shipped vendor images and the contract every image an agent runs in must satisfy, which are `../infra/AVI-agent-vendor-images.md`'s; configuring which image a project runs and building it, which is `../core/PSS-project-settings-storage.md`'s; and configuring and verifying the Docker backend, which is `../core/GSS-global-settings-storage.md`'s and which this tool reads rather than probes.
 
 ## Contract surface
 
@@ -286,6 +286,8 @@ Every container operation goes through one internal abstraction rather than thro
 trait DockerRuntime {
     async fn run(&self, container: &ContainerSpec, env: &[(String, SecretString)], stdin: &[u8])
         -> Result<RuntimeOutcome, RuntimeError>;
+    async fn run_interactive(&self, container: &ContainerSpec, env: &[(String, SecretString)], size: TerminalSize)
+        -> Result<InteractiveProcess, RuntimeError>;   // EAC-FR-LQJC
 }
 ```
 
@@ -299,6 +301,8 @@ Where EAC-FR-SNMS selects a sandbox, the launch goes through a second internal s
 trait SandboxRuntime {
     async fn ensure_vm(&self, scope: &SandboxScope, spec: &SandboxSpec) -> Result<(), SandboxFailure>;
     async fn run(&self, scope: &SandboxScope, process: &ProcessSpec, env, stdin) -> Result<RuntimeOutcome, RuntimeError>;
+    async fn attach_interactive(&self, scope: &SandboxScope, process: &ProcessSpec, size: TerminalSize)
+        -> Result<InteractiveProcess, SandboxFailure>;  // EAC-FR-QQMA: never boots
     async fn stop(&self, scope: &SandboxScope);
     async fn stop_all(&self);
 }
@@ -330,9 +334,38 @@ SandboxNetwork {
 
 Production binds it to the embedded microsandbox runtime (EAC-FR-HMBJ). A test binds it to a recording double that asserts the exact `SandboxSpec` and `ProcessSpec` and replays a configured outcome (EAC-FR-VPNW). The export cache of EAC-FR-IGBY is `app_data_dir()/sandbox-images/`.
 
+### The interactive launch
+
+The one entry point beside `execute_agent_cli` and `probe_agent_image`, reached only from `../core/TRS-terminal-sessions.md`:
+
+```
+async fn launch_interactive(request: InteractiveLaunchRequest)
+    -> Result<InteractiveProcess, AgentExecutionError>
+
+InteractiveLaunchRequest {
+  execution_directory: PathBuf,          // the target's checkout (EAC-FR-06 validates it)
+  program:             InteractiveProgram,
+  place:               "docker" | "devcontainer" | "microsandbox",
+  sandbox_scope:       SandboxScope | null,  // microsandbox only: the VM to attach to
+  terminal_id:         string,           // names the container and the dev container scope key
+  size:                TerminalSize
+}
+
+InteractiveProgram =
+    { kind: "shell" }
+  | { kind: "agent_cli", vendor: "claude_code" | "codex" | "opencode" }
+
+TerminalSize { cols: u16, rows: u16 }
+
+InteractiveProcess {   // owned by the caller until it ends
+  read(), write(bytes), resize(TerminalSize), terminate(), wait() -> exit code,
+  environment_name     // the container name, the dev container id, or the VM name
+}
+```
+
 ## Functional requirements
 
-1. **EAC-FR-01** The execution surface is `execute_agent_cli`, an internal Rust API taking a typed request and returning a typed result or a typed error. It is not registered as a `#[tauri::command]`, emits no Tauri event, and is unreachable from `src/**`, so no frontend call can launch an agent.
+1. **EAC-FR-01** The execution surface is `execute_agent_cli`, an internal Rust API taking a typed request and returning a typed result or a typed error. It is not registered as a `#[tauri::command]`, emits no Tauri event, and is unreachable from `src/**`, so no frontend call can launch an agent turn. The interactive launch of EAC-FR-CKGX runs no turn.
 2. **EAC-FR-02** The caller request carries an execution directory, an `AgentTaskRequest`, a cancellation token, the turn kind of EAC-FR-IRRD, the sandbox scope of EAC-FR-SNMS, and at most one typed supplementary mount of the one kind EAC-FR-40 defines, and carries no vendor, model, reasoning effort, image reference, credential, or credential location. No field of it, and no field of any type it contains, can express one. A turn kind is not one of them: it is a closed set of six names for the kind of work a turn does, it is a fact the caller already holds about its own run, and what follows from it is resolved here rather than supplied with it.
 3. **EAC-FR-03** The executor calls `../core/AIC-agentic-integrations.md`'s `resolve_agentic_invocation()` (AIC-FR-19) itself on every launch, and that call is the sole source of the vendor, the model, and the reasoning effort. A caller cannot select, override, pre-resolve, or supply any of the three, and a resolution that refuses returns `IntegrationUnresolved` carrying the same distinction `get_project_agentic_integration` reports, with no container created.
 4. **EAC-FR-04** Only `claude_code` and `codex` are executable here. A resolution naming `opencode` or either API-kind vendor returns `UnsupportedIntegration` before any credential is requested and before any container is created, neither having an execution protocol pinned in this spec.
@@ -527,6 +560,20 @@ Production binds it to the embedded microsandbox runtime (EAC-FR-HMBJ). A test b
 80. **EAC-FR-WYYZ** `probe_agent_image` runs its probe command in one container of the image of EAC-FR-38, under the runtime, the isolation, and the launch conditions of EAC-FR-13 and EAC-FR-14. It mounts no execution directory, no credential, no session state, and no supplementary mount, stops the command after 30 seconds, and removes the container.
     - *Why:* The image probe of `../core/OFP-openspec-failure-policy.md` OFP-FR-BZDP must see the image as a turn sees it, and it needs no project file and no secret.
 
+
+### Interactive launch
+81. **EAC-FR-CKGX** `launch_interactive` is an internal Rust API that `../core/TRS-terminal-sessions.md` alone calls. It starts one process with a terminal in a Docker container, a dev container, or a running VM, and hands the caller its input, output, size, and end. It is not registered as a `#[tauri::command]`.
+82. **EAC-FR-LUZG** An interactive launch carries no task, no turn kind, no response contract, no activity or durable sink, and no time limit. The executor writes nothing to its stdin and parses none of its output. The headless path is unchanged: a request of `execute_agent_cli` allocates no terminal (EAC-FR-13).
+83. **EAC-FR-LIQF** A Docker interactive launch creates one container from the image of the resolved `work` vendor for a shell, or of the given vendor for an agent CLI (EAC-FR-38). It has the mounts, the user mapping, the groups, the host mappings, the capabilities, and the network of EAC-FR-13, EAC-FR-14, EAC-FR-ZKMR, EAC-FR-FNFV, and EAC-FR-DKRS, except the mounts EAC-FR-DQZP names.
+84. **EAC-FR-LQJC** In Docker CLI mode, the interactive launch runs `docker run -i -t` on a host pseudo-terminal. In Docker Engine mode, it creates the container with a terminal and an open stdin, attaches to it, and resizes it through the Engine API. The container is removed when its process ends or is terminated.
+85. **EAC-FR-HTEB** A shell runs `/bin/bash -l` where the image holds it, and `/bin/sh -l` otherwise, in place of the image's entrypoint. An agent CLI runs the image's entrypoint with the vendor's executable name (`claude`, `codex`, `opencode`) after it and no argument. Both set `TERM=xterm-256color` and start in the execution directory.
+86. **EAC-FR-DQZP** A shell gets no credential and no session-state mount. An agent CLI of Claude Code or Codex gets the launch credential of `../core/AIC-agentic-integrations.md` AIC-FR-30 that a turn gets. Claude Code also gets an empty session-state directory of its own in place of EAC-FR-31's, removed when the launch ends. Codex gets its login directory alone (EAC-FR-16). OpenCode gets no credential.
+   - *Why:* Codex keeps its sessions in its login directory, so it has no separate session-state mount to replace.
+87. **EAC-FR-QGYS** EAC-FR-04 binds turns alone. An interactive agent CLI of `opencode` is a valid launch.
+88. **EAC-FR-QQMA** A Microsandbox interactive launch runs one process with a terminal in the VM of its scope where that VM runs, as the host user's UID and GID, with the image's `Env`, in the directory of EAC-FR-ZKMR. Where no VM of the scope runs, it returns `SandboxLaunchFailed` with `no_vm_running`. It never boots a VM.
+89. **EAC-FR-INWE** An interactive process in a VM is not a launch of the scope's queue: it waits for no launch, no launch waits for it, and it does not keep its VM. A stop or a reboot of the VM, for every reason of EAC-FR-ABHG, EAC-FR-LQRI, and EAC-FR-HXDN, ends it and waits for it in no way.
+90. **EAC-FR-QWOA** A dev container interactive launch runs on the terms of `../core/DVC-devcontainer-environment.md` DVC-FR-RMJQ and DVC-FR-WRXL.
+91. **EAC-FR-HCIK** Each interactive launch emits an `INFO` record under the `backend` domain when its process starts and when it ends, naming the program, the vendor, the place, and the container or VM. No record carries its input or its output.
 ## Non-functional requirements
 
 - Nothing here is reachable from the frontend, and no path through this tool reads a Tauri command's arguments, so an agent launch originates only in backend loop code.

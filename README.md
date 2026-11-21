@@ -141,6 +141,7 @@ The **Git** panel can also show the tasks with the status "Ready" in a GitHub Pr
 | Work stream | A branch and working copy that the application owns and that many runs share. |
 | Flow | A visual graph of prompts and artifacts. In this version you can edit and validate a flow, but you cannot run it. |
 | Note | A short note (1 KiB maximum) on an artifact, a flow, or the project. |
+| Terminal | An interactive shell or agent CLI session in a worktree or a work stream. See `docs/terminals.md`. |
 
 ## What you need to use it
 
@@ -210,6 +211,7 @@ The repository contains two Claude Code skills for this process, in `.claude/ski
 
 - `docs/README.md`: the architecture.
 - `docs/development.md`: the build, test, and check commands.
+- `docs/terminals.md`: the Terminals panel, its targets, and its limits.
 - `server/README.md`: the server.
 - `docker/agent-images/README.md`: the agent images.
 - `tools/agentic-cli-mock/README.md`: the mock agent CLI.

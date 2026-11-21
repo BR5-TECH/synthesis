@@ -13,6 +13,8 @@ const BACKGROUND_COMMANDS = new Set([
   "active_root_state",
   // WSS-FR-RPYH: the read of an open dropdown's notices.
   "list_removed_work_streams",
+  // TRM-FR-LAZH: the read of the Terminals list, which an open project sends.
+  "list_terminals",
 ]);
 
 /**

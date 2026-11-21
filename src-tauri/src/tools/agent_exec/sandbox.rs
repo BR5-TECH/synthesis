@@ -36,6 +36,8 @@ pub use catalog::{GuardEnd, GuardOutcome, GuardReport};
 mod daemon;
 mod failure;
 pub mod gateway;
+mod interactive_attach;
+pub use interactive_attach::{InteractiveVmProcess, NO_VM_RUNNING};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub mod micro;
 pub use failure::{SandboxFailure, SandboxFailureCause};
@@ -235,6 +237,17 @@ pub trait SandboxRuntime: Send + Sync {
 
     /// Stop and remove `vm`. A VM that is not there is not an error.
     fn stop<'a>(&'a self, vm: &'a str) -> BoxFuture<'a, ()>;
+
+    /// EAC-FR-QQMA: start one process with a terminal in the running `vm`. It
+    /// never boots, and it is refused with [`NO_VM_RUNNING`] where `vm` is not
+    /// running.
+    fn attach_interactive<'a>(
+        &'a self,
+        _vm: &'a str,
+        _process: InteractiveVmProcess,
+    ) -> BoxFuture<'a, Result<crate::terminals::process::ProcessHandle, String>> {
+        Box::pin(async { Err(NO_VM_RUNNING.to_string()) })
+    }
 
     /// EAC-FR-WTFH: replace the lines of the guest `/etc/hosts` that the
     /// executor owns with `text`, as root.

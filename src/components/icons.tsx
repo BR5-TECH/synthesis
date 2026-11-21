@@ -698,6 +698,22 @@ export const Icon = {
       <path d="m7 9 4 3-4 3M13 15h4" />
     </I>
   ),
+  // SNV-FR-PULG: the Terminals toggle and the Terminal tab. A prompt with a
+  // cursor bar, so it reads apart from the Runs toggle's console window.
+  TerminalPrompt: (p: IconProps) => (
+    <I {...p}>
+      <path d="m4 7 5 5-5 5" />
+      <path d="M12 18h8" />
+    </I>
+  ),
+  // TRM-FR-BHYF: the mass closes of the Terminals panel.
+  CloseMany: (p: IconProps) => (
+    <I {...p}>
+      <path d="M8 4h12v12" />
+      <rect x="4" y="8" width="12" height="12" rx="1.5" />
+      <path d="m8 12 4 4M12 12l-4 4" />
+    </I>
+  ),
   Code: (p: IconProps) => (
     <I {...p}>
       <path d={CODE_GLYPH} />

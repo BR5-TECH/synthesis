@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { TerminalsPanel, type TerminalsPanelProps } from "./Terminals/TerminalsPanel";
+import { isWindowsPlatform } from "../platform";
 import * as api from "../api";
 import { useGoneActiveRoot } from "../state/activeRootHealth";
 import { Icon } from "./icons";
@@ -605,6 +607,18 @@ export function ActivityBar({
         >
           <Icon.Diff size={16} />
         </ActivityToggle>
+        {/* SNV-FR-PULG / TRM-FR-DQYZ: Terminals closes the leading cluster. It
+            is not rendered on Windows. */}
+        {!isWindowsPlatform() && (
+          <ActivityToggle
+            label="Terminals"
+            side={side}
+            active={isToggleActive(vertical, "terminals")}
+            onClick={() => onSelectPanelSurface("terminals")}
+          >
+            <Icon.TerminalPrompt size={16} />
+          </ActivityToggle>
+        )}
       </div>
 
       {/* SNV-FR-44: the bottom-panel cluster, anchored to the foot of the strip
@@ -740,6 +754,8 @@ export function BottomPanelResizer({
 
 interface VPanelProps {
   surface: PanelSurface;
+  /** TRM-FR-LAZH: what the Terminals panel needs from the shell. */
+  terminals?: Pick<TerminalsPanelProps, "activeWorktreePath" | "onOpenTerminal">;
   onOpenArtifact: (node: OpenableArtifact) => void;
   // LCM-FR-05: jump from a Library context menu to an artifact's Notes scope.
   onShowNotes: (artifact: OpenableArtifact) => void;
@@ -868,6 +884,7 @@ export function VPanel({
   onOpenDocument,
   onDocumentsRemoved,
   onOverlayOpening,
+  terminals,
 }: VPanelProps) {
   // LIB-FR-14 … LIB-FR-17: the Library's expand/filter state lives here rather
   // than inside `Library`, because choosing another surface below unmounts that
@@ -926,6 +943,14 @@ export function VPanel({
     );
   if (surface === "comments")
     return <Comments panel={commentsPanel} onReveal={onRevealDiscussion} />;
+  if (surface === "terminals" && terminals && !isWindowsPlatform())
+    return (
+      <TerminalsPanel
+        {...terminals}
+        reveal={panelReveal?.panel === "terminals" ? panelReveal : null}
+        onOverlayOpening={onOverlayOpening}
+      />
+    );
   if (surface === "notes")
     return (
       <Notes

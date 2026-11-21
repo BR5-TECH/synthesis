@@ -91,6 +91,7 @@ remotes, or the network.
 | AI | `ai_api`, `ai_openrouter`, `ai_shared`, `agents`, `agent_conversations`, `tools`, `agentic`, `agent_activity`, `prompts` | AI providers, agent personas, conversation turns, model tools, and agent CLI integrations. |
 | Graduation and Git | `graduation`, `streams`, `git`, `changes` | The run queue and state machine, work streams, and all Git operations. |
 | GitHub | `github_publication`, `github_polling` | Publish a draft as an issue, and claim ready tasks from GitHub Projects. |
+| Terminals | `terminals` | The author's interactive terminals: a pseudo-terminal for each session, its output history in memory, and its end when the target is gone. Container, dev container, and VM sessions start through the interactive launch of `tools::agent_exec`. |
 
 ## Frontend
 
@@ -252,6 +253,9 @@ frontend as events.
   contain Git, so that an agent can read the history, but the host makes all
   commits. The token of Claude Code goes to the container as an environment
   variable, never in the command line.
+- **Terminals.** A terminal is a shell with the user's own rights. No masking
+  applies to it. No agent loop, tool, or remote session reaches a terminal,
+  and its output is never written to disk or to the log.
 - **Server.** All routes except `GET /v1/health` need a static bearer token.
 
 ## Build, test, and CI

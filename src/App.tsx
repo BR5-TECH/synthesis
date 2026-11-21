@@ -54,6 +54,7 @@ import { followAgentTurn } from "./state/discussionSession";
 import { useAgentGroupSwitch } from "./state/agentGroupSwitch";
 import { publishThread } from "./state/conversationThreads";
 import { publishSet } from "./state/questionSets";
+import { terminalsSnapshot } from "./state/terminals";
 import { useDiscussionAnnouncement } from "./state/discussionAnnouncer";
 import {
   publishKnownArtifacts,
@@ -265,6 +266,11 @@ function App({ projectWindowBoot = null }: AppProps = {}) {
       );
     if (request.panel === "changes")
       return changePaths.current !== null && !changePaths.current.has(request.id);
+    // SNV-FR-67 / TRM-FR-RCCE: a terminal that the list no longer holds.
+    if (request.panel === "terminals") {
+      const terminals = terminalsSnapshot();
+      return terminals.loaded && !terminals.sessions.some((t) => t.id === request.id);
+    }
     return false;
   };
 

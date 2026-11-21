@@ -1,0 +1,7 @@
+// The fixture of the dev container acceptance test (DVC-FR-LKRY).
+{
+  "name": "synthesis-devcontainer-uat",
+  "build": { "dockerfile": "Dockerfile" },
+  "postCreateCommand": "echo created > /tmp/synthesis-uat-marker",
+  "remoteEnv": { "UAT_REMOTE_ENV": "from-remote-env" }
+}

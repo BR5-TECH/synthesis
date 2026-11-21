@@ -38,6 +38,11 @@ const IMAGE_PREFLIGHT: ReadonlySet<string> = new Set([
   CHANGE_RUN_ERRORS.executionUnsupported,
   CHANGE_RUN_ERRORS.dockerUnverified,
   CHANGE_RUN_ERRORS.socketUnavailable,
+  CHANGE_RUN_ERRORS.devcontainerConfigMissing,
+  CHANGE_RUN_ERRORS.devcontainerConfigInvalid,
+  CHANGE_RUN_ERRORS.devcontainerCliMissing,
+  CHANGE_RUN_ERRORS.dockerCliRequired,
+  CHANGE_RUN_ERRORS.devcontainerAgentCliMissing,
 ]);
 
 /** What the author configures for each refusal of the image preflight. */
@@ -50,6 +55,16 @@ const IMAGE_CONFIGURE: Record<string, string> = {
     "Choose an agent that can run in a container in Project settings, then start again.",
   [CHANGE_RUN_ERRORS.dockerUnverified]:
     "Verify the Docker backend of this machine in Settings, then start again.",
+  [CHANGE_RUN_ERRORS.devcontainerConfigMissing]:
+    "Choose a devcontainer.json in Project settings, in the Docker section, then start again.",
+  [CHANGE_RUN_ERRORS.devcontainerConfigInvalid]:
+    "Correct the project's devcontainer.json, then start again.",
+  [CHANGE_RUN_ERRORS.devcontainerCliMissing]:
+    "Verify the dev container CLI in Global settings, in the Docker section, then start again.",
+  [CHANGE_RUN_ERRORS.dockerCliRequired]:
+    "Set the Docker CLI in Global settings, in the Docker section, then start again.",
+  [CHANGE_RUN_ERRORS.devcontainerAgentCliMissing]:
+    "Add the active agent's CLI to the dev container in Project settings, then start again.",
 };
 
 /**

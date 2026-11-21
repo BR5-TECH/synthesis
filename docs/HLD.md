@@ -38,7 +38,7 @@ Today one author uses the application on one computer. Team work goes through Gi
 Synthesis has three main parts:
 
 - **The desktop application.** A Tauri 2 application with two processes. The **Synthesis UI** (React 19, TypeScript) runs in the webview. It has no direct access to the disk, to Git, or to the network. The **Synthesis core** (Rust) does all the work: files, Git, secrets, AI calls, agent sandboxes, and GitHub. The UI sends each request to the core as a command, and the core sends updates back as events.
-- **The agent sandbox.** A Docker container, or a Microsandbox microVM, on the computer of the author or remotely. A coding agent CLI runs in it and can write only to the working copy of its run.
+- **The agent sandbox.** A Docker container, a Microsandbox microVM, or the dev container of the project, on the computer of the author or remotely. A coding agent CLI runs in it and can write only to the working copy of its run.
 - **The Synthesis server** (partial). A Rust service in a Linux container image. It has two halves. The **relay** connects IDE workers and remote clients, and routes encrypted traffic that it cannot read. The **application service** owns identity, teams, organizations, project access, and the project data that a remote client reads.
 
 ### Architecture principles
@@ -123,13 +123,13 @@ The diagram shows the target state.
       "unique-id": "container-runtime",
       "node-type": "network",
       "name": "Sandbox runtime",
-      "description": "Docker, or a Microsandbox microVM, on the computer of the author."
+      "description": "Docker, a Microsandbox microVM, or the dev container of the project, on the computer of the author."
     },
     {
       "unique-id": "agent-sandbox",
       "node-type": "service",
       "name": "Agent sandbox",
-      "description": "A hardened Docker container for each turn, or a process in the microVM of the queue. It runs Claude Code or Codex on the working copy of the run.",
+      "description": "A hardened Docker container for each turn, a process in the microVM of the queue, or one exec in the dev container of the queue. It runs Claude Code or Codex on the working copy of the run.",
       "metadata": { "status": "delivered", "customer-value": "Unattended work that cannot write outside its working copy." }
     },
     {
@@ -862,7 +862,7 @@ sequenceDiagram
 
 - **GR-1 Work and review passes** `delivered`An execution agent does the work. A new agent session reviews it. A `ready` review commits the result. A `revise` review starts the next pass, up to the pass budget of the project.
 - **GR-2 Questions to the author** `delivered`An agent that cannot decide stops the run in `awaiting_author`. The author answers in the run region, and the run continues from its checkpoint.
-- **GR-3 Isolation** `delivered`Each Docker turn runs in a new container with `--cap-drop ALL` and `no-new-privileges`, as the host user. With Microsandbox, the turns of a queue run in one microVM. Git metadata is mounted read-only. The host makes all commits. Docker-in-Docker is optional for each project.
+- **GR-3 Isolation** `delivered`Each Docker turn runs in a new container with `--cap-drop ALL` and `no-new-privileges`, as the host user. With Microsandbox, the turns of a queue run in one microVM. A developer can choose the dev container of the project instead: the turns of a queue then run in one container that `devcontainer up` starts from the project's `devcontainer.json`. Git metadata is mounted read-only. The host makes all commits. Docker-in-Docker is optional for each project.
 - **GR-4 Watch a run** `delivered`The author sees the stage, the condition, and the passes of each run, the live agent output, and the log of each phase.
 - **GR-5 Control a run** `delivered`Pause, continue, discard, and restart. Each project sets its concurrency limit, its time limits, and its pass budget.
 - **GR-6 Coding agents** `delivered`Claude Code and Codex, each in the image that the project names.

@@ -39,6 +39,7 @@ export * from "./comments";
 export * from "./mapPlan";
 export * from "./agents";
 export * from "./agentConversations";
+export * from "./devcontainer";
 export * from "./docker";
 export * from "./isolation";
 export * from "./remoteConnectivity";

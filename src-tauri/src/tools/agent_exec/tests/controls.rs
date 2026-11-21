@@ -158,6 +158,7 @@ fn an_unmountable_directory_is_refused_through_the_executor() {
             fs: &fs,
             images: &TEST_IMAGES,
             docker_in_docker: Default::default(),
+            devcontainer: None,
         },
         AgentExecutionRequest {
             sandbox_scope: None,
@@ -227,6 +228,7 @@ fn an_api_kind_integration_is_refused_by_its_own_branch() {
                 fs: &fs,
                 images: &TEST_IMAGES,
                 docker_in_docker: Default::default(),
+                devcontainer: None,
             },
             AgentExecutionRequest {
                 sandbox_scope: None,

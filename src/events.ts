@@ -10,6 +10,8 @@
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { listenProject } from "./projectEvents";
 import type {
+  DevcontainerBuildFinished,
+  DevcontainerBuildProgress,
   ModelDowngrade,
   VoiceActivityChange,
   VoiceChunkChange,
@@ -293,6 +295,27 @@ export const onProjectImageBuildProgress = (
   handler: (payload: ImageBuildProgress) => void,
 ): Promise<UnlistenFn> =>
   listenProject<ImageBuildProgress>(PROJECT_IMAGE_BUILD_PROGRESS, (event) =>
+    handler(event.payload),
+  );
+
+/** DVC-FR-RTBA: `"devcontainer build progress"` on the wire. */
+export const DEVCONTAINER_BUILD_PROGRESS = "devcontainer-build-progress";
+/** DVC-FR-RTBA: `"devcontainer build finished"` on the wire. */
+export const DEVCONTAINER_BUILD_FINISHED = "devcontainer-build-finished";
+
+/** DVC-FR-RTBA: watch each line of a running dev container build. */
+export const onDevcontainerBuildProgress = (
+  handler: (payload: DevcontainerBuildProgress) => void,
+): Promise<UnlistenFn> =>
+  listenProject<DevcontainerBuildProgress>(DEVCONTAINER_BUILD_PROGRESS, (event) =>
+    handler(event.payload),
+  );
+
+/** DVC-FR-RTBA: watch for the one result of a dev container build. */
+export const onDevcontainerBuildFinished = (
+  handler: (payload: DevcontainerBuildFinished) => void,
+): Promise<UnlistenFn> =>
+  listenProject<DevcontainerBuildFinished>(DEVCONTAINER_BUILD_FINISHED, (event) =>
     handler(event.payload),
   );
 

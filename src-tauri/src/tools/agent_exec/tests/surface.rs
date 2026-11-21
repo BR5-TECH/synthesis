@@ -305,6 +305,7 @@ fn an_unavailable_credential_prevents_the_launch_without_disclosing_anything() {
         fs: &fs,
         images: &TEST_IMAGES,
         docker_in_docker: Default::default(),
+        devcontainer: None,
     };
 
     let runtime = RecordingRuntime::replying("");
@@ -356,6 +357,7 @@ fn an_unavailable_credential_prevents_the_launch_without_disclosing_anything() {
         fs: &harness.fs,
         images: &TEST_IMAGES,
         docker_in_docker: Default::default(),
+        devcontainer: None,
     };
     let runtime = RecordingRuntime::replying("");
     let executor =

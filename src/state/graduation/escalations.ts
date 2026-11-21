@@ -173,9 +173,27 @@ export function sandboxFailureCause(run: GraduationRun): string | null {
   return match ? match[1] : null;
 }
 
+/**
+ * GRU-FR-PTFJ / NTF-FR-TFIY / GXD-FR-ZPYN: the cause a dev container launch
+ * failure names, read from the run's detail, or `null` where the detail is not
+ * one.
+ */
+export function devcontainerFailureCause(run: GraduationRun): string | null {
+  const interruption = run.interruption;
+  if (!interruption || interruption.reason !== "launch_failed") return null;
+  const detail = interruption.detail ?? "";
+  if (detail.startsWith("The dev container could not start.")) {
+    return "the dev container could not start";
+  }
+  const missing = /^The dev container does not hold the agent CLI `([^`]+)`/.exec(detail);
+  return missing ? `the dev container does not hold the agent CLI ${missing[1]}` : null;
+}
+
 /** GRU-FR-FJZD / NTF-FR-BDNY: the stop sentence of an interrupted run. */
 function interruptedStatement(run: GraduationRun, title: string): string {
   if (!run.interruption) return `“${title}” stopped.`;
+  const devcontainer = devcontainerFailureCause(run);
+  if (devcontainer) return `“${title}” stopped: ${devcontainer}.`;
   const sandbox = sandboxFailureCause(run);
   if (sandbox) return `“${title}” stopped: the Microsandbox VM could not start — ${sandbox}.`;
   return `“${title}” stopped: ${interruptionCause(run.interruption.reason)}.`;

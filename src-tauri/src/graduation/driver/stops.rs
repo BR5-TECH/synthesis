@@ -165,6 +165,11 @@ pub(super) fn stop_of_launch_error(error: &AgentExecutionError, limit_ms: u64) -
             );
             socket_detail.as_str()
         }
+        // GXD-FR-ZPYN: the dev container's cause in words, then the CLI's line.
+        AgentExecutionError::DevcontainerLaunchFailed(failure) => {
+            socket_detail = devcontainer_detail(failure);
+            socket_detail.as_str()
+        }
         AgentExecutionError::IntegrationUnresolved(_) => {
             "The project has no agentic integration to run the turn with. Choose one in Project settings."
         }
@@ -235,6 +240,34 @@ pub(super) fn launch_error_kind(error: &AgentExecutionError) -> &'static str {
         AgentExecutionError::RepositoryMaskingUnavailable(_) => "repository_masking_unavailable",
         AgentExecutionError::DurableOutputFailed(_) => "durable_output_failed",
         AgentExecutionError::SandboxLaunchFailed(_) => "sandbox_launch_failed",
+        AgentExecutionError::DevcontainerLaunchFailed(_) => "devcontainer_launch_failed",
+    }
+}
+
+/// GXD-FR-ZPYN: the detail of a dev container that could not start or that
+/// does not hold the agent CLI.
+fn devcontainer_detail(failure: &crate::tools::agent_exec::DevcontainerFailure) -> String {
+    use crate::tools::agent_exec::DevcontainerFailure;
+    match failure {
+        DevcontainerFailure::StartFailed(message) => {
+            let line: String = message
+                .split_whitespace()
+                .map(|word| word.chars().filter(|c| !c.is_control()).collect::<String>())
+                .filter(|word| !word.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .take(RUNTIME_MESSAGE_LIMIT)
+                .collect();
+            let reported =
+                if line.is_empty() { String::new() } else { format!(" The dev container CLI reported: {line}") };
+            format!(
+                "The dev container could not start. Correct the cause, or choose Vendor images in Project settings, in the Docker section. Then use Continue.{reported}"
+            )
+        }
+        DevcontainerFailure::AgentCliMissing(cli) => format!(
+            "The dev container does not hold the agent CLI `{cli}`. Add it in Project settings, in the Docker section, and build the dev container again. Then use Continue."
+        ),
     }
 }
 
@@ -600,5 +633,40 @@ mod tests {
         ] {
             assert!(reason.is_failure(), "{reason:?}");
         }
+    }
+
+    // GXD-FR-ZPYN: a dev container that cannot start rests `launch_failed`
+    // with a one-line detail that gives the CLI's line, cut to its limit.
+    #[test]
+    fn a_dev_container_start_failure_has_a_one_line_detail() {
+        use crate::tools::agent_exec::DevcontainerFailure;
+        let message = format!("first\n\u{7}{}", "x".repeat(1000));
+        let error = AgentExecutionError::DevcontainerLaunchFailed(
+            DevcontainerFailure::StartFailed(message),
+        );
+        let stop = stop_of_launch_error(&error, TWO_HOURS);
+        assert_eq!(stop.reason, GraduationInterruptionReason::LaunchFailed);
+        assert!(!stop.detail.contains('\n'), "{}", stop.detail);
+        assert!(stop.detail.starts_with("The dev container could not start."), "{}", stop.detail);
+        assert!(stop.detail.contains("The dev container CLI reported: first x"), "{}", stop.detail);
+        assert!(!stop.detail.contains("sandbox"), "{}", stop.detail);
+        let reported = stop.detail.split("reported: ").nth(1).unwrap();
+        assert_eq!(reported.chars().count(), RUNTIME_MESSAGE_LIMIT);
+        assert_eq!(launch_error_kind(&error), "devcontainer_launch_failed");
+    }
+
+    // GXD-FR-ZPYN: a dev container that lacks the CLI names it and the place
+    // where the author adds it.
+    #[test]
+    fn a_missing_agent_cli_names_the_cli_and_the_correction() {
+        use crate::tools::agent_exec::DevcontainerFailure;
+        let error = AgentExecutionError::DevcontainerLaunchFailed(
+            DevcontainerFailure::AgentCliMissing("claude".into()),
+        );
+        let stop = stop_of_launch_error(&error, TWO_HOURS);
+        assert_eq!(stop.reason, GraduationInterruptionReason::LaunchFailed);
+        assert!(stop.detail.contains("`claude`"), "{}", stop.detail);
+        assert!(stop.detail.contains("Project settings, in the Docker section"), "{}", stop.detail);
+        assert!(stop.detail.contains("Continue"), "{}", stop.detail);
     }
 }

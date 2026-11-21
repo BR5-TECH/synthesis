@@ -95,6 +95,13 @@ describe("Global settings → Isolation (GLS-FR-YAEA through GLS-FR-GHYV)", () =
     expect(screen.queryByLabelText(/CPU cores/)).not.toBeInTheDocument();
   });
 
+  it("GLS-FR-WLJL: the section states that the mode does not apply to a dev container project", async () => {
+    render(<IsolationSettings />);
+    expect(await screen.findByTestId("isolation-devcontainer-note")).toHaveTextContent(
+      "does not apply to a project whose agent environment is a dev container",
+    );
+  });
+
   it("GLS-FR-GHYV: choosing Microsandbox applies at once through the save, with no dirty state", async () => {
     render(<IsolationSettings />);
     await userEvent.click(await microsandbox());

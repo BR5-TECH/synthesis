@@ -35,6 +35,10 @@ fn no_backend_module_reaches_the_filesystem_outside_the_helper() {
     const EXCEPTIONS: &[(&str, &str)] = &[
         // A user-named CLI binary, anywhere on the machine (AII-FR-05).
         ("agentic/runner.rs", "is_executable"),
+        // DVC-FR-DCQG: an owner-only mode for the folder and the env file the
+        // executor itself just wrote under the application data folder.
+        // FsAccess has no operation that sets a mode; no content is read.
+        ("tools/agent_exec/devcontainer_launch.rs", "restrict_to_owner"),
         // OSM-FR-EZKW, OSM-FR-ZNVZ: the OpenSpec CLI, installed anywhere on
         // the machine, on the terms of the line above. These ask whether it is
         // executable, when it last changed, and which Node version folders

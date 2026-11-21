@@ -844,6 +844,10 @@ pub(crate) fn image_preflight<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> R
             return Err(ERR_VENDOR_EXECUTION_UNSUPPORTED.to_string())
         }
     };
+    // GSU-FR-GLVQ / DVC-FR-HINW: a dev container has checks of its own.
+    if let Some(checked) = crate::devcontainer::preflight::check(&root, &store, &vendor) {
+        return checked;
+    }
     // PSS-FR-30: the image the open project commits for that vendor. Read
     // without probing a daemon or a registry.
     crate::project_settings::resolve_project_vendor_image(&root, &vendor)

@@ -73,6 +73,16 @@ export function refusalText(text: string): string {
       "The active agent cannot be executed in a container, so a conflicting merge cannot be handed off. Nothing was written.",
     [STREAM_ERRORS.dockerBackendUnverified]:
       "The machine's Docker backend has not been verified, so a conflicting merge cannot be handed off. Nothing was written.",
+    [STREAM_ERRORS.devcontainerConfigMissing]:
+      "This project selects no devcontainer.json, so a conflicting merge cannot be handed off. Nothing was written.",
+    [STREAM_ERRORS.devcontainerConfigInvalid]:
+      "This project's devcontainer.json is not valid, so a conflicting merge cannot be handed off. Nothing was written.",
+    [STREAM_ERRORS.devcontainerCliMissing]:
+      "The dev container CLI is not verified, so a conflicting merge cannot be handed off. Nothing was written.",
+    [STREAM_ERRORS.dockerCliRequired]:
+      "No Docker CLI was found for the dev container, so a conflicting merge cannot be handed off. Nothing was written.",
+    [STREAM_ERRORS.devcontainerAgentCliMissing]:
+      "The dev container does not hold the active agent's CLI, so a conflicting merge cannot be handed off. Nothing was written.",
     [STREAM_ERRORS.unsupportedConflict]:
       "Git found a conflict that a text edit cannot settle, such as a symbolic link, a submodule, or a path that is a file on one side and a directory on the other. Settle it with Git. Nothing was written.",
     [STREAM_ERRORS.artifactGenerationFailed]:

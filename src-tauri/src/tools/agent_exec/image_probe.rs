@@ -225,6 +225,11 @@ impl AgentCliExecutor {
     /// a probe outcome (OFP-FR-XBNJ). The caller answers `RuntimeUnavailable`
     /// for it, and the dispatch then states the error on its own terms.
     fn probe_isolation_is_sandbox(&self, context: &LaunchContext<'_>) -> Result<bool, String> {
+        // DVC-FR-SKLQ: a dev container runs no command in place of an entry
+        // point either, so its probe is skipped on the same terms.
+        if context.devcontainer.is_some() {
+            return Ok(true);
+        }
         let isolation = match &self.isolation {
             Some(isolation) => isolation.clone(),
             None => crate::isolation::resolve_isolation(context.store)?,

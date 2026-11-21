@@ -153,3 +153,22 @@ fn the_vm_daemon_choice_keeps_the_skip() {
     );
     assert_eq!(runtime.launched(), 0);
 }
+
+// DVC-FR-SKLQ, OFP-FR-RKMB: a dev container project skips the probe, also with
+// the isolation `none`, and reaches no Docker runtime.
+#[test]
+fn a_dev_container_skips_the_probe() {
+    let harness = harness_for("claude_code");
+    let runtime = RecordingRuntime::broken(false, false, None);
+    let request = ImageProbeRequest {
+        command: ProbeCommand::OpenSpecVersion,
+        cancellation: CancellationToken::new(),
+    };
+    let context =
+        LaunchContext { devcontainer: Some(Err("not ready".to_string())), ..harness.context() };
+    let executor = AgentCliExecutor::new(runtime.clone()).with_isolation(ResolvedIsolation::None);
+    let outcome =
+        tauri::async_runtime::block_on(executor.probe_agent_image(&Silent, &context, request));
+    assert_eq!(outcome, Ok(ImageProbeOutcome::Skipped));
+    assert_eq!(runtime.launched(), 0);
+}

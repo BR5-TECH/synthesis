@@ -27,6 +27,7 @@ use tauri::State;
 
 use crate::project::ProjectState;
 
+pub mod agent_environment;
 pub mod build_seam;
 pub mod concurrency;
 pub mod delivery_settings;

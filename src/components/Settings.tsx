@@ -15,7 +15,7 @@ import {
   GraduationLoopSliders,
   type GraduationFocusRequest,
 } from "./GraduationLoopSliders";
-import { ProjectDockerImages } from "./ProjectDockerImages";
+import { ProjectAgentEnvironment } from "./ProjectAgentEnvironment";
 import { GraduationSettings } from "./GraduationSettings";
 import { ProjectIndexingSettings } from "./ProjectIndexingSettings";
 import { McpServersSettings } from "./McpServersSettings";
@@ -437,10 +437,12 @@ export function Settings({
           the tab's save-before-close sweep (SET-FR-08, SWN-FR-08). */}
       {/* SET-FR-GFHV: the OpenSpec line stands above the Docker section's own
           controls. */}
+      {/* SET-FR-SVBS: the agent environment opens the section and decides
+          whether the vendor images or the dev container panel follow. */}
       {section === "docker" && (
         <>
           <OpenSpecImageRequirement />
-          <ProjectDockerImages contentRoot={contentRoot} />
+          <ProjectAgentEnvironment contentRoot={contentRoot} />
         </>
       )}
 

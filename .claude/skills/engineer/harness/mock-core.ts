@@ -8024,6 +8024,83 @@ const mockDockerInDockerSupport: "supported" | "best_effort" | "unsupported" =
     : harnessValue("dindSupport") === "unsupported"
       ? "unsupported"
       : "supported";
+/**
+ * DVC-FR-EVZD / SET-FR-SVBS: the agent environment of the demo project, its
+ * devcontainer.json files and the dev container CLI of the harness machine.
+ *
+ *   http://localhost:5199/?agentEnv=devcontainer      // starts on Dev container
+ *   http://localhost:5199/?devcontainerConfigs=0      // no devcontainer.json yet
+ *   http://localhost:5199/?devcontainerCli=verified   // CLI already verified
+ *   http://localhost:5199/?devcontainerBuild=fail     // the build fails
+ */
+let mockDevcontainerConfigs: string[] =
+  harnessValue("devcontainerConfigs") === "0"
+    ? []
+    : [".devcontainer/devcontainer.json", ".devcontainer/gpu-workstation-with-cuda-toolkit/devcontainer.json"];
+const mockAgentEnvironment: { source: "vendor_images" | "devcontainer"; devcontainerConfig: string | null } = {
+  source: harnessValue("agentEnv") === "devcontainer" ? "devcontainer" : "vendor_images",
+  devcontainerConfig:
+    harnessValue("agentEnv") === "devcontainer" ? (mockDevcontainerConfigs[0] ?? null) : null,
+};
+const mockAgentCli: Array<{ vendor: "claude_code" | "codex"; state: "found" | "missing" | "unknown"; knownFeature: string | null }> = [
+  { vendor: "claude_code", state: "unknown", knownFeature: "ghcr.io/anthropics/devcontainer-features/claude-code:1" },
+  { vendor: "codex", state: "missing", knownFeature: null },
+];
+let mockDevcontainerCli: { path: string; state: "unverified" | "verified"; version: string | null; verifiedAt: string | null } =
+  harnessValue("devcontainerCli") === "verified"
+    ? { path: "/opt/homebrew/bin/devcontainer", state: "verified", version: "0.72.0", verifiedAt: "2026-11-20T10:00:00Z" }
+    : { path: "", state: "unverified", version: null, verifiedAt: null };
+let mockDevcontainerBuild: { operationId: string; lines: string[]; timer: ReturnType<typeof setInterval> } | null = null;
+let mockDevcontainerBuildSeq = 0;
+function mockAgentEnvironmentState() {
+  return {
+    environment: { ...mockAgentEnvironment },
+    configExists:
+      mockAgentEnvironment.devcontainerConfig !== null &&
+      mockDevcontainerConfigs.includes(mockAgentEnvironment.devcontainerConfig),
+    agentCli: mockAgentCli.map((row) => ({ ...row })),
+  };
+}
+/** DVC-FR-RTBA: a build emits a line every 250 ms, then its end. */
+function startMockDevcontainerBuild(noCache: boolean) {
+  const fire = (globalThis as Record<string, unknown>).__fireBusEvent as
+    | ((n: string, p?: unknown) => void)
+    | undefined;
+  const operationId = `devcontainer-build-${++mockDevcontainerBuildSeq}`;
+  const script = [
+    `[+] devcontainer build --workspace-folder /Users/demo/dev/acme${noCache ? " --no-cache" : ""}`,
+    "#1 [internal] load build definition from Dockerfile-with-features",
+    "#2 [internal] load metadata for mcr.microsoft.com/devcontainers/base:bookworm",
+    "#3 [dev_containers_feature_content_source] COPY --from=dev_containers_feature_content_source /tmp/build-features/ /tmp/dev-container-features/ghcr.io/anthropics/devcontainer-features/claude-code_1",
+    "#4 RUN chmod -R 0755 /tmp/dev-container-features/node_0 && cd /tmp/dev-container-features/node_0 && chmod +x ./devcontainer-features-install.sh && ./devcontainer-features-install.sh",
+    "#5 Installing Node.js 22 with nvm…",
+    "#6 Installing @anthropic-ai/claude-code globally",
+    "#7 exporting to image",
+    "#8 naming to docker.io/library/vsc-acme-4f2a9c:latest done",
+  ];
+  let index = 0;
+  const timer = setInterval(() => {
+    if (!mockDevcontainerBuild || mockDevcontainerBuild.operationId !== operationId) return;
+    if (index < script.length) {
+      mockDevcontainerBuild.lines.push(script[index]);
+      fire?.("devcontainer-build-progress", { operationId, message: script[index] });
+      index += 1;
+      return;
+    }
+    clearInterval(timer);
+    mockDevcontainerBuild = null;
+    const failed = harnessValue("devcontainerBuild") === "fail";
+    if (!failed) mockAgentCli[0].state = "found";
+    fire?.("devcontainer-build-finished", {
+      operationId,
+      outcome: failed ? "failed" : "succeeded",
+      image: failed ? null : "vsc-acme-4f2a9c:latest",
+      error: failed ? "The dev container CLI exited with code 1: the Feature could not be installed." : null,
+    });
+  }, 250);
+  mockDevcontainerBuild = { operationId, lines: [], timer };
+  return { operationId };
+}
 /** SET-FR-21: the Docker section's per-vendor images (`load_project_docker_images`). */
 const mockDockerImages: Array<Record<string, any>> = [
   {
@@ -11538,6 +11615,84 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       };
     case "load_project_image_build_in_flight":
       return null;
+    // DVC-FR-WZSY / DVC-FR-WXYK / DVC-FR-BCDZ / DVC-FR-ABQZ: the agent
+    // environment and its devcontainer.json files, kept for the page's life.
+    case "load_agent_environment":
+      return mockAgentEnvironmentState();
+    case "save_agent_environment": {
+      const next = (a.environment ?? {}) as { source?: string; devcontainerConfig?: string | null };
+      const config = next.devcontainerConfig ?? null;
+      if (next.source === "devcontainer" && config === null) throw { code: "config_missing" };
+      if (config !== null && !mockDevcontainerConfigs.includes(config)) {
+        throw { code: "config_path_invalid", reason: "not_a_file" };
+      }
+      mockAgentEnvironment.source = next.source === "devcontainer" ? "devcontainer" : "vendor_images";
+      mockAgentEnvironment.devcontainerConfig = config;
+      return mockAgentEnvironmentState();
+    }
+    case "list_devcontainer_configs":
+      return [...mockDevcontainerConfigs];
+    case "create_devcontainer_config": {
+      const starter = ".devcontainer/devcontainer.json";
+      if (mockDevcontainerConfigs.includes(starter)) throw { code: "config_exists" };
+      mockDevcontainerConfigs = [starter, ...mockDevcontainerConfigs];
+      mockAgentEnvironment.source = "devcontainer";
+      mockAgentEnvironment.devcontainerConfig = starter;
+      mockAgentCli[0].state = "unknown";
+      return mockAgentEnvironmentState();
+    }
+    case "add_devcontainer_agent_feature": {
+      const row = mockAgentCli.find((r) => r.vendor === a.vendor);
+      if (!row?.knownFeature) throw { code: "no_known_feature" };
+      if (!mockAgentEnvironment.devcontainerConfig) throw { code: "config_missing" };
+      row.state = "unknown";
+      return mockAgentEnvironmentState();
+    }
+    case "build_devcontainer":
+      if (mockDevcontainerBuild) throw "build_in_flight";
+      if (mockDevcontainerCli.state !== "verified") throw "devcontainer_cli_missing";
+      if (!mockAgentEnvironment.devcontainerConfig) throw "devcontainer_config_missing";
+      return startMockDevcontainerBuild(Boolean(a.noCache));
+    case "cancel_devcontainer_build": {
+      const running = mockDevcontainerBuild;
+      if (running && running.operationId === a.operationId) {
+        clearInterval(running.timer);
+        mockDevcontainerBuild = null;
+        const fire = (globalThis as Record<string, unknown>).__fireBusEvent as
+          | ((n: string, p?: unknown) => void)
+          | undefined;
+        setTimeout(() => {
+          fire?.("devcontainer-build-finished", {
+            operationId: running.operationId, outcome: "cancelled", image: null, error: null,
+          });
+        }, 100);
+      }
+      return undefined;
+    }
+    case "load_devcontainer_build_in_flight":
+      return mockDevcontainerBuild
+        ? { operationId: mockDevcontainerBuild.operationId, lines: [...mockDevcontainerBuild.lines] }
+        : null;
+    // DVC-FR-WOAM / DVC-FR-XZCD / DVC-FR-BAID: the dev container CLI. A path
+    // with "missing" in it is not found; any other path verifies.
+    case "load_devcontainer_cli":
+      return { ...mockDevcontainerCli };
+    case "save_devcontainer_cli": {
+      const path = String(a.path ?? "").trim();
+      if (path !== mockDevcontainerCli.path) {
+        mockDevcontainerCli = { path, state: "unverified", version: null, verifiedAt: null };
+      }
+      return { ...mockDevcontainerCli };
+    }
+    case "verify_devcontainer_cli":
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      if (mockDevcontainerCli.path === "" || mockDevcontainerCli.path.includes("missing")) {
+        throw { code: "not_found", message: "" };
+      }
+      mockDevcontainerCli = { ...mockDevcontainerCli, state: "verified", version: "0.72.0", verifiedAt: new Date().toISOString() };
+      return { ...mockDevcontainerCli };
+    case "detect_devcontainer_cli":
+      return { path: "/opt/homebrew/bin/devcontainer" };
     case "save_project_vendor_image": {
       const entry = (a.entry ?? {}) as {
         imageName?: string; tag?: string | null; dockerfile?: string | null; buildContext?: string | null;

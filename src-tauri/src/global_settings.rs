@@ -202,6 +202,10 @@ pub struct PersistedState {
     /// table, declared beside the other user-global tables and before the two
     /// project tables below. It holds no credential.
     pub embeddings: crate::embeddings::EmbeddingsRecord,
+    /// GSS-FR-MVLQ / DVC-FR-WOAM: the dev container CLI path and its
+    /// verification. One table, beside the Docker backend. It holds no
+    /// credential.
+    pub devcontainer_cli: crate::devcontainer::cli::DevcontainerCliRecord,
     /// GSS-FR-WSZK: the size the author gave the Settings window, or `None`
     /// until they resize it. One table, declared beside the other user-global
     /// tables and before the two project tables below. It is deliberately not a
@@ -653,6 +657,25 @@ impl GlobalSettingsStore {
     pub fn save_isolation(&self, record: &crate::isolation::IsolationRecord) -> Result<(), String> {
         let mut state = self.lock()?;
         state.isolation = record.clone();
+        self.persist(&state)
+    }
+
+    // -- Dev container CLI (GSS-FR-MVLQ) ---------------------------------
+
+    /// DVC-FR-WOAM: the stored record. Reads the store and nothing else.
+    pub fn load_devcontainer_cli(
+        &self,
+    ) -> Result<crate::devcontainer::cli::DevcontainerCliRecord, String> {
+        Ok(self.lock()?.devcontainer_cli.clone())
+    }
+
+    /// DVC-FR-WOAM: write a record whole.
+    pub fn save_devcontainer_cli(
+        &self,
+        record: &crate::devcontainer::cli::DevcontainerCliRecord,
+    ) -> Result<(), String> {
+        let mut state = self.lock()?;
+        state.devcontainer_cli = record.clone();
         self.persist(&state)
     }
 

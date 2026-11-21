@@ -155,6 +155,11 @@ const IMAGE_REFUSALS: ReadonlySet<string> = new Set([
   "vendor_execution_unsupported",
   "docker_backend_unverified",
   "docker_socket_unavailable",
+  "devcontainer_config_missing",
+  "devcontainer_config_invalid",
+  "devcontainer_cli_missing",
+  "docker_cli_required",
+  "devcontainer_agent_cli_missing",
 ]);
 
 /**

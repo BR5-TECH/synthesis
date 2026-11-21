@@ -49,6 +49,11 @@ export const CHANGE_RUN_ERRORS = {
   executionUnsupported: "vendor_execution_unsupported",
   dockerUnverified: "docker_backend_unverified",
   socketUnavailable: "docker_socket_unavailable",
+  devcontainerConfigMissing: "devcontainer_config_missing",
+  devcontainerConfigInvalid: "devcontainer_config_invalid",
+  devcontainerCliMissing: "devcontainer_cli_missing",
+  dockerCliRequired: "docker_cli_required",
+  devcontainerAgentCliMissing: "devcontainer_agent_cli_missing",
   writeUnconfirmed: "main_branch_write_unconfirmed",
 } as const;
 

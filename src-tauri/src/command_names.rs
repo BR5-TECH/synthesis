@@ -321,6 +321,18 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // Docker-in-Docker settings, project-local scope (PSS-FR-DIND / SET-FR-NXDV).
     "load_docker_in_docker_settings",
     "save_docker_in_docker_settings",
+    "load_agent_environment",
+    "save_agent_environment",
+    "list_devcontainer_configs",
+    "create_devcontainer_config",
+    "add_devcontainer_agent_feature",
+    "build_devcontainer",
+    "cancel_devcontainer_build",
+    "load_devcontainer_build_in_flight",
+    "load_devcontainer_cli",
+    "save_devcontainer_cli",
+    "verify_devcontainer_cli",
+    "detect_devcontainer_cli",
     "load_notes_panel_state",
     "save_notes_panel_state",
     // Notes (NTC-notes-storage.md / NTS-notes.md).

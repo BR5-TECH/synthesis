@@ -638,3 +638,111 @@
   overflow-wrap: anywhere;
   user-select: text;
 }
+
+/* SET-FR-SVBS: the agent environment choice, above everything else in the
+   Docker section, because it decides what the rest of the section is. */
+.agent-env {
+  border: 0;
+  padding: 0 0 var(--sp-3);
+  margin: 0 0 var(--sp-4);
+  border-bottom: 1px solid var(--border-1);
+}
+.agent-env__legend {
+  padding: 0;
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-ui-sm);
+  color: var(--fg-1);
+}
+.agent-env__choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.agent-env__choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  column-gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-panel);
+  cursor: pointer;
+}
+.agent-env__choice[data-selected="true"] { border-color: var(--accent); }
+.agent-env__choice:has(input:focus-visible) { border-color: var(--accent); }
+.agent-env__choice input { margin-top: 3px; }
+.agent-env__choice-text { display: flex; flex-direction: column; gap: 2px; }
+.agent-env__choice-label { font-size: var(--fs-ui-sm); color: var(--fg-1); }
+.agent-env__choice-note { font-size: var(--fs-ui-xs); line-height: var(--lh-normal); color: var(--fg-3); }
+.agent-env__local { margin: 0; }
+
+/* SET-FR-FVIZ: the dev container panel. */
+.devcontainer__note { margin-top: 0; }
+.devcontainer__empty { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); }
+.devcontainer__select {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  font-size: var(--fs-ui-sm);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-panel);
+  color: var(--fg-1);
+}
+.devcontainer__select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* SET-FR-PYRJ: one row for each agent, its state as a word and as a colour. */
+.devcontainer__agents {
+  list-style: none;
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+}
+.devcontainer__agent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-ui-sm);
+}
+.devcontainer__agent + .devcontainer__agent { border-top: 1px solid var(--border-1); }
+.devcontainer__agent-name { min-width: 96px; color: var(--fg-1); }
+.devcontainer__agent-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+}
+.devcontainer__agent-state::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fg-4);
+}
+.devcontainer__agent[data-state="found"] .devcontainer__agent-state::before { background: var(--ok); }
+.devcontainer__agent[data-state="missing"] .devcontainer__agent-state::before { background: var(--danger); }
+.devcontainer__agent-mark { font-size: var(--fs-ui-xs); color: var(--accent); }
+.devcontainer__agent-action { margin-left: auto; }
+.devcontainer__agent-requirement,
+.devcontainer__agent-error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--fs-ui-xs);
+  line-height: var(--lh-normal);
+  color: var(--fg-3);
+}
+.devcontainer__agent-error { color: var(--danger); }
+.devcontainer__nocache {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-2);
+}

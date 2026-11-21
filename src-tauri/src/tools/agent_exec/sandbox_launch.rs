@@ -58,7 +58,9 @@ impl AgentCliExecutor {
         context: &LaunchContext<'_>,
         request: &AgentExecutionRequest,
     ) -> Result<Option<SandboxSettings>, AgentExecutionError> {
+        // EAC-FR-GOAR: a dev container project runs in no VM.
         if request.sandbox_scope.is_none()
+            || context.devcontainer.is_some()
             || request.supplementary_mount.is_some()
             || request.turn_kind == TurnKind::SemanticRebase
         {

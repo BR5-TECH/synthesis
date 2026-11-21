@@ -49,6 +49,8 @@ mod concurrency;
 mod contracts;
 mod controls;
 mod decoding;
+#[cfg(unix)]
+mod devcontainer;
 mod docker_in_docker;
 mod durable;
 mod env_values;
@@ -526,6 +528,7 @@ impl Harness {
             fs: &self.fs,
             images: &TEST_IMAGES,
             docker_in_docker: self.docker_in_docker.clone(),
+            devcontainer: None,
         }
     }
 

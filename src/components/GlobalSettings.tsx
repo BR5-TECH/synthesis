@@ -15,6 +15,7 @@ import {
   type RehearsalTarget,
 } from "./NotificationSettings";
 import { NavigationSettings } from "./NavigationSettings";
+import { DevcontainerCliSettings } from "./DevcontainerCliSettings";
 import { DockerSettings } from "./DockerSettings";
 import { IsolationSettings } from "./IsolationSettings";
 import { IndexingSettings } from "./IndexingSettings";
@@ -769,7 +770,14 @@ export function GlobalSettings({
       {/* GLS-FR-24 / AGT-FR-21: every action here applies immediately through
           its own operation, so the section never contributes to the window's
           save-before-close sweep (GLS-FR-13, SWN-FR-08). */}
-      {section === "docker" && <DockerSettings />}
+      {/* GLS-FR-AGPG: the Dev container CLI subsection, below the backend
+          controls. */}
+      {section === "docker" && (
+        <>
+          <DockerSettings />
+          <DevcontainerCliSettings />
+        </>
+      )}
       {/* GLS-FR-GHYV: every change applies immediately through its own
           operation, so the section never contributes to the window's
           save-before-close sweep (GLS-FR-13, SWN-FR-08). */}

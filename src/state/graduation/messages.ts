@@ -80,6 +80,17 @@ export function graduationErrorMessage(error: string): string {
       return "The machine's Docker backend has not been verified.";
     case "docker_socket_unavailable":
       return dockerSocketUnavailableMessage(detail);
+    // GSU-FR-SQRC / DVC-FR-ETQN: the five refusals of a dev container.
+    case "devcontainer_config_missing":
+      return "This project selects no devcontainer.json. Choose one in Project settings, in the Docker section.";
+    case "devcontainer_config_invalid":
+      return "This project's devcontainer.json is not valid JSON with comments. Correct the file, then start again.";
+    case "devcontainer_cli_missing":
+      return "The dev container CLI is not verified. Verify it in Global settings, in the Docker section.";
+    case "docker_cli_required":
+      return "No Docker CLI was found. The dev container CLI needs one. Set it in Global settings, in the Docker section.";
+    case "devcontainer_agent_cli_missing":
+      return "The dev container does not hold the active agent's CLI. Add it in Project settings, in the Docker section, and build again.";
     case "stream_busy":
       return "A run holds that work stream.";
     case "stream_dirty":

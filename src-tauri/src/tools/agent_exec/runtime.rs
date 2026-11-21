@@ -542,7 +542,7 @@ impl DockerRuntime for HostDockerCli {
 /// The child was made a process-group leader at spawn, so one `killpg` reaches
 /// the group. The direct `kill` still runs: it is what reaps the child and what
 /// covers the platforms with no process group to signal.
-async fn kill_tree(child: &mut tokio::process::Child) {
+pub(crate) async fn kill_tree(child: &mut tokio::process::Child) {
     #[cfg(unix)]
     if let Some(pid) = child.id() {
         // SAFETY: `killpg` touches no memory the caller owns. A failure means

@@ -342,6 +342,12 @@ export const STREAM_ERRORS = {
   dockerBackendUnverified: "docker_backend_unverified",
   /** GSU-FR-RQDS: Docker-in-Docker is enabled and its socket is not there. */
   dockerSocketUnavailable: "docker_socket_unavailable",
+  /** GSU-FR-SQRC / DVC-FR-ETQN: the refusals of a dev container project. */
+  devcontainerConfigMissing: "devcontainer_config_missing",
+  devcontainerConfigInvalid: "devcontainer_config_invalid",
+  devcontainerCliMissing: "devcontainer_cli_missing",
+  dockerCliRequired: "docker_cli_required",
+  devcontainerAgentCliMissing: "devcontainer_agent_cli_missing",
   /** WKS-FR-GKPX: a conflict a text turn cannot reconcile; nothing was written. */
   unsupportedConflict: "unsupported_conflict",
   /** GRB-FR-YPEX: the material an update turn reads could not be written. */

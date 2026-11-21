@@ -3,6 +3,24 @@
 //! when the application exits.
 
 use super::*;
+use crate::tools::agent_exec::devcontainer_pool;
+
+/// DVC-FR-DTWX: a dev container that could not be removed stays tracked, and
+/// the record names the scope and the step that failed.
+fn log_removal_failures<S>(sink: &S, failures: &[devcontainer_pool::RemovalFailure])
+where
+    S: LogSink + Clone + Send + Sync + 'static,
+{
+    for (scope, reason) in failures {
+        logging::log_warn(
+            sink,
+            &BUFFER,
+            &DOMAINS,
+            "dev container could not be removed",
+            log_fields! { "scope" => scope.as_str(), "reason" => reason.as_str() },
+        );
+    }
+}
 
 /// EAC-FR-ABHG: stop the VM of one stream of one project. Called when the
 /// stream is deleted.
@@ -11,7 +29,12 @@ where
     S: LogSink + Clone + Send + Sync + 'static,
 {
     let vm = vm_name(project_key, &SandboxScope { queue_key: queue_key.to_string() });
-    production_pool().stop(&vm).await;
+    // DVC-FR-DTWX: the dev container of the scope goes at the same point.
+    let (_, removed) =
+        tokio::join!(production_pool().stop(&vm), devcontainer_pool::production_pool().stop(&vm));
+    if let Err(reason) = removed {
+        log_removal_failures(sink, &[(vm.clone(), reason)]);
+    }
     logging::log_info(
         sink,
         &BUFFER,
@@ -28,7 +51,11 @@ pub async fn stop_all<S>(sink: &S)
 where
     S: LogSink + Clone + Send + Sync + 'static,
 {
-    production_pool().stop_all().await;
+    // DVC-FR-DTWX: and every dev container, at the same time, so neither
+    // uses the exit bound of the other.
+    let (_, failures) =
+        tokio::join!(production_pool().stop_all(), devcontainer_pool::production_pool().stop_all());
+    log_removal_failures(sink, &failures);
     logging::log_info(sink, &BUFFER, &DOMAINS, "every sandbox VM stopped", log_fields! {});
 }
 
@@ -59,6 +86,22 @@ where
 {
     let app = app.clone();
     crate::project_scope::context::spawn(async move {
+        // DVC-FR-DTWX: a scope runs either a dev container or a VM.
+        let devcontainers = devcontainer_pool::production_pool();
+        if devcontainers.holds(&vm) {
+            match devcontainers.stop_when(&vm, still_idle).await {
+                Ok(true) => logging::log_info(
+                    &app,
+                    &BUFFER,
+                    &DOMAINS,
+                    "dev container of an idle queue removed",
+                    log_fields! { "scope" => vm.as_str() },
+                ),
+                Ok(false) => {}
+                Err(reason) => log_removal_failures(&app, &[(vm.clone(), reason)]),
+            }
+            return;
+        }
         if production_pool().stop_when(&vm, still_idle).await {
             logging::log_info(
                 &app,
@@ -85,7 +128,12 @@ pub async fn stop_project<S>(sink: &S, project_key: &str)
 where
     S: LogSink + Clone + Send + Sync + 'static,
 {
-    production_pool().stop_project(project_key).await;
+    // DVC-FR-DTWX: and the dev containers of that project, at the same time.
+    let (_, failures) = tokio::join!(
+        production_pool().stop_project(project_key),
+        devcontainer_pool::production_pool().stop_project(project_key)
+    );
+    log_removal_failures(sink, &failures);
     logging::log_info(sink, &BUFFER, &DOMAINS, "sandbox VMs of a project stopped", log_fields! {});
 }
 

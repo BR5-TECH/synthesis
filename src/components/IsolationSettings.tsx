@@ -287,6 +287,12 @@ export function IsolationSettings() {
         choice applies to stream, direct, and merge runs, and to no other agent
         call. It belongs to you and this machine — a project never carries it.
       </p>
+      {/* GLS-FR-WLJL: a dev container project is outside this choice. */}
+      <p className="t-p" data-testid="isolation-devcontainer-note" style={{ marginBottom: 20 }}>
+        The mode does not apply to a project whose agent environment is a dev
+        container: that project&apos;s agents run in its dev container on the host
+        Docker.
+      </p>
 
       <fieldset style={{ border: 0, padding: 0, margin: "0 0 12px" }}>
         <legend className="t-label">Isolation</legend>

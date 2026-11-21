@@ -15,6 +15,7 @@
  * the area whose Rust module registers its command.
  */
 export * from "./content";
+export * from "./devcontainer";
 export * from "./docker";
 export * from "./isolation";
 export * from "./documents";

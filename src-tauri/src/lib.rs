@@ -27,6 +27,7 @@ pub mod changes;
 pub mod comments;
 pub mod dashboard;
 pub mod delivery;
+pub mod devcontainer;
 pub mod dialog;
 pub mod docker;
 pub mod document_export;
@@ -156,6 +157,7 @@ pub fn run() {
         // PSS-FR-29: the one build a project may have in flight, and the seam
         // that performs it.
         .manage(project_settings::images::ImageBuildRegistry::default())
+        .manage(devcontainer::build::DevcontainerBuildRegistry::default())
         .manage(project_settings::ImageBuilderSeam::default())
         .manage(ai_api::AiApiIntegrations::default())
         // AGV-FR-01: one store for every run's activity, alive for the process
@@ -542,6 +544,18 @@ pub fn run() {
             project_settings::save_drafts_panel_state,
             project_settings::load_docker_in_docker_settings,
             project_settings::save_docker_in_docker_settings,
+            devcontainer::commands::load_agent_environment,
+            devcontainer::commands::save_agent_environment,
+            devcontainer::commands::list_devcontainer_configs,
+            devcontainer::commands::create_devcontainer_config,
+            devcontainer::commands::add_devcontainer_agent_feature,
+            devcontainer::commands::build_devcontainer,
+            devcontainer::commands::cancel_devcontainer_build,
+            devcontainer::commands::load_devcontainer_build_in_flight,
+            devcontainer::commands::load_devcontainer_cli,
+            devcontainer::commands::save_devcontainer_cli,
+            devcontainer::commands::verify_devcontainer_cli,
+            devcontainer::commands::detect_devcontainer_cli,
             notes::list_notes_for_entity,
             notes::list_project_notes,
             notes::list_all_notes,

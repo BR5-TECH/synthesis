@@ -121,6 +121,7 @@ struct LaunchParts<'a> {
     fs: Arc<crate::fs::FsAccess>,
     docker_in_docker: crate::tools::agent_exec::DockerInDockerLaunch,
     images: crate::tools::agent_exec::ProjectVendorImages,
+    devcontainer: Option<Result<crate::tools::agent_exec::DevcontainerLaunch, String>>,
 }
 
 impl<'a> LaunchParts<'a> {
@@ -159,9 +160,16 @@ impl<'a> LaunchParts<'a> {
         // EAC-FR-DKRS: read from the project-local store at every launch, so
         // Continue uses the settings and the socket that stand now. The
         // application reads them; the model has no route to them.
-        let (docker_in_docker, images) =
+        // EAC-FR-GOAR / DVC-FR-YZLH: a dev container project takes neither its
+        // vendor images nor its Docker-in-Docker settings.
+        let devcontainer =
+            crate::tools::agent_exec::project_devcontainer_launch(&project_root, &store);
+        let (mut docker_in_docker, images) =
             crate::tools::agent_exec::project_launch_inputs(project_root);
-        Ok(LaunchParts { store, integrations, fs, docker_in_docker, images })
+        if devcontainer.is_some() {
+            docker_in_docker = Default::default();
+        }
+        Ok(LaunchParts { store, integrations, fs, docker_in_docker, images, devcontainer })
     }
 
     fn context<'b>(&'b self, project_key: &'b str) -> LaunchContext<'b> {
@@ -172,6 +180,7 @@ impl<'a> LaunchParts<'a> {
             fs: &self.fs,
             images: &self.images,
             docker_in_docker: self.docker_in_docker.clone(),
+            devcontainer: self.devcontainer.clone(),
         }
     }
 }

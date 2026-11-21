@@ -51,10 +51,13 @@ pub mod sandbox;
 
 // The parts this file was split into. They hold no surface of their own: every
 // item they carry is named through this module, exactly as before.
+mod devcontainer_launch;
+pub mod devcontainer_pool;
 mod docker_in_docker;
 pub mod image_probe;
 mod launch;
 mod launch_env;
+mod launch_outcome;
 mod milestone;
 mod observer;
 mod repository;
@@ -424,6 +427,9 @@ pub enum AgentExecutionError {
     /// EAC-FR-NCSA: the micro VM could not be established. There is no
     /// fallback to Docker or to `none`.
     SandboxLaunchFailed(sandbox::SandboxFailure),
+    /// DVC-FR-ATEO / DVC-FR-ODWK: the dev container could not start, or does
+    /// not hold the agent CLI. There is no fallback to the vendor images.
+    DevcontainerLaunchFailed(DevcontainerFailure),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -469,6 +475,7 @@ impl AgentExecutionError {
             }
             AgentExecutionError::DurableOutputFailed(_) => "durable_output_failed",
             AgentExecutionError::SandboxLaunchFailed(_) => "sandbox_launch_failed",
+            AgentExecutionError::DevcontainerLaunchFailed(_) => "devcontainer_launch_failed",
         }
     }
 }
@@ -493,7 +500,14 @@ pub struct LaunchContext<'a> {
     /// application before the container exists. A task field, an instruction or
     /// an agent output has no route into it.
     pub docker_in_docker: DockerInDockerLaunch,
+    /// EAC-FR-GOAR: the dev container of the project, where its agent
+    /// environment is one. An `Err` is a start failure (DVC-FR-ATEO).
+    pub devcontainer: Option<Result<DevcontainerLaunch, String>>,
 }
+
+pub use devcontainer_launch::{
+    project_devcontainer_launch, DevcontainerFailure, DevcontainerLaunch,
+};
 
 /// EAC-FR-DKRS: what the launch needs of the project's Docker-in-Docker
 /// settings. The default is disabled, and a disabled launch is the launch it
@@ -601,6 +615,9 @@ pub struct AgentCliExecutor {
     /// EAC-FR-KVBT: how a gateway name is resolved on this machine. `None` is
     /// the system resolver, which is what production uses.
     gateway_resolver: Option<Arc<dyn sandbox::gateway::GatewayResolver>>,
+    /// EAC-FR-GOAR: the pool dev container launches go through. `None` is the
+    /// one production pool.
+    devcontainer_pool: Option<Arc<devcontainer_pool::DevcontainerPool>>,
 }
 
 /// EAC-FR-FNFV: what [`AgentCliExecutor::repository_mounts`] grants one launch:
@@ -617,6 +634,7 @@ impl Default for AgentCliExecutor {
             sandbox_pool: None,
             image_exporter: None,
             gateway_resolver: None,
+            devcontainer_pool: None,
         }
     }
 }
@@ -630,6 +648,7 @@ impl AgentCliExecutor {
             sandbox_pool: None,
             image_exporter: None,
             gateway_resolver: None,
+            devcontainer_pool: None,
         }
     }
 
@@ -666,6 +685,15 @@ impl AgentCliExecutor {
     /// (EAC-FR-SNMS).
     pub fn with_isolation(mut self, isolation: crate::isolation::ResolvedIsolation) -> Self {
         self.isolation = Some(isolation);
+        self
+    }
+
+    /// The same executor launching dev containers through `pool` (EAC-FR-GOAR).
+    pub fn with_devcontainer_pool(
+        mut self,
+        pool: Arc<devcontainer_pool::DevcontainerPool>,
+    ) -> Self {
+        self.devcontainer_pool = Some(pool);
         self
     }
 

@@ -1,7 +1,8 @@
 //! The sessions of one project (TRS-FR-AYCY, TRS-FR-LRYH, TRS-FR-TEHT).
 //!
 //! The registry is in memory only. A new application process starts with an
-//! empty one, and a project close empties it.
+//! empty one, and a project close empties it. Persistent sessions come back
+//! into it from tmux (TRS-FR-IEKU).
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -76,6 +77,36 @@ impl Registry {
         }
         let labels: Vec<String> = inner.sessions.iter().map(|s| s.spec.label.clone()).collect();
         let label = next_label(label_name(new.kind, new.vendor), &labels);
+        Ok(Self::insert(&mut inner, id, label, created_at, new))
+    }
+
+    /// TRS-FR-IEKU, TRS-FR-TFAN: adds a restored session with its own id and
+    /// label. Refuses past the limit with `terminal_limit_reached`, and gives
+    /// `None` for an id that the registry holds already.
+    pub fn restore(
+        &self,
+        id: String,
+        label: String,
+        created_at: String,
+        new: NewSession,
+    ) -> Result<Option<Arc<Session>>, TerminalError> {
+        let mut inner = self.lock();
+        if inner.sessions.iter().any(|s| s.spec.id == id) {
+            return Ok(None);
+        }
+        if inner.sessions.len() >= MAX_SESSIONS {
+            return Err(TerminalError::new("terminal_limit_reached"));
+        }
+        Ok(Some(Self::insert(&mut inner, id, label, created_at, new)))
+    }
+
+    fn insert(
+        inner: &mut RegistryInner,
+        id: String,
+        label: String,
+        created_at: String,
+        new: NewSession,
+    ) -> Arc<Session> {
         let sequence = inner.next_sequence;
         inner.next_sequence += 1;
         let session = Arc::new(Session::new(
@@ -95,7 +126,21 @@ impl Registry {
             new.busy_run_id,
         ));
         inner.sessions.push(session.clone());
-        Ok(session)
+        session
+    }
+
+    /// Whether the registry holds a session with `id`.
+    pub fn contains(&self, id: &str) -> bool {
+        self.lock().sessions.iter().any(|s| s.spec.id == id)
+    }
+
+    /// The number of sessions, in every state (TRS-FR-AYCY).
+    pub fn len(&self) -> usize {
+        self.lock().sessions.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.lock().sessions.is_empty()
     }
 
     pub fn get(&self, id: &str) -> Result<Arc<Session>, TerminalError> {
@@ -210,6 +255,30 @@ mod tests {
         let found = registry.for_target(&TargetRef::Worktree { path: "/two".into() });
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].spec.id, "b");
+    }
+
+    // TRS-FR-IEKU, TRS-FR-TFAN, TRS-FR-AYCY: a restored session keeps its id
+    // and label, an id held already is skipped, and the limit counts it.
+    #[test]
+    fn restores_with_the_given_id_and_label() {
+        let registry = Registry::default();
+        let restored = registry
+            .restore("t9".into(), "Host shell 4".into(), "2026".into(), host("/r"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored.spec.label, "Host shell 4");
+        assert!(registry.contains("t9"));
+        assert!(registry
+            .restore("t9".into(), "Host shell 4".into(), "2026".into(), host("/r"))
+            .unwrap()
+            .is_none());
+        for i in 1..MAX_SESSIONS {
+            registry.add(format!("t{i}x"), String::new(), host("/r")).unwrap();
+        }
+        assert_eq!(registry.len(), MAX_SESSIONS);
+        let err =
+            registry.restore("u".into(), "x".into(), String::new(), host("/r")).err().unwrap();
+        assert_eq!(err.code, "terminal_limit_reached");
     }
 
     // TRS-FR-YYER: an unknown id is a typed error.

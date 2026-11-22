@@ -66,16 +66,33 @@
 .terminal-row[aria-selected="true"] { background: var(--bg-active); }
 .terminal-row:focus-visible { box-shadow: var(--shadow-focus); }
 
-/* TRM-FR-DYKW: the pinned marker sits in space every row reserves. */
+/* TRM-FR-DYKW, TRM-FR-QFYS: the pinned and the persistent markers sit in
+   space every row reserves, so neither moves a label. */
 .terminal-row__marks {
   flex: none;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+.terminal-row__pin,
+.terminal-row__persist {
   width: 12px;
   height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--accent);
+  flex: none;
+  color: var(--fg-3);
 }
+/* The global `.icon` size would draw a marker wider than its slot. */
+.terminal-row__pin svg,
+.terminal-row__persist svg {
+  width: 10px;
+  height: 10px;
+  flex: none;
+}
+.terminal-persist { display: inline-flex; }
 .terminal-row__main {
   display: flex;
   flex-direction: column;
@@ -317,6 +334,14 @@
 }
 .terminal-tab__gone-output p { margin: 0 0 var(--sp-2); }
 
+/* TRM-FR-PHTL: the persistent marker after a Terminal tab's label. */
+.tab__terminal-persist {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  color: var(--fg-3);
+}
+
 /* TRM-FR-DPWA: the state marker of a Terminal tab. */
 .tab__terminal-state {
   margin-left: 4px;
@@ -357,12 +382,6 @@
 }
 .terminal-menu .menu-item:not(.menu-item--disabled):hover { background: var(--bg-active); }
 .terminals-panel__new { flex: none; }
-.terminal-row__pin {
-  display: inline-flex;
-  width: 10px;
-  flex: none;
-  color: var(--fg-3);
-}
 
 /* TRM-FR-EAUY: the icons of a group header keep their size. */
 .terminals-group__head svg { flex: none; }

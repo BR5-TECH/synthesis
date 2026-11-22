@@ -81,6 +81,40 @@ describe("Terminals panel rows", () => {
     expect(row("Host shell 1")).not.toHaveAttribute("data-pinned");
   });
 
+  it("TRM-FR-QFYS: a persistent row shows the persistent marker with its text; another row shows none", async () => {
+    await seed([
+      session({ id: "a", label: "Host shell 1", persistent: true, pinned: true }),
+      session({ id: "b", label: "Host shell 2" }),
+    ]);
+    renderPanel();
+    const persistent = row("Host shell 1");
+    expect(persistent).toHaveAccessibleName("Host shell 1, running, survives IDE restart");
+    const marker = within(persistent).getByRole("img", { name: "Survives IDE restart" });
+    expect(marker).toHaveAttribute("title", "Survives IDE restart");
+    expect(marker.querySelector("svg")).not.toBeNull();
+    expect(row("Host shell 2")).toHaveAccessibleName("Host shell 2, running");
+    expect(within(row("Host shell 2")).queryByRole("img", { name: "Survives IDE restart" })).toBeNull();
+  });
+
+  it("TRM-FR-QFYS, TRM-FR-DYKW: every row reserves both marker slots, and the two icons differ", async () => {
+    await seed([
+      session({ id: "a", label: "Host shell 1", persistent: true }),
+      session({ id: "b", label: "Host shell 2", pinned: true }),
+      session({ id: "c", label: "Host shell 3" }),
+    ]);
+    renderPanel();
+    for (const label of ["Host shell 1", "Host shell 2", "Host shell 3"]) {
+      const marks = row(label).querySelector(".terminal-row__marks")!;
+      expect(marks.querySelector(".terminal-row__pin")).not.toBeNull();
+      expect(marks.querySelector(".terminal-row__persist")).not.toBeNull();
+    }
+    const persistIcon = row("Host shell 1").querySelector(".terminal-row__persist svg")!.innerHTML;
+    const pinIcon = row("Host shell 2").querySelector(".terminal-row__pin svg")!.innerHTML;
+    expect(persistIcon).not.toBe("");
+    expect(persistIcon).not.toBe(pinIcon);
+    expect(row("Host shell 2").querySelector(".terminal-row__persist svg")).toBeNull();
+  });
+
   it("TRM-FR-CTGK: a row of a busy target shows the busy mark", async () => {
     await seed([session({ id: "a", busyRunId: "run-1" })]);
     renderPanel();
@@ -205,6 +239,9 @@ describe("Terminals row context menu", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: "Close terminal" }));
     const dialog = screen.getByRole("dialog", { name: "End running terminals" });
     expect(within(dialog).getByText("End 1 running terminal?")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("1 running terminal ends. Its process stops, its output is gone, and it cannot be restored."),
+    ).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(commands("close_terminal")).toHaveLength(0);
     expect(row("Host shell 1")).toBeInTheDocument();
@@ -272,6 +309,39 @@ describe("Terminals row context menu", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: "Close all terminals" }));
     const dialog = screen.getByRole("dialog", { name: "End running terminals" });
     expect(within(dialog).getByText("End 2 running terminals?")).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole("button", { name: "End terminals" }));
+    await waitFor(() => expect(commands("close_terminal")).toHaveLength(3));
+  });
+});
+
+describe("Restored persistent terminals", () => {
+  it("TRM-FR-QSRZ, TRM-FR-JJEY: a restored running row asks before Close terminal and closes as any other", async () => {
+    await seed([session({ id: "r", label: "Host shell 3", persistent: true, createdAt: "2025-12-01T00:00:00Z" })]);
+    serve("close_terminal", null);
+    renderPanel();
+    fireEvent.contextMenu(row("Host shell 3"));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Close terminal" }));
+    const dialog = screen.getByRole("dialog", { name: "End running terminals" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "End terminals" }));
+    await waitFor(() => expect(screen.queryByRole("option")).toBeNull());
+    expect(commands("close_terminal").map((c) => c.args.terminalId)).toEqual(["r"]);
+  });
+
+  it("TRM-FR-QSRZ, TRM-FR-BHYF, TRM-FR-JJEY: Close all terminals counts restored running rows and says they cannot be restored", async () => {
+    await seed([
+      session({ id: "a", label: "Host shell 1", persistent: true }),
+      session({ id: "b", label: "Host shell 2", persistent: true }),
+      session({ id: "c", label: "Host shell 3", persistent: true, state: "exited", exitCode: 0 }),
+    ]);
+    serve("close_terminal", null);
+    renderPanel();
+    fireEvent.contextMenu(row("Host shell 1"));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Close all terminals" }));
+    const dialog = screen.getByRole("dialog", { name: "End running terminals" });
+    expect(within(dialog).getByText("End 2 running terminals?")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("2 running terminals end. Their processes stop, their output is gone, and they cannot be restored."),
+    ).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole("button", { name: "End terminals" }));
     await waitFor(() => expect(commands("close_terminal")).toHaveLength(3));
   });

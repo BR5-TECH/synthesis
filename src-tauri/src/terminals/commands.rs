@@ -54,15 +54,23 @@ pub fn list_terminals(app: tauri::AppHandle) -> Result<Vec<TerminalSummary>, Ter
     logged(&app, "list", service::list(&app))
 }
 
+/// Runs off the thread the window draws from: a create can call git and tmux
+/// (TRS-FR-OMYR), and neither may stop the window.
 #[project_scope_macros::project_scoped]
 #[tauri::command]
-pub fn create_terminal(
+pub async fn create_terminal(
     app: tauri::AppHandle,
     target: TargetRef,
     kind: TerminalKind,
     vendor: Option<CliVendor>,
 ) -> Result<TerminalSummary, TerminalError> {
-    logged(&app, "create", service::create(&app, target, kind, vendor))
+    let worker = app.clone();
+    let result = crate::project_scope::context::spawn_blocking(move || {
+        service::create(&worker, target, kind, vendor)
+    })
+    .await
+    .unwrap_or_else(|_| Err(TerminalError::new("start_failed")));
+    logged(&app, "create", result)
 }
 
 #[project_scope_macros::project_scoped]

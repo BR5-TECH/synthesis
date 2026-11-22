@@ -1,17 +1,24 @@
 /**
- * TRM-FR-DPWA: the state marker of a Terminal tab. An exited session and a
- * session with a gone target show it beside the tab's label.
+ * The marks beside a Terminal tab's label: the persistent marker of a session
+ * that survives an IDE restart (TRM-FR-PHTL), and the state marker of an
+ * exited session and of a session with a gone target (TRM-FR-DPWA).
  */
 import { useTerminalsSnapshot } from "../../hooks/shell/useTerminalTabs";
+import { TerminalPersistMark } from "./TerminalPersistMark";
 
 export function TerminalTabMark({ terminalId }: { terminalId: string }) {
   const { sessions } = useTerminalsSnapshot();
-  const state = sessions.find((s) => s.id === terminalId)?.state;
-  if (state !== "exited" && state !== "target_gone") return null;
+  const session = sessions.find((s) => s.id === terminalId);
+  const state = session?.state;
+  const persistent = session?.persistent === true && <TerminalPersistMark className="tab__terminal-persist" />;
+  if (state !== "exited" && state !== "target_gone") return persistent || null;
   const text = state === "exited" ? "exited" : "target gone";
   return (
-    <span className="tab__terminal-state" data-state={state} aria-label={text} title={text}>
-      {text}
-    </span>
+    <>
+      {persistent}
+      <span className="tab__terminal-state" data-state={state} aria-label={text} title={text}>
+        {text}
+      </span>
+    </>
   );
 }

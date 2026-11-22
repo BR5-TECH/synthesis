@@ -196,6 +196,8 @@ pub struct TerminalSummary {
     pub pinned: bool,
     pub busy_run_id: Option<String>,
     pub has_history: bool,
+    /// TRS-FR-FKVW: the session runs in the application's tmux server.
+    pub persistent: bool,
     pub created_at: String,
 }
 

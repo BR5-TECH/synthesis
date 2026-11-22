@@ -58,6 +58,8 @@ export interface TerminalSummary {
   pinned: boolean;
   busyRunId: string | null;
   hasHistory: boolean;
+  /** TRS-FR-FKVW: the session runs in the application's tmux server and survives an IDE restart. */
+  persistent: boolean;
   createdAt: string;
 }
 

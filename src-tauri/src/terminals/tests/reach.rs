@@ -24,6 +24,7 @@ fn only_the_lifetime_hooks_reach_the_module() {
         "command_names.rs",
         "project/close.rs",
         "menu/exit.rs",
+        "project.rs",
         "streams/removal.rs",
         "worktree/removal.rs",
     ];

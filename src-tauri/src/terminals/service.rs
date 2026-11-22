@@ -24,8 +24,8 @@ use crate::tools::agent_exec::sandbox::SandboxScope;
 pub const TERMINALS_CHANGED: &str = "terminals-changed";
 
 /// The terminal size a process starts at, before its tab fits it.
-const START_COLS: u16 = 80;
-const START_ROWS: u16 = 24;
+pub(super) const START_COLS: u16 = 80;
+pub(super) const START_ROWS: u16 = 24;
 
 #[derive(Clone, serde::Serialize)]
 struct ChangedPayload {}
@@ -48,7 +48,7 @@ pub fn registry<R: Runtime>(app: &AppHandle<R>) -> Arc<Registry> {
         .unwrap_or_default()
 }
 
-fn log_session(app: &AppHandle<impl Runtime>, message: &str, session: &Session) {
+pub(super) fn log_session(app: &AppHandle<impl Runtime>, message: &str, session: &Session) {
     let summary = session.summary();
     logging::log_info(
         app,
@@ -65,7 +65,17 @@ fn log_session(app: &AppHandle<impl Runtime>, message: &str, session: &Session) 
     );
 }
 
-fn warn(app: &AppHandle<impl Runtime>, message: &str, terminal_id: &str, cause: &str) {
+pub(super) fn note(app: &AppHandle<impl Runtime>, message: &str, terminal_id: &str, cause: &str) {
+    logging::log_info(
+        app,
+        &logging::BUFFER,
+        &[Domain::Backend],
+        message,
+        log_fields! { "terminal_id" => terminal_id, "cause" => cause },
+    );
+}
+
+pub(super) fn warn(app: &AppHandle<impl Runtime>, message: &str, terminal_id: &str, cause: &str) {
     logging::log_warn(
         app,
         &logging::BUFFER,
@@ -214,6 +224,22 @@ fn start_host<R: Runtime>(
                 super::host::host_shell_command(&shell, checkout)
             }
         };
+        if persistent_kind(session.spec.kind, session.spec.runs_in) {
+            match super::tmux::source(app).probe() {
+                Ok(tmux) => {
+                    match super::persistent::start(app, session, tmux, &facts.project_key, &command)
+                    {
+                        Ok(()) => return Ok(()),
+                        // TRS-FR-FIIJ: the session starts as one that is not persistent.
+                        Err(cause) => {
+                            warn(app, "terminal tmux call failed", &session.spec.id, cause)
+                        }
+                    }
+                }
+                // TRS-FR-OMYR: the record says why the session is not persistent.
+                Err(cause) => note(app, "terminal not persistent", &session.spec.id, cause),
+            }
+        }
         let handle = super::process::spawn_host(&command, START_COLS, START_ROWS, None, None)
             .map_err(|e| TerminalError::with_message("start_failed", e.to_string()))?;
         run(app, session.clone(), handle);
@@ -226,6 +252,11 @@ fn start_host<R: Runtime>(
     }
 }
 
+/// TRS-FR-FKVW: the kinds that run in tmux where tmux is usable.
+pub fn persistent_kind(kind: TerminalKind, runs_in: RunsIn) -> bool {
+    runs_in == RunsIn::Host && matches!(kind, TerminalKind::HostShell | TerminalKind::AgentCli)
+}
+
 /// TRS-FR-HWNA: a VM process with no exit code ended with its VM.
 pub fn end_reason_for(microsandbox: bool, code: Option<i32>) -> EndReason {
     match code {
@@ -235,7 +266,7 @@ pub fn end_reason_for(microsandbox: bool, code: Option<i32>) -> EndReason {
 }
 
 /// Starts the pump of a running process, and records its end.
-fn run<R: Runtime>(app: &AppHandle<R>, session: Arc<Session>, handle: ProcessHandle) {
+pub(super) fn run<R: Runtime>(app: &AppHandle<R>, session: Arc<Session>, handle: ProcessHandle) {
     let environment_name = handle.environment_name.clone();
     if !session.started(handle.control.clone(), environment_name) {
         handle.control.terminate();
@@ -374,6 +405,10 @@ pub fn resize<R: Runtime>(
     let session = registry(app).get(terminal_id)?;
     // TRS-FR-UNIL: a session that is starting gets the size when it runs.
     session.set_size(cols, rows);
+    if session.take_wait_for_size() {
+        super::persistent::start_restored_later(app, &session, cols, rows);
+        return Ok(());
+    }
     if let Some(control) = session.control() {
         control
             .resize(cols, rows)
@@ -402,6 +437,7 @@ pub fn set_pinned<R: Runtime>(
     ensure_platform()?;
     let session = registry(app).get(terminal_id)?;
     session.set_pinned(pinned);
+    super::persistent::set_pinned(app, &session);
     announce(app);
     Ok(session.summary())
 }
@@ -412,6 +448,7 @@ pub fn close<R: Runtime>(app: &AppHandle<R>, terminal_id: &str) -> Result<(), Te
     let registry = registry(app);
     let session = registry.get(terminal_id)?;
     end_session(&session);
+    super::persistent::kill_later(app, &session);
     registry.remove(terminal_id);
     log_session(app, "terminal closed", &session);
     announce(app);
@@ -435,6 +472,7 @@ pub fn end_for_target<R: Runtime>(app: &AppHandle<R>, target: &TargetRef) {
         if let Some(control) = session.target_gone() {
             control.terminate();
         }
+        super::persistent::kill_later(app, &session);
         log_session(app, "terminal target gone", &session);
         changed = true;
     }
@@ -443,7 +481,8 @@ pub fn end_for_target<R: Runtime>(app: &AppHandle<R>, target: &TargetRef) {
     }
 }
 
-/// TRS-FR-OTLH: a project close ends every session of the project.
+/// TRS-FR-OTLH: a project close ends every session of the project. For a
+/// persistent session, it ends the tmux client alone.
 pub fn end_for_project<R: Runtime>(app: &AppHandle<R>) {
     for session in registry(app).drain() {
         end_session(&session);

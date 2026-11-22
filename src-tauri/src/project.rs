@@ -602,6 +602,9 @@ fn activate_project<R: tauri::Runtime>(
     // OSM-FR-ZNVZ: the OpenSpec CLI check runs in the background, so a turn
     // finds its result kept.
     crate::openspec::warm_on_project_open(app);
+    // TRS-FR-IEKU: the persistent terminals of the project come back from the
+    // application's tmux server, in the background.
+    crate::terminals::persistent::restore_for_project(app);
 }
 
 /// Tear down everything tied to the open project (SNV-FR-25): forget the root

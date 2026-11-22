@@ -10,6 +10,7 @@ use super::flow::{Batcher, FlowControl, MAX_FRAME_BYTES};
 use super::history::History;
 use super::model::*;
 use super::process::{ProcessControl, ProcessHandle};
+use super::tmux::supervisor::Persistence;
 
 /// Where the output of an attached tab goes. Production binds it to a Tauri
 /// channel; a test binds it to a recorder.
@@ -60,6 +61,11 @@ struct Inner {
     ended_by_module: bool,
     /// The last size a tab asked for (TRS-FR-UNIL).
     size: Option<(u16, u16)>,
+    /// TRS-FR-FKVW: the tmux session of a persistent session.
+    persistence: Option<Arc<Persistence>>,
+    /// TRS-FR-TCBS: a restored session whose first client attaches at the
+    /// first size a tab asks for.
+    waits_for_size: bool,
 }
 
 pub struct Session {
@@ -95,6 +101,8 @@ impl Session {
                 control: None,
                 ended_by_module: false,
                 size: None,
+                persistence: None,
+                waits_for_size: false,
             }),
             resume: Notify::new(),
         }
@@ -123,12 +131,46 @@ impl Session {
             pinned: inner.pinned,
             busy_run_id: inner.busy_run_id.clone(),
             has_history: !inner.history.is_empty(),
+            persistent: inner.persistence.as_ref().is_some_and(|p| !p.is_gone()),
             created_at: self.spec.created_at.clone(),
         }
     }
 
     pub fn state(&self) -> TerminalState {
         self.lock().state
+    }
+
+    /// TRS-FR-FKVW: the session is persistent.
+    pub fn set_persistence(&self, persistence: Arc<Persistence>) {
+        self.lock().persistence = Some(persistence);
+    }
+
+    /// The session was closed or its target is gone.
+    pub fn is_ended_by_module(&self) -> bool {
+        self.lock().ended_by_module
+    }
+
+    /// The session is not persistent after all (TRS-FR-FIIJ).
+    pub fn clear_persistence(&self) {
+        self.lock().persistence = None;
+    }
+
+    pub fn persistence(&self) -> Option<Arc<Persistence>> {
+        self.lock().persistence.clone()
+    }
+
+    /// TRS-FR-TCBS: the first client waits for the first size a tab asks for.
+    pub fn wait_for_size(&self) {
+        self.lock().waits_for_size = true;
+    }
+
+    /// TRS-FR-TCBS: true once, for the size that starts the first client of
+    /// a restored session. A session that the module ended starts none.
+    pub fn take_wait_for_size(&self) -> bool {
+        let mut inner = self.lock();
+        let waits = inner.waits_for_size && !inner.ended_by_module;
+        inner.waits_for_size = false;
+        waits
     }
 
     pub fn pinned(&self) -> bool {

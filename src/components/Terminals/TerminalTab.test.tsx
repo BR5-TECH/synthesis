@@ -282,6 +282,27 @@ describe("Terminal tab marker and logging", () => {
     expect(document.querySelectorAll(".tab__terminal-state")).toHaveLength(2);
   });
 
+  it("TRM-FR-PHTL: a persistent session's tab shows the persistent marker with its text, also beside a state marker", async () => {
+    const { TerminalTabMark } = await import("./TerminalTabMark");
+    await seed([
+      session({ id: "p", persistent: true }),
+      session({ id: "q", persistent: true, state: "exited", exitCode: 0 }),
+      session({ id: "n" }),
+    ]);
+    const { container } = render(
+      <>
+        <span data-tab="p"><TerminalTabMark terminalId="p" /></span>
+        <span data-tab="q"><TerminalTabMark terminalId="q" /></span>
+        <span data-tab="n"><TerminalTabMark terminalId="n" /></span>
+      </>,
+    );
+    const marks = screen.getAllByRole("img", { name: "Survives IDE restart" });
+    expect(marks).toHaveLength(2);
+    expect(marks[0]).toHaveAttribute("title", "Survives IDE restart");
+    expect(container.querySelector('[data-tab="n"] .tab__terminal-persist')).toBeNull();
+    expect(container.querySelector('[data-tab="q"] .tab__terminal-state')).not.toBeNull();
+  });
+
   it("TRM-FR-LNOZ: attach and detach emit DEBUG, a failed call a WARN, and no record carries input or output", async () => {
     const logging = await import("../../logging");
     vi.mocked(logging.logDebug).mockClear();

@@ -84,6 +84,8 @@ function make(target: Record<string, any>, kind: string, vendor?: string, extra:
     pinned: false,
     busyRunId: busy(target),
     hasHistory: true,
+    // TRS-FR-FKVW: a host session runs in tmux in the mock.
+    persistent: runsIn === "host",
     createdAt: new Date(Date.now() + nextId).toISOString(),
     ...extra,
   };

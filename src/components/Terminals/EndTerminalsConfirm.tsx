@@ -1,7 +1,7 @@
 /**
  * The confirmation before a close ends running terminals (`TRM-terminals.md`
- * TRM-FR-JJEY). It states how many running terminals end. Cancel changes
- * nothing.
+ * TRM-FR-JJEY). It states how many running terminals end, and that they
+ * cannot be restored. Cancel changes nothing.
  */
 import { Modal } from "../DraftsPanelParts";
 
@@ -26,8 +26,8 @@ export function EndTerminalsConfirm({
       </div>
       <p className="modal__body">
         {running === 1
-          ? "1 running terminal ends. Its process stops and its output is gone."
-          : `${running} running terminals end. Their processes stop and their output is gone.`}
+          ? "1 running terminal ends. Its process stops, its output is gone, and it cannot be restored."
+          : `${running} running terminals end. Their processes stop, their output is gone, and they cannot be restored.`}
       </p>
       <div className="modal__actions">
         <button type="button" className="btn btn--sm" onClick={onCancel}>

@@ -117,7 +117,8 @@ jobs:
             build-essential \
             curl \
             wget \
-            file
+            file \
+            tmux
 
       # Names no version: rustup reads src-tauri/rust-toolchain.toml, so that
       # file stays the single source of truth for the toolchain. `install`

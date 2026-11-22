@@ -140,6 +140,12 @@ export function stateName(session: TerminalSummary): string {
   }
 }
 
+/** TRM-FR-BEYN, TRM-FR-QFYS: the accessible name of a row. */
+export function rowName(session: TerminalSummary): string {
+  const name = `${session.label}, ${stateName(session)}`;
+  return session.persistent ? `${name}, survives IDE restart` : name;
+}
+
 /** TRM-FR-HJUD: the reason text of a greyed kind entry. */
 export function reasonText(reason: UnavailableReason | undefined): string {
   switch (reason) {

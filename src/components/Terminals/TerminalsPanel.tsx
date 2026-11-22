@@ -23,6 +23,7 @@ import {
   placeName,
   roleName,
   rowOrder,
+  rowName,
   runningCount,
   stateName,
   type CloseScope,
@@ -34,6 +35,7 @@ import { Icon } from "../icons";
 import { EMPTY_BODY_CLASS, PanelEmptyState } from "../PanelEmptyState";
 import { EndTerminalsConfirm } from "./EndTerminalsConfirm";
 import { NewTerminalMenu } from "./NewTerminalMenu";
+import { TerminalPersistMark } from "./TerminalPersistMark";
 import { TerminalRowMenu, type TerminalMenuChoice } from "./TerminalRowMenu";
 
 export interface TerminalsPanelProps {
@@ -244,7 +246,7 @@ export function TerminalsPanel({
                     key={session.id}
                     role="option"
                     aria-selected={selectedId === session.id}
-                    aria-label={`${session.label}, ${stateName(session)}`}
+                    aria-label={rowName(session)}
                     tabIndex={tabbable ? 0 : -1}
                     className="terminal-row"
                     data-terminal-row={session.id}
@@ -267,8 +269,13 @@ export function TerminalsPanel({
                       }
                     }}
                   >
-                    <span className="terminal-row__marks" aria-hidden="true">
-                      <span className="terminal-row__pin">{session.pinned && <Icon.Pin size={10} />}</span>
+                    <span className="terminal-row__marks">
+                      <span className="terminal-row__pin" aria-hidden="true">
+                        {session.pinned && <Icon.Pin size={10} />}
+                      </span>
+                      <span className="terminal-row__persist">
+                        {session.persistent && <TerminalPersistMark className="terminal-persist" />}
+                      </span>
                     </span>
                     <span className="terminal-row__main">
                       <span className="terminal-row__line">

@@ -291,6 +291,22 @@ export const Icon = {
       <path d="M12 12v9" />
     </I>
   ),
+  /**
+   * `TRM-terminals.md` TRM-FR-QFYS, TRM-FR-PHTL: the persistent marker of a
+   * terminal that survives an IDE restart.
+   *
+   * An anchor: the terminal stays where it is while the IDE goes. Its round
+   * eye and curved flukes keep it apart from the straight-sided pin at the
+   * same few pixels.
+   */
+  Persistent: (p: IconProps) => (
+    <I {...p}>
+      <circle cx="12" cy="5" r="2" />
+      <path d="M12 7v14" />
+      <path d="M8 11h8" />
+      <path d="M5 14a7 7 0 0 0 14 0" />
+    </I>
+  ),
   /** `TAB-tabs.md` TAB-FR-33: the same pin, struck through, for **Unpin tab**. */
   Unpin: (p: IconProps) => (
     <I {...p}>

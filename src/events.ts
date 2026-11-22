@@ -980,3 +980,10 @@ export const onProjectWindowCloseRequested = (
   listen<{ projectId: string }>(PROJECT_WINDOW_CLOSE_REQUESTED, (ev) =>
     handler(ev.payload.projectId),
   );
+
+/** TRS-FR-EHXS: a session was created, changed state or pin, or closed. */
+export const TERMINALS_CHANGED = "terminals-changed";
+
+/** TRM-FR-LAZH: the panel reads the list again on each notice. */
+export const onTerminalsChanged = (handler: () => void): Promise<UnlistenFn> =>
+  listenProject<{ projectId?: string }>(TERMINALS_CHANGED, () => handler());

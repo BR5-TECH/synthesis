@@ -199,49 +199,57 @@ async fn docker_output(docker: &str, args: &[&str]) -> Result<String, String> {
     }
 }
 
+/// DVC-FR-QGUT / DVC-FR-BUXC: `devcontainer up` and the environment probe,
+/// with each line that `up` writes handed to `on_line` (DVC-FR-KTBH).
+pub async fn up_reporting(
+    start: &DevcontainerStart,
+    cancel: &CancellationToken,
+    mut on_line: impl FnMut(&str) + Send,
+) -> Result<RunningDevcontainer, String> {
+    let mut command = crate::devcontainer::cli::command(&start.cli, Some(&start.docker));
+    command.args(start.up_args());
+    let result = process::run(command, None, UP_TIMEOUT, cancel, &mut on_line)
+        .await
+        .map_err(|e| e.to_string())?;
+    match result.end {
+        ProcessEnd::TimedOut => {
+            return Err("devcontainer up ran longer than its time limit".to_string());
+        }
+        ProcessEnd::Cancelled => return Err("the start was cancelled".to_string()),
+        ProcessEnd::Exited => {}
+    }
+    let (container_id, remote_user, remote_workspace_folder) = parse_up_result(&result.stdout)
+        .map_err(|message| {
+            let line = result.last_error_line(FAILURE_LINE_LIMIT);
+            match (message.is_empty(), line.is_empty()) {
+                (false, _) => message,
+                (true, false) => line,
+                (true, true) => "the dev container CLI returned no result".to_string(),
+            }
+        })?;
+    let mut command = crate::devcontainer::cli::command(&start.cli, Some(&start.docker));
+    command.args(start.env_probe_args());
+    let probed = process::run(command, None, HELPER_TIMEOUT, cancel, |_| {})
+        .await
+        .map_err(|e| e.to_string())?;
+    if !probed.succeeded() {
+        return Err(probed.last_error_line(FAILURE_LINE_LIMIT));
+    }
+    Ok(RunningDevcontainer {
+        container_id,
+        remote_user,
+        remote_workspace_folder,
+        probed_env: parse_probed_env(&probed.stdout),
+    })
+}
+
 impl DevcontainerRuntime for CliDevcontainerRuntime {
     fn up<'a>(
         &'a self,
         start: &'a DevcontainerStart,
         cancel: &'a CancellationToken,
     ) -> BoxFuture<'a, Result<RunningDevcontainer, String>> {
-        Box::pin(async move {
-            let mut command = crate::devcontainer::cli::command(&start.cli, Some(&start.docker));
-            command.args(start.up_args());
-            let result = process::run(command, None, UP_TIMEOUT, cancel, |_| {})
-                .await
-                .map_err(|e| e.to_string())?;
-            match result.end {
-                ProcessEnd::TimedOut => {
-                    return Err("devcontainer up ran longer than its time limit".to_string());
-                }
-                ProcessEnd::Cancelled => return Err("the start was cancelled".to_string()),
-                ProcessEnd::Exited => {}
-            }
-            let (container_id, remote_user, remote_workspace_folder) =
-                parse_up_result(&result.stdout).map_err(|message| {
-                    let line = result.last_error_line(FAILURE_LINE_LIMIT);
-                    match (message.is_empty(), line.is_empty()) {
-                        (false, _) => message,
-                        (true, false) => line,
-                        (true, true) => "the dev container CLI returned no result".to_string(),
-                    }
-                })?;
-            let mut command = crate::devcontainer::cli::command(&start.cli, Some(&start.docker));
-            command.args(start.env_probe_args());
-            let probed = process::run(command, None, HELPER_TIMEOUT, cancel, |_| {})
-                .await
-                .map_err(|e| e.to_string())?;
-            if !probed.succeeded() {
-                return Err(probed.last_error_line(FAILURE_LINE_LIMIT));
-            }
-            Ok(RunningDevcontainer {
-                container_id,
-                remote_user,
-                remote_workspace_folder,
-                probed_env: parse_probed_env(&probed.stdout),
-            })
-        })
+        Box::pin(up_reporting(start, cancel, |_| {}))
     }
 
     fn end_turn<'a>(

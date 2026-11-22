@@ -74,6 +74,12 @@ export function followTargetForTab(tab: Tab | undefined): FollowTarget | null {
   // panel shows no selection, so activating one changes nothing.
   if (tab.kind === "document" || tab.kind === "pdf") return null;
 
+  // SNV-FR-66 / TRM-FR-RCCE: a Terminal tab selects in the Terminals panel, by
+  // its terminal id (TAB-FR-VKPS).
+  if (tab.kind === "terminal") {
+    return tab.terminalId ? { panel: "terminals", id: tab.terminalId } : null;
+  }
+
   return null;
 }
 

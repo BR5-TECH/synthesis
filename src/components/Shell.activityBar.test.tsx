@@ -75,8 +75,8 @@ describe("the activity bar's two clusters (SNV-FR-44)", () => {
   it("groups vertical-panel toggles at the top and bottom-panel toggles at the foot", () => {
     renderBar();
     const [leading, trailing] = clusters();
-    // CMP-FR-01: Comments sits immediately below Notes. SNV-FR-44: Changes
-    // closes the cluster, meeting the Git toggle across the gap.
+    // CMP-FR-01: Comments sits immediately below Notes. SNV-FR-44 /
+    // SNV-FR-PULG: Terminals closes the cluster, after Changes.
     // DPN-FR-KYSK / SNV-FR-UCJH: Documents sits immediately after Project.
     expect(namesIn(leading)).toEqual([
       "Project",
@@ -85,6 +85,7 @@ describe("the activity bar's two clusters (SNV-FR-44)", () => {
       "Comments",
       "Drafts",
       "Changes",
+      "Terminals",
     ]);
     // SNV-FR-44: Logs sits beside Runs — the two surfaces that stream lines as
     // they are produced — and Git closes the cluster, at the very foot of the
@@ -95,7 +96,7 @@ describe("the activity bar's two clusters (SNV-FR-44)", () => {
   it("holds only panel toggles — nothing else (SNV-FR-03 / SNV-FR-42)", () => {
     renderBar();
     const bar = document.querySelector(".activity-bar") as HTMLElement;
-    expect(within(bar).getAllByRole("button")).toHaveLength(10);
+    expect(within(bar).getAllByRole("button")).toHaveLength(11);
   });
 
   it("routes each toggle to its own cluster's callback", async () => {
@@ -118,6 +119,7 @@ describe("the activity bar's two clusters (SNV-FR-44)", () => {
       ["Comments", "comments"],
       ["Drafts", "drafts"],
       ["Changes", "changes"],
+      ["Terminals", "terminals"],
     ] as const) {
       const props = renderBar();
       await userEvent.click(screen.getByRole("button", { name }));
@@ -298,5 +300,21 @@ describe("the Runs toggle's needs-attention mark (SNV-FR-70 / SNV-FR-46, SNV-FR-
     renderBar();
     expect(runsToggle()).not.toHaveAttribute("data-attention");
     expect(runsToggle().getAttribute("aria-label")).toBe("Runs");
+  });
+});
+
+describe("Terminals toggle", () => {
+  it("SNV-FR-PULG, SNV-FR-49: the Terminals toggle carries its name and selects the terminals surface", async () => {
+    const props = renderBar();
+    await userEvent.click(screen.getByRole("button", { name: "Terminals" }));
+    expect(props.onSelectPanelSurface).toHaveBeenCalledWith("terminals");
+  });
+
+  it("SNV-FR-PULG, TRM-FR-DQYZ: on Windows the Terminals toggle is not rendered", () => {
+    const spy = vi.spyOn(navigator, "platform", "get").mockReturnValue("Win32");
+    renderBar();
+    expect(screen.queryByRole("button", { name: "Terminals" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Changes" })).toBeInTheDocument();
+    spy.mockRestore();
   });
 });

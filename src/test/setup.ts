@@ -2,6 +2,10 @@ import { afterEach, beforeEach, vi } from "vitest";
 
 import "@testing-library/jest-dom/vitest";
 
+// TRM-FR-XBVB: the terminal library loads WebAssembly, which jsdom does not
+// run, so every test sees a recording fake.
+vi.mock("ghostty-web", () => import("./ghosttyMock"));
+
 import { cancelAllScheduledWrites } from "../state/writeSchedule";
 
 /**
@@ -191,6 +195,22 @@ beforeEach(async () => {
   // project in its window, and with the payload field off, so a test of one
   // feature compares the arguments of that feature alone. The tests of the
   // wrapper switch the field on.
+  // TRM-FR-LAZH / TRM-FR-ITAK: the terminal list and the terminal of each tab
+  // are module stores of the window, so nothing of one test reaches the next.
+  const [{ resetTerminalsForTest }, { resetTerminalViewsForTest }, ghostty] = await Promise.all([
+    import("../state/terminals"),
+    import("../state/terminalViews"),
+    import("./ghosttyMock"),
+  ]);
+  resetTerminalsForTest();
+  resetTerminalViewsForTest();
+  ghostty.fakeTerminals.length = 0;
+  ghostty.fakeWriteFailure.error = null;
+  ghostty.fakeInstances.length = 0;
+  ghostty.fakeLoadFailure.error = null;
+  ghostty.fakeLoadGate.promise = null;
+  ghostty.fakeLoadGate.waiting = 0;
+  ghostty.fakeInitCalls.count = 0;
   const { setPayloadProjectIdEnabled, setWindowProjectId } = await import("../api/invoke");
   setWindowProjectId(null);
   setPayloadProjectIdEnabled(false);

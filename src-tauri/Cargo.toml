@@ -410,6 +410,9 @@ microsandbox-image = "=0.7.8"
 # file. Already in the tree as a dependency of many crates.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+# TRS-FR-YYER: the pseudo-terminal of a terminal session on macOS and Linux.
+# Windows offers no terminal (TRS-FR-YZMR), so the crate is not built there.
+portable-pty = "=0.9.0"
 
 # PWN-FR-CTXT: the macro crate is a member, and a default member, so that the
 # plain `cargo fmt --check` and `cargo clippy` commands of the backend lane

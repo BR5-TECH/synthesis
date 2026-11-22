@@ -47,6 +47,9 @@ importers:
       elkjs:
         specifier: ^0.12.1
         version: 0.12.1
+      ghostty-web:
+        specifier: 0.4.0
+        version: 0.4.0
       highlight.js:
         specifier: ^11.12.0
         version: 11.12.0
@@ -1553,6 +1556,9 @@ packages:
   gensync@1.0.0-beta.2:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
     engines: {node: '>=6.9.0'}
+
+  ghostty-web@0.4.0:
+    resolution: {integrity: sha512-0puDBik2qapbD/QQBW9o5ZHfXnZBqZWx/ctBiVtKZ6ZLds4NYb+wZuw1cRLXZk9zYovIQ908z3rvFhexAvc5Hg==}
 
   hachure-fill@0.5.2:
     resolution: {integrity: sha512-3GKBOn+m2LX9iq+JC1064cSFprJY4jL1jCXTcpnfER5HYE2l/4EfWSGzkPa/ZDBmYI0ZOEj5VHV/eKnPGkHuOg==}
@@ -3469,6 +3475,8 @@ snapshots:
     optional: true
 
   gensync@1.0.0-beta.2: {}
+
+  ghostty-web@0.4.0: {}
 
   hachure-fill@0.5.2: {}
 

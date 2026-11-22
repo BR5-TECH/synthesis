@@ -168,6 +168,15 @@ pub fn remove_linked_worktree<R: tauri::Runtime>(
     path: &Path,
 ) -> Result<(), String> {
     let result = remove_checked(app, root, path);
+    if result.is_ok() {
+        // WTC-FR-TVKA: the worktree's terminal sessions end as a gone target.
+        crate::terminals::service::end_for_target(
+            app,
+            &crate::terminals::model::TargetRef::Worktree {
+                path: path.to_string_lossy().into_owned(),
+            },
+        );
+    }
     match &result {
         Ok(()) => logging::log_info(
             app,

@@ -31,6 +31,7 @@ export const PANEL_TARGETS = [
   "comments",
   "drafts",
   "changes",
+  "terminals",
 ] as const;
 export type PanelTarget = (typeof PANEL_TARGETS)[number];
 

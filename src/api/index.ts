@@ -42,3 +42,4 @@ export * from "./project";
 export * from "./projectWindows";
 export * from "./streams";
 export * from "./voice";
+export * from "./terminals";

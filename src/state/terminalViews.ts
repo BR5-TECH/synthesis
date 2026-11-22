@@ -9,7 +9,7 @@
  * when the tab is hidden. Closing the tab detaches the session and disposes
  * the terminal (TRM-FR-JXLA); it never ends the session.
  */
-import type { FitAddon, ITheme, Terminal } from "ghostty-web";
+import type { FitAddon, Ghostty as GhosttyInstance, ITheme, Terminal } from "ghostty-web";
 import * as api from "../api";
 import { logDebug, logWarn } from "../logging";
 import { currentTheme, subscribeTheme } from "../components/markdownMermaidRender";
@@ -52,14 +52,12 @@ let stopFonts: (() => void) | null = null;
 
 /**
  * Loads the library on the first terminal, so the main bundle does not carry
- * it and its WebAssembly.
+ * it and its WebAssembly. It does not call `init()`: that makes the one shared
+ * instance which TRM-FR-CGRR forbids, and each terminal loads its own.
  */
 function ghosttyReady(): Promise<Ghostty> {
   if (!ready) {
-    ready = import("ghostty-web").then(async (ghostty) => {
-      await ghostty.init();
-      return ghostty;
-    });
+    ready = import("ghostty-web");
     ready.catch(() => {
       ready = null;
     });
@@ -259,9 +257,21 @@ async function start(entry: ViewEntry, size: { cols: number; rows: number } | nu
     return;
   }
   if (entry.released || generation !== entry.generation) return;
+  // TRM-FR-CGRR: each terminal gets its own WebAssembly instance. ghostty-web
+  // frees the screen memory of a disposed terminal but does not clear it, so a
+  // terminal that shares an instance can show the cells of an earlier terminal.
+  let instance: GhosttyInstance;
+  try {
+    instance = await ghostty.Ghostty.load();
+  } catch (err) {
+    logWarn(["frontend"], "terminal instance failed to load", { terminalId: entry.id, error: String(err) });
+    return;
+  }
+  if (entry.released || generation !== entry.generation) return;
   const font = terminalFont();
   const term = new ghostty.Terminal({
     ...(size ?? {}),
+    ghostty: instance,
     scrollback: TERMINAL_SCROLLBACK_BYTES,
     fontFamily: font.fontFamily,
     fontSize: font.fontSize,

@@ -45,9 +45,10 @@ The Terminals panel and the terminal tab let the author open an interactive term
 
 ### Terminal tab
 31. **TRM-FR-XBVB** A terminal tab shows its session in a `ghostty-web` terminal, at a version that `package.json` pins exactly.
-32. **TRM-FR-WRVB** The terminal uses the Source code typographic role (per `OVW-overview.md` OVW-FR-13) and colors from the app theme. A change of the theme or of the role's font applies to an open tab at once.
+32. **TRM-FR-WRVB** The terminal uses the Source code typographic role (per `OVW-overview.md` OVW-FR-13) and colors from the app theme. A change of the role's font applies to an open tab at once. A change of the theme applies at once to a tab that shows. A hidden tab gets the new theme when it shows next, before it writes more output.
+    - *Why:* the terminal library cannot recolor an open terminal, so a theme change makes it again, and a terminal made out of the page cannot measure its size.
 33. **TRM-FR-ILRQ** The terminal fills the tab. When the tab's size changes, the terminal fits its columns and rows to the new size and calls `"resize terminal (id, cols, rows)"` once for each new size.
-34. **TRM-FR-AULS** When the tab opens, it calls `"attach terminal (id, output)"`, writes the history and then the live output into the terminal, and calls `"acknowledge terminal output (id, bytes)"` for the bytes it wrote.
+34. **TRM-FR-AULS** When the tab opens, it calls `"attach terminal (id, output)"`, writes the history and then the live output into the terminal, and calls `"acknowledge terminal output (id, bytes)"` for each frame it received. A frame that the terminal fails to write is also acknowledged. The first failed write of each terminal emits one `WARN` record.
 35. **TRM-FR-ITAK** A tab that is not the active tab stays attached and keeps writing output, so the tab shows the current output when it becomes active again.
 36. **TRM-FR-JXLA** Closing a tab calls `"detach terminal (id)"` and ends no session. The row stays, with its pinned state.
 37. **TRM-FR-RFVP** While the terminal has the focus, every key without the platform's command modifier goes to the session, Ctrl with a letter included. On Linux, no application menu accelerator acts on a key that goes to the session.

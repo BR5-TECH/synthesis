@@ -197,7 +197,7 @@ beforeEach(async () => {
   // wrapper switch the field on.
   // TRM-FR-LAZH / TRM-FR-ITAK: the terminal list and the terminal of each tab
   // are module stores of the window, so nothing of one test reaches the next.
-  const [{ resetTerminalsForTest }, { resetTerminalViewsForTest }, { fakeTerminals }] =
+  const [{ resetTerminalsForTest }, { resetTerminalViewsForTest }, { fakeTerminals, fakeWriteFailure }] =
     await Promise.all([
       import("../state/terminals"),
       import("../state/terminalViews"),
@@ -206,6 +206,7 @@ beforeEach(async () => {
   resetTerminalsForTest();
   resetTerminalViewsForTest();
   fakeTerminals.length = 0;
+  fakeWriteFailure.error = null;
   const { setPayloadProjectIdEnabled, setWindowProjectId } = await import("../api/invoke");
   setWindowProjectId(null);
   setPayloadProjectIdEnabled(false);

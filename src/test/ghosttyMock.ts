@@ -16,6 +16,9 @@ function emitter<T>() {
 
 export const fakeTerminals: FakeTerminal[] = [];
 
+/** Test hook: while set, `write()` of every fake terminal throws it. */
+export const fakeWriteFailure: { error: Error | null } = { error: null };
+
 export async function init(): Promise<void> {}
 
 export class FakeTerminal {
@@ -25,6 +28,8 @@ export class FakeTerminal {
   written: Uint8Array[] = [];
   pasted: string[] = [];
   opened: HTMLElement | null = null;
+  /** Whether the parent was in the page when `open()` ran. */
+  openedConnected = false;
   disposed = false;
   selection = "";
   keyHandler: ((event: KeyboardEvent) => boolean) | null = null;
@@ -35,15 +40,19 @@ export class FakeTerminal {
 
   constructor(options: Record<string, unknown> = {}) {
     this.options = { ...options };
+    if (typeof options.cols === "number") this.cols = options.cols;
+    if (typeof options.rows === "number") this.rows = options.rows;
     fakeTerminals.push(this);
   }
   open(parent: HTMLElement) {
     this.opened = parent;
+    this.openedConnected = parent.isConnected;
     const canvas = document.createElement("canvas");
     canvas.dataset.fakeTerminal = "true";
     parent.appendChild(canvas);
   }
   write(data: string | Uint8Array, callback?: () => void) {
+    if (fakeWriteFailure.error) throw fakeWriteFailure.error;
     this.written.push(typeof data === "string" ? new TextEncoder().encode(data) : data);
     callback?.();
   }

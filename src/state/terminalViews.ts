@@ -37,6 +37,8 @@ interface ViewEntry {
   sentSize: { cols: number; rows: number } | null;
   starting: Promise<void> | null;
   released: boolean;
+  /** TRM-FR-WRVB: the theme changed while the tab was hidden; the next show makes the terminal again. */
+  stale: boolean;
   /** Counts the terminals made for this tab; output of an older one is dropped. */
   generation: number;
   dispose: (() => void)[];
@@ -196,9 +198,18 @@ function followAppearance() {
   }
   if (!stopTheme) {
     // TRM-FR-WRVB: the theme of an open terminal cannot change in place, so a
-    // theme change makes each terminal again. The new attach sends the history.
+    // theme change makes the terminal again. The new attach sends the history.
+    // A terminal made out of the page cannot measure its size, and ghostty-web
+    // 0.4.0 then fails on each write. So a hidden tab keeps its terminal until
+    // it shows again.
     stopTheme = subscribeTheme(() => {
-      for (const entry of views.values()) rebuild(entry);
+      for (const entry of views.values()) {
+        if (entry.host.isConnected) rebuild(entry);
+        else if (!entry.stale) {
+          entry.stale = true;
+          logDebug(["frontend"], "terminal theme deferred until shown", { terminalId: entry.id });
+        }
+      }
     });
   }
   if (!stopFonts && typeof MutationObserver !== "undefined" && typeof document !== "undefined") {
@@ -227,13 +238,18 @@ function teardownTerm(entry: ViewEntry) {
 
 function rebuild(entry: ViewEntry) {
   if (entry.released) return;
+  logDebug(["frontend"], "terminal rebuilt for theme", { terminalId: entry.id });
+  // The new terminal starts at the size of the old one, so it is not made
+  // smaller than the terminal that was just freed.
+  const size = entry.lastSize;
+  entry.stale = false;
   teardownTerm(entry);
+  // The session keeps its size, so `sentSize` stays: an unchanged size is not sent again.
   entry.lastSize = null;
-  entry.sentSize = null;
-  entry.starting = start(entry);
+  entry.starting = start(entry, size);
 }
 
-async function start(entry: ViewEntry): Promise<void> {
+async function start(entry: ViewEntry, size: { cols: number; rows: number } | null = null): Promise<void> {
   const generation = ++entry.generation;
   let ghostty: Ghostty;
   try {
@@ -245,6 +261,7 @@ async function start(entry: ViewEntry): Promise<void> {
   if (entry.released || generation !== entry.generation) return;
   const font = terminalFont();
   const term = new ghostty.Terminal({
+    ...(size ?? {}),
     scrollback: TERMINAL_SCROLLBACK_BYTES,
     fontFamily: font.fontFamily,
     fontSize: font.fontSize,
@@ -273,6 +290,7 @@ async function start(entry: ViewEntry): Promise<void> {
   fit.fit();
   fit.observeResize();
   reportSize(entry, term.cols, term.rows);
+  let writeFailed = false;
   try {
     await api.attachTerminal(id, (frame) => {
       if (generation !== entry.generation || !entry.term) return;
@@ -280,7 +298,16 @@ async function start(entry: ViewEntry): Promise<void> {
       // TRS-FR-VYIB: ghostty-web parses a write before it returns and paints
       // on a later frame. The acknowledgement follows the parse, so a window
       // that paints no frames (hidden or minimized) holds no process back.
-      entry.term.write(frame);
+      try {
+        entry.term.write(frame);
+      } catch (err) {
+        // TRM-FR-AULS: a failed write is acknowledged too, so a fault in the
+        // view never holds the process back. One record for each terminal.
+        if (!writeFailed) {
+          writeFailed = true;
+          logWarn(["frontend"], "terminal write failed", { terminalId: id, error: String(err) });
+        }
+      }
       api.acknowledgeTerminalOutput(id, bytes).catch(() => {});
     });
     logDebug(["frontend"], "terminal attached", { terminalId: id });
@@ -333,6 +360,7 @@ export function showTerminalView(id: string, container: HTMLElement): void {
       sentSize: null,
       starting: null,
       released: false,
+      stale: false,
       generation: 0,
       dispose: [],
     };
@@ -340,7 +368,8 @@ export function showTerminalView(id: string, container: HTMLElement): void {
     followAppearance();
   }
   container.appendChild(entry.host);
-  if (!entry.term && !entry.starting) entry.starting = start(entry);
+  if (entry.stale) rebuild(entry);
+  else if (!entry.term && !entry.starting) entry.starting = start(entry);
   else entry.fit?.fit();
 }
 

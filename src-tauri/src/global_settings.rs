@@ -119,6 +119,14 @@ pub struct PersistedState {
         deserialize_with = "document_limit::lenient_percent"
     )]
     pub history_limit_percent: Option<u8>,
+    /// GSS-FR-IRYZ: the extracted text limit, whole kilobytes from 1 to
+    /// 10240. `None` reads as 1024. A scalar, so it is declared before the
+    /// tables.
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "extracted_text_limit::lenient_kilobytes"
+    )]
+    pub extracted_text_limit_kb: Option<u32>,
     /// GSS-FR-CKQG: the active Voice AI provider, or `None`. A scalar, so
     /// it is declared before the tables.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -228,6 +236,7 @@ pub struct PersistedState {
 mod agent_group;
 mod document_limit;
 mod embeddings;
+mod extracted_text_limit;
 mod history_limit;
 mod legacy;
 mod mcp_trust;
@@ -236,6 +245,7 @@ pub use model_downgrades::LoadedSuppressions;
 mod recents;
 mod voice_ai;
 pub use document_limit::*;
+pub use extracted_text_limit::*;
 pub use history_limit::*;
 pub use recents::*;
 

@@ -13,11 +13,19 @@ export const PERCENT_LIMIT_MAX = 100;
  * commits nothing: the setting always holds a value.
  */
 export function percentLimitToCommit(text: string): number | undefined {
+  return limitToCommit(text, PERCENT_LIMIT_MIN, PERCENT_LIMIT_MAX);
+}
+
+/**
+ * GLS-FR-WQHT, GLS-FR-QHNI, GLS-FR-LZLG: a whole number from `min` to `max`,
+ * or `undefined` for an entry that commits nothing.
+ */
+export function limitToCommit(text: string, min: number, max: number): number | undefined {
   const trimmed = text.trim();
   if (!/^\d+$/.test(trimmed)) return undefined;
-  const percent = Number(trimmed);
-  if (percent < PERCENT_LIMIT_MIN || percent > PERCENT_LIMIT_MAX) return undefined;
-  return percent;
+  const value = Number(trimmed);
+  if (value < min || value > max) return undefined;
+  return value;
 }
 
 /** What one percent limit field reads, writes, and says. */
@@ -31,14 +39,20 @@ export interface PercentLimitConfig {
   /** The setting in words, for the log records. */
   logName: string;
   load: () => Promise<number>;
-  save: (percent: number) => Promise<number>;
+  save: (value: number) => Promise<number>;
+  /** The smallest value, 1 where not given. */
+  min?: number;
+  /** The largest value, 100 where not given. */
+  max?: number;
+  /** The unit after the field, the percent of the context window where not given. */
+  suffix?: string;
+  /** The typed refusal of an out-of-range save, `percent_out_of_range` where not given. */
+  refusalCode?: string;
 }
 
 /** A refusal in words the author can act on. */
-function describeRefusal(e: unknown): string {
-  return String(e).includes("percent_out_of_range")
-    ? "Enter a whole number from 1 to 100."
-    : "The limit could not be saved.";
+function describeRefusal(e: unknown, code: string, rangeText: string): string {
+  return String(e).includes(code) ? rangeText : "The limit could not be saved.";
 }
 
 /**
@@ -51,6 +65,9 @@ function describeRefusal(e: unknown): string {
  * value and shows the refusal beside the field.
  */
 export function AiApiPercentLimitRow({ config }: { config: PercentLimitConfig }) {
+  const min = config.min ?? PERCENT_LIMIT_MIN;
+  const max = config.max ?? PERCENT_LIMIT_MAX;
+  const rangeText = `Enter a whole number from ${min} to ${max}.`;
   /** The stored value, or `null` until the first read answers. */
   const [stored, setStored] = useState<number | null>(null);
   const [text, setText] = useState("");
@@ -80,7 +97,7 @@ export function AiApiPercentLimitRow({ config }: { config: PercentLimitConfig })
 
   const shown = stored === null ? "" : String(stored);
   const unchanged = text.trim() === shown;
-  const toCommit = percentLimitToCommit(text);
+  const toCommit = limitToCommit(text, min, max);
   const invalid = !unchanged && toCommit === undefined;
 
   const commit = async () => {
@@ -98,9 +115,9 @@ export function AiApiPercentLimitRow({ config }: { config: PercentLimitConfig })
     } catch (e) {
       // GLS-FR-WQHT: the field keeps the value it held before.
       setText(shown);
-      setError(describeRefusal(e));
+      setError(describeRefusal(e, config.refusalCode ?? "percent_out_of_range", rangeText));
       logWarn(["frontend", "ai"], `the ${config.logName} was refused`, {
-        percent: toCommit,
+        value: toCommit,
         error: String(e),
       });
     } finally {
@@ -137,7 +154,7 @@ export function AiApiPercentLimitRow({ config }: { config: PercentLimitConfig })
               if (e.key === "Enter" && !invalid) void commit();
             }}
           />
-          <span className="t-ui-xs t-muted">% of the context window</span>
+          <span className="t-ui-xs t-muted">{config.suffix ?? "% of the context window"}</span>
         </div>
       </div>
       <div id={`${fieldId}-note`} className="t-ui-xs t-muted" data-testid={`${fieldId}-note`}>
@@ -149,7 +166,7 @@ export function AiApiPercentLimitRow({ config }: { config: PercentLimitConfig })
           style={{ display: "block", marginTop: 4 }}
           data-testid={`${fieldId}-invalid`}
         >
-          Enter a whole number from 1 to 100.
+          {rangeText}
         </span>
       )}
       {error && (

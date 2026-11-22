@@ -29,6 +29,7 @@ pub mod dashboard;
 pub mod delivery;
 pub mod devcontainer;
 pub mod dialog;
+pub mod doc_extraction;
 pub mod docker;
 pub mod document_export;
 pub mod documents;
@@ -211,6 +212,8 @@ pub fn run() {
             voice_ai::start_watchdog(app.handle().clone());
             // AGC-FR-NBZN: the turn builders find a stream's working copy.
             change_proposals::install_stream_lookup(app.handle().clone());
+            // CMS-FR-YSRD: the append reads the extracted text limit.
+            comments::install_document_hooks(app.handle().clone());
             // CAR-FR-IFGR: the turn builders read the state of a requested run.
             change_action_requests::install_run_state_lookup(app.handle().clone());
             // VOP-FR-MNTN: WebKitGTK denies capture without a handler.
@@ -733,6 +736,8 @@ pub fn run() {
             global_settings::save_document_limit_percent,
             global_settings::load_history_limit_percent,
             global_settings::save_history_limit_percent,
+            global_settings::load_extracted_text_limit_kb,
+            global_settings::save_extracted_text_limit_kb,
             embeddings::list_embedding_models,
             embeddings::retry_embeddings_model_download,
             embeddings::load_project_embeddings_mode,

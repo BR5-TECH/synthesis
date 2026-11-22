@@ -16,6 +16,13 @@
  * preload on the rail: a review carrying dozens of screenshots costs nothing for
  * the threads the author is not looking at.
  */
+import {
+  ATTACH_ACCEPT,
+  DOCX_MEDIA_TYPE,
+  base64ByteLength,
+  formatByteSize,
+  isDocumentMediaType,
+} from "./commentDocuments";
 import { AdvisorsListView } from "./discussion/GroupMarks";
 import { ExportRequestCard } from "./ExportDialog/ExportRequestCard";
 import { MapNodeChip, MapPlanEntry } from "./MapPlanProposal";
@@ -78,6 +85,8 @@ export function guessMediaType(pathOrName: string): string {
       return "image/avif";
     case "pdf":
       return "application/pdf";
+    case "docx":
+      return DOCX_MEDIA_TYPE;
     case "txt":
     case "log":
     case "md":
@@ -164,7 +173,12 @@ export async function fileToInput(file: File): Promise<AttachmentInput> {
     kind: "inline",
     // A browser leaves `type` empty for an extension it does not know; falling
     // back to the name keeps a legitimate `.png` from being refused for it.
-    mediaType: file.type !== "" ? file.type : guessMediaType(file.name),
+    // CVP-FR-YBTS: a `.docx` that the system names as generic bytes is sent
+    // as DOCX.
+    mediaType:
+      file.type !== "" && file.type !== "application/octet-stream"
+        ? file.type
+        : guessMediaType(file.name),
     filename: file.name !== "" ? file.name : "attachment",
     data: encodeBytes(new Uint8Array(buffer)),
   };
@@ -377,6 +391,7 @@ export function AttachControl({
         hidden
         aria-hidden="true"
         tabIndex={-1}
+        accept={ATTACH_ACCEPT}
         data-testid="comment-attach-file-input"
         onChange={(e) => {
           const files = Array.from(e.target.files ?? []);
@@ -444,14 +459,35 @@ export function PendingAttachmentStrip({
   if (pending.length === 0) return null;
   return (
     <div className="comment-attach__pending" data-testid="comment-pending-attachments">
-      {pending.map((item, i) => (
-        <span key={i} className="comment-attach__chip">
+      {pending.map((item, i) => {
+        const document = item.input.kind === "inline" && isDocumentMediaType(item.input.mediaType);
+        return (
+        <span
+          key={i}
+          className={document ? "comment-attach__chip comment-attach__chip--document" : "comment-attach__chip"}
+          // CMT-FR-HQDV: a document chip is keyboard reachable, named by its
+          // filename, and has no view action.
+          role={document ? "group" : undefined}
+          aria-label={document ? item.name : undefined}
+          tabIndex={document ? 0 : undefined}
+          data-testid={document ? "comment-pending-document" : undefined}
+        >
           {item.input.kind === "url" ? (
             <Icon.Link size={11} />
           ) : (
             <Icon.Paperclip size={11} />
           )}
           <span className="comment-attach__chip-name">{item.name}</span>
+          {document && item.input.kind === "inline" && (
+            <>
+              <span className="comment-attach__chip-type" title={item.input.mediaType}>
+                {item.input.mediaType}
+              </span>
+              <span className="comment-attach__chip-size">
+                {formatByteSize(base64ByteLength(item.input.data))}
+              </span>
+            </>
+          )}
           <button
             aria-label={`Remove attachment ${item.name}`}
             title="Remove attachment"
@@ -460,7 +496,8 @@ export function PendingAttachmentStrip({
             <Icon.X size={11} />
           </button>
         </span>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -825,9 +862,11 @@ function AttachmentView({
   // reads them and then opens, which is the whole point of not having read them
   // to draw a filename.
   const deferred = source.state === "deferred";
+  const document =
+    !failed && attachment.kind === "blob" && isDocumentMediaType(attachment.mediaType);
   return (
     <a
-      className="comment-attach__chip"
+      className={document ? "comment-attach__chip comment-attach__chip--document" : "comment-attach__chip"}
       data-testid={failed ? "comment-attachment-broken" : "comment-attachment-chip"}
       data-broken={failed || undefined}
       href={failed || deferred ? undefined : source.url}
@@ -838,6 +877,8 @@ function AttachmentView({
       target="_blank"
       rel="noreferrer"
       title={failed ? `${name} could not be loaded` : name}
+      // CMT-FR-HQDV: a document chip is named by its filename.
+      aria-label={document ? name : undefined}
       onClick={
         deferred
           ? (e) => {
@@ -871,6 +912,10 @@ function AttachmentView({
             ? attachment.path
             : attachment.mediaType}
       </span>
+      {document && attachment.kind === "blob" && (
+        // CMT-FR-HQDV: a document chip shows its size as well.
+        <span className="comment-attach__chip-size">{formatByteSize(attachment.bytes)}</span>
+      )}
     </a>
   );
 }

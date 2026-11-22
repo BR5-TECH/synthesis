@@ -8,7 +8,14 @@
  * (CMS-FR-43, CMS-FR-47); these are the render path refusing them again.
  */
 import { describe, expect, it } from "vitest";
-import { guessMediaType, inlineDataUrl, safeUrl } from "./CommentAttachments";
+import { fileToInput, guessMediaType, inlineDataUrl, safeUrl } from "./CommentAttachments";
+import {
+  ATTACH_ACCEPT,
+  DOCX_MEDIA_TYPE,
+  base64ByteLength,
+  formatByteSize,
+  isDocumentMediaType,
+} from "./commentDocuments";
 
 describe("safeUrl: what may reach an href or a src", () => {
   it("admits http and https and nothing else", () => {
@@ -76,5 +83,49 @@ describe("guessMediaType: a link's type, from its path alone", () => {
     // address actually serves past the accepted set (CMS-FR-47).
     expect(guessMediaType("archive.zip")).toBe("application/octet-stream");
     expect(guessMediaType("no-extension")).toBe("application/octet-stream");
+  });
+});
+
+describe("DOCX in the Attach picker", () => {
+  it("CVP-FR-YBTS: the picker offers images and exactly the accepted document and text files", () => {
+    expect(ATTACH_ACCEPT.split(",").sort()).toEqual(
+      [".docx", ".log", ".md", ".pdf", ".txt", "image/*"].sort(),
+    );
+  });
+
+  it("CVP-FR-YBTS: a .docx name gives the DOCX type, and .doc does not", () => {
+    expect(guessMediaType("spec.DOCX")).toBe(DOCX_MEDIA_TYPE);
+    expect(guessMediaType("old.doc")).toBe("application/octet-stream");
+  });
+
+  it("CVP-FR-YBTS: a .docx the system names as empty or generic bytes is sent as DOCX", async () => {
+    for (const type of ["", "application/octet-stream"]) {
+      const input = await fileToInput(new File(["zip"], "spec.docx", { type }));
+      expect(input).toMatchObject({ kind: "inline", mediaType: DOCX_MEDIA_TYPE, filename: "spec.docx" });
+    }
+    const named = await fileToInput(new File(["%PDF"], "a.pdf", { type: "application/pdf" }));
+    expect(named).toMatchObject({ mediaType: "application/pdf" });
+  });
+});
+
+describe("the size a document chip shows", () => {
+  it("CMT-FR-HQDV: PDF and DOCX are documents, whatever the case; other types are not", () => {
+    expect(isDocumentMediaType("application/pdf")).toBe(true);
+    expect(isDocumentMediaType(`${DOCX_MEDIA_TYPE.toUpperCase()}; x=y`)).toBe(true);
+    expect(isDocumentMediaType("text/plain")).toBe(false);
+    expect(isDocumentMediaType("image/png")).toBe(false);
+  });
+
+  it("CMT-FR-HQDV: sizes read in B, KB, and MB", () => {
+    expect(formatByteSize(512)).toBe("512 B");
+    expect(formatByteSize(2048)).toBe("2 KB");
+    expect(formatByteSize(3 * 1024 * 1024)).toBe("3.0 MB");
+  });
+
+  it("CMT-FR-HQDV: the size of a pending file is the decoded length of its data", () => {
+    expect(base64ByteLength(btoa("abc"))).toBe(3);
+    expect(base64ByteLength(btoa("abcd"))).toBe(4);
+    expect(base64ByteLength(btoa("abcde"))).toBe(5);
+    expect(base64ByteLength("")).toBe(0);
   });
 });

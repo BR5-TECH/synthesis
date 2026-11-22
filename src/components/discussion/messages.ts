@@ -69,6 +69,39 @@ export function turnFailureMessage(raw: string): string {
 }
 
 /**
+ * CMT-FR-LMMQ / CMT-FR-QZXV: the sentence of an attachment refusal, or `null`
+ * for any other refusal.
+ *
+ * A refusal of the form `<code>: <filename>` names the file. A bare code reads
+ * without a name.
+ */
+export function attachmentRefusalMessage(raw: string): string | null {
+  const split = raw.indexOf(": ");
+  const code = split === -1 ? raw : raw.slice(0, split);
+  const filename = split === -1 ? null : raw.slice(split + 2);
+  const named = (sentence: string) => (filename === null ? sentence : `${filename}: ${sentence}`);
+  const file = filename ?? "This file";
+  switch (code) {
+    case COMMENT_ERRORS.noTextExtracted:
+      return `${file} has no text to read. Scanned documents are not supported.`;
+    case COMMENT_ERRORS.documentUnreadable:
+      return `${file} could not be read. It can be damaged or encrypted.`;
+    case COMMENT_ERRORS.extractedTextTooLarge:
+      return filename === null
+        ? "The text of this file is above the Extracted text limit."
+        : `The text of ${filename} is above the Extracted text limit.`;
+    case COMMENT_ERRORS.unsupportedMediaType:
+      return named("This file type cannot be attached.");
+    case COMMENT_ERRORS.attachmentTooLarge:
+      return named("This file is above the attachment size limit.");
+    case COMMENT_ERRORS.malformedAttachment:
+      return named("This attachment could not be read.");
+    default:
+      return null;
+  }
+}
+
+/**
  * CMT-FR-34: what a refused operation says to the author.
  *
  * The wire strings are matched on rather than printed: `discussion_resolved` is a fact
@@ -77,6 +110,8 @@ export function turnFailureMessage(raw: string): string {
  * slug would leak an implementation detail and tell them neither.
  */
 export function commentErrorMessage(raw: string): string {
+  const attachment = attachmentRefusalMessage(raw);
+  if (attachment !== null) return attachment;
   switch (raw) {
     case COMMENT_ERRORS.discussionResolved:
       return "This discussion was resolved, so it takes no new comments.";

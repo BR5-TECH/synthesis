@@ -184,6 +184,11 @@ pdf-extract = "0.12"
 
 # DXP-FR-CPPT: the `docx` export of a DOC artifact is written with this crate.
 docx-rs = "0.4.22"
+# CMS-FR-WIIE: the unpacked size of a DOCX attachment is read from its central
+# directory before `docx-rs` reads it. The version `docx-rs` reads with, so
+# nothing is added to the build. The DXP-FR-CPPT tests read the
+# `word/document.xml` of an exported `.docx` with it too.
+zip = { version = "8.6", default-features = false, features = ["deflate-flate2"] }
 # DXP-FR-JYHX / DXP-FR-YVIV: decodes a project image before it reaches a writer,
 # and encodes the empty image a vertical break takes in a PDF. The version and
 # features `markdown2pdf` already brings, so nothing is added to the build.
@@ -257,9 +262,6 @@ ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "
 
 [dev-dependencies]
 tempfile = "3"
-# DXP-FR-CPPT: the tests read the `word/document.xml` of an exported `.docx`.
-# The same version `docx-rs` writes with, so nothing is added to the build.
-zip = { version = "8.6", default-features = false, features = ["deflate-flate2"] }
 # AAP-FR-HZTB: the TLS tests run a local HTTPS server under a certificate they
 # generate, so every cause code is produced by a real handshake.
 rcgen = { version = "0.13", default-features = false, features = ["pem", "ring"] }

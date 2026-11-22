@@ -59,7 +59,7 @@ fn draft_with_two_embedded_images(h: &Harness) -> (String, Vec<u8>, Vec<u8>) {
     (draft_id, png_bytes("first"), png_bytes("second"))
 }
 
-fn open_draft_discussion(h: &Harness, draft_id: &str, body: &str) -> Discussion {
+pub(super) fn open_draft_discussion(h: &Harness, draft_id: &str, body: &str) -> Discussion {
     crate::comments::open_discussion_in(
         &h.root(),
         &h.root(),
@@ -72,7 +72,7 @@ fn open_draft_discussion(h: &Harness, draft_id: &str, body: &str) -> Discussion 
     .expect("discussion")
 }
 
-fn image_parts(section: &InputSection) -> Vec<&InputImage> {
+pub(super) fn image_parts(section: &InputSection) -> Vec<&InputImage> {
     section
         .parts
         .iter()
@@ -140,9 +140,9 @@ fn agc_ts53_a_drafts_prompt_interleaves_its_text_with_the_images_it_embeds() {
     assert!(artifact.body.contains("A second paragraph."));
 }
 
-/// AGC-FR-09, AGC-FR-35: a comment's stored image attachments reach the request as image
-/// content in the positions their comments occupy, while a PDF and a link reach
-/// it as metadata and no address is requested.
+/// AGC-FR-09, AGC-FR-35, AGC-FR-VQWY: a comment's stored image attachments reach the
+/// request as image content in the positions their comments occupy, a PDF gives
+/// its text, a link reaches it as metadata, and no address is requested.
 #[test]
 fn agc_ts54_a_comments_image_attachments_reach_the_section_holding_them() {
     let h = Harness::new(vec![]);
@@ -174,7 +174,7 @@ fn agc_ts54_a_comments_image_attachments_reach_the_section_holding_them() {
         vec![crate::comments::AttachmentInput::Inline {
             media_type: "application/pdf".into(),
             filename: "notes.pdf".into(),
-            data: encoded(b"%PDF-1.7"),
+            data: encoded(&crate::doc_extraction::tests::fixtures::text_pdf("ZQX notes body")),
         }],
         crate::comments::Stamp { by: &human("ada"), at: "2026-01-01T00:00:01Z" },
     )
@@ -218,8 +218,11 @@ fn agc_ts54_a_comments_image_attachments_reach_the_section_holding_them() {
     // AGC-FR-35: an image part names the comment it belongs to.
     assert!(history_images[0].context.contains("diff.png"), "{}", history_images[0].context);
     assert!(history_images[0].context.contains("@ada"), "{}", history_images[0].context);
-    // AGC-FR-09: a PDF and a link are metadata, and always were.
-    assert!(history.body.contains("[attachment: notes.pdf (application/pdf), not shown]"));
+    // AGC-FR-09, AGC-FR-VQWY: a PDF gives its text in place, and a link is
+    // metadata.
+    assert!(history.body.contains("[attachment: notes.pdf (application/pdf)]\n"));
+    assert!(history.body.contains("ZQX notes body"));
+    assert!(history.body.contains("[end of attachment: notes.pdf]"));
     assert!(history.body.contains("[attachment: spec v2 (text/plain), not shown]"));
     assert!(!history.body.contains("example.invalid/spec\n"), "nothing was fetched from the link",);
 

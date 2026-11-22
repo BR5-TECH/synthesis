@@ -520,6 +520,107 @@ describe("CMT-FR-34, CMS-FR-47 / CMT-FR-51: an append refused for its attachment
   });
 });
 
+describe("CMT-FR-HQDV, CMT-FR-51: PDF and DOCX attachments", () => {
+  const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+  it("CVP-FR-YBTS: the Attach file picker offers images and the accepted document and text files", async () => {
+    await mount({ threads: [makeThread()] });
+    await openColumn();
+    expect(screen.getByTestId("comment-attach-file-input")).toHaveAttribute(
+      "accept",
+      "image/*,.pdf,.docx,.txt,.log,.md",
+    );
+  });
+
+  it("CMT-FR-HQDV: a pending document chip shows name, type, and size, is reachable, and has no view action", async () => {
+    await mount({ threads: [makeThread()] });
+    await openColumn();
+    await act(async () => {
+      fireEvent.change(screen.getByTestId("comment-attach-file-input"), {
+        target: { files: [new File(["abc"], "spec.docx", { type: "" })] },
+      });
+    });
+    const chip = await screen.findByTestId("comment-pending-document");
+    expect(chip).toHaveTextContent("spec.docx");
+    expect(chip).toHaveTextContent(DOCX);
+    expect(chip).toHaveTextContent("3 B");
+    expect(chip).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("group", { name: "spec.docx" })).toBe(chip);
+    // The one control is the remove button: no view action.
+    expect(within(chip).getAllByRole("button")).toHaveLength(1);
+    expect(within(chip).getByRole("button")).toHaveAccessibleName("Remove attachment spec.docx");
+  });
+
+  it("CMT-FR-HQDV: a posted document chip shows its size, is named by its filename, and still opens the file", async () => {
+    const { backend } = await mount({
+      threads: [
+        makeThread({
+          comments: [
+            {
+              id: "c1",
+              author: human("raver119"),
+              body: "the spec",
+              quotes: [],
+              attachments: [
+                { kind: "blob", digest: "d0c5", mediaType: DOCX, filename: "spec.docx", bytes: 2048 },
+              ],
+              createdAt: "2026-01-01T00:00:00Z",
+            },
+          ],
+        }),
+      ],
+    });
+    await openColumn();
+    const chip = await screen.findByTestId("comment-attachment-chip");
+    expect(chip).toHaveTextContent("spec.docx");
+    expect(chip).toHaveTextContent(DOCX);
+    expect(chip).toHaveTextContent("2 KB");
+    expect(chip).toHaveAccessibleName("spec.docx");
+    expect(chip).toHaveAttribute("role", "button");
+    expect(chip).toHaveAttribute("tabindex", "0");
+    // CMT-FR-48: activating it reads the original file and opens it.
+    const opened = vi.fn();
+    vi.stubGlobal("open", opened);
+    fireEvent.click(chip);
+    await waitFor(() =>
+      expect(
+        backend.calls.some(
+          (c) =>
+            c.cmd === "read_comment_attachment" && (c.args as { digest: string }).digest === "d0c5",
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() =>
+      expect(opened).toHaveBeenCalledWith(
+        expect.stringMatching(/^data:application\/octet-stream;base64,/),
+        "_blank",
+        "noreferrer",
+      ),
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it("CMT-FR-51, CMT-FR-LMMQ: a document refusal is a sentence that names the file, and the body and strip stay", async () => {
+    await mount({ threads: [makeThread()], addCommentError: "no_text_extracted: scan.pdf" });
+    await openColumn();
+    await act(async () => {
+      fireEvent.change(screen.getByTestId("comment-attach-file-input"), {
+        target: { files: [new File(["%PDF"], "scan.pdf", { type: "application/pdf" })] },
+      });
+    });
+    await screen.findByText("scan.pdf");
+    fireEvent.change(screen.getByLabelText("Reply to thread t1"), {
+      target: { value: "the scan" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Post" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "scan.pdf has no text to read. Scanned documents are not supported.",
+    );
+    expect(screen.getByLabelText("Reply to thread t1")).toHaveValue("the scan");
+    expect(screen.getByText("scan.pdf")).toBeInTheDocument();
+  });
+});
+
 describe("CMT-FR-05, CMT-FR-45 … CMT-FR-47: the column's opening composer for a passage owns its own strip", () => {
   /**
    * DDS-FR-QMBC / CMT-FR-05: the Comment affordance puts the column on the

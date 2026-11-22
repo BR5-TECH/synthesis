@@ -278,6 +278,7 @@ mod attachment_read;
 mod attachments;
 mod author_comments;
 mod change_owner;
+mod document_attachments;
 mod errors_and_lifecycle;
 mod local_participant;
 mod log_and_fold;

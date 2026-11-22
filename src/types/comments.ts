@@ -884,6 +884,12 @@ export const COMMENT_ERRORS = {
   malformedAttachment: "malformed_attachment",
   /** CMS-FR-48: the digest names no attachment in this discussion's scope. */
   attachmentNotFound: "attachment_not_found",
+  /** CMS-FR-LZZV: a PDF or DOCX with no text. Sent as `<code>: <filename>`. */
+  noTextExtracted: "no_text_extracted",
+  /** CMS-FR-LZZV: a PDF or DOCX that cannot be read. Sent as `<code>: <filename>`. */
+  documentUnreadable: "document_unreadable",
+  /** CMS-FR-LZZV: a document whose text is above the Extracted text limit. */
+  extractedTextTooLarge: "extracted_text_too_large",
   /** CMS-FR-57: the `draftId` names no draft in the open project. */
   draftNotFound: "draft_not_found",
   /** CMS-FR-57: a discussion target naming a path the project does not hold. */

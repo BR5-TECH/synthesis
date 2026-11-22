@@ -63,6 +63,9 @@ pub(super) fn stage_attachment(
                 return Err(ERR_ATTACHMENT_TOO_LARGE.to_string());
             }
             let digest = fsa::sha256_bytes(&bytes);
+            // CMS-FR-EHOG: a PDF or DOCX is extracted before anything is
+            // written, and a refusal refuses the whole append (CMS-FR-LZZV).
+            validate_document(&media_type, &filename, &digest, &bytes)?;
             let path = scope.attachment_path(root, &digest)?;
             // CMS-FR-44: byte-identical content is one file. An existing digest
             // is left untouched rather than rewritten — the bytes cannot differ,
@@ -194,14 +197,25 @@ pub(super) fn read_attachment_in(
         _ => None,
     });
     let (media_type, filename) = found.ok_or(ERR_ATTACHMENT_NOT_FOUND)?;
-    let path = scope.attachment_path(root, digest)?;
-    let bytes = root.read_bytes(&path).map_err(|_| ERR_ATTACHMENT_NOT_FOUND.to_string())?;
+    let bytes = read_blob_bytes_in(root, scope, digest)?;
     use base64::Engine as _;
     Ok(AttachmentContent {
         media_type,
         filename,
         data: base64::engine::general_purpose::STANDARD.encode(bytes),
     })
+}
+
+/// The raw stored bytes of the blob `digest` in this scope, or
+/// `attachment_not_found`. The caller has already checked that the thread
+/// carries the digest.
+pub(super) fn read_blob_bytes_in(
+    root: &fsa::RootFs,
+    scope: LogScope<'_>,
+    digest: &str,
+) -> Result<Vec<u8>, String> {
+    let path = scope.attachment_path(root, digest)?;
+    root.read_bytes(&path).map_err(|_| ERR_ATTACHMENT_NOT_FOUND.to_string())
 }
 
 /// CMS-FR-67: a stored `blob` served to a caller **inside the backend**, on
@@ -214,9 +228,9 @@ pub(super) fn read_attachment_in(
 /// nor a `prompt_proposal` — this module holds content for none of them — and it
 /// fetches nothing: an address stays an address here as everywhere (CMS-FR-43).
 ///
-/// Its one consumer is the conversational input assembly of
-/// `AGC-agent-conversations.md` (AGC-FR-35), which reads an image a comment
-/// carries so an agent can be shown it rather than told about it. It exists so
+/// Its consumers are `read_attachment_document` (CMS-FR-RQTB) and the
+/// conversational input assembly of `AGC-agent-conversations.md` (AGC-FR-35),
+/// which reads an image a comment carries so an agent can be shown it rather than told about it. It exists so
 /// that reading an attachment for a model and reading one for a card are one
 /// path with one set of rules rather than two.
 ///

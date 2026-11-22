@@ -319,6 +319,20 @@ export const saveHistoryLimitPercent = (percent: number) =>
   invoke<number>("save_history_limit_percent", { percent });
 
 /**
+ * GSS-FR-IRYZ: the Extracted text limit, whole kilobytes of text that one
+ * attached PDF or DOCX may give. 1024 while nothing is stored.
+ */
+export const loadExtractedTextLimitKb = () =>
+  invoke<number>("load_extracted_text_limit_kb");
+
+/**
+ * GSS-FR-JGZY: store the Extracted text limit. Rejects `kilobytes_out_of_range`
+ * for a value outside 1 to 10240, and writes nothing then.
+ */
+export const saveExtractedTextLimitKb = (kb: number) =>
+  invoke<number>("save_extracted_text_limit_kb", { kb });
+
+/**
  * AAP-FR-ITBL: store the max context size of any provider. `null` clears it.
  * Rejects `token_limit_invalid` for a value that is not a whole number from 1
  * to 4294967295.

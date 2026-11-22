@@ -563,6 +563,9 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // History size limit (GSS-global-settings-storage.md GSS-FR-USGD).
     "load_history_limit_percent",
     "save_history_limit_percent",
+    // Extracted text limit (GSS-global-settings-storage.md GSS-FR-IRYZ).
+    "load_extracted_text_limit_kb",
+    "save_extracted_text_limit_kb",
     "list_embedding_models",
     "retry_embeddings_model_download",
     "load_project_embeddings_mode",

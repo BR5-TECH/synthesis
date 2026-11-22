@@ -51,3 +51,48 @@ describe("what a refused change discussion says", () => {
     },
   );
 });
+
+describe("what an attachment refusal says", () => {
+  it.each([
+    ["no_text_extracted: scan.pdf", "scan.pdf has no text to read. Scanned documents are not supported."],
+    ["document_unreadable: spec.docx", "spec.docx could not be read. It can be damaged or encrypted."],
+    ["extracted_text_too_large: big.pdf", "The text of big.pdf is above the Extracted text limit."],
+  ])("CMT-FR-LMMQ: %j names the file", (raw, sentence) => {
+    expect(commentErrorMessage(raw)).toBe(sentence);
+  });
+
+  it.each([
+    ["unsupported_media_type", "This file type cannot be attached."],
+    ["attachment_too_large", "This file is above the attachment size limit."],
+    ["malformed_attachment", "This attachment could not be read."],
+    ["unsupported_media_type: a.zip", "a.zip: This file type cannot be attached."],
+  ])("CMT-FR-QZXV: %j reads as a sentence", (raw, sentence) => {
+    expect(commentErrorMessage(raw)).toBe(sentence);
+  });
+
+  it("CMT-FR-LMMQ: a filename that holds a colon and a space is kept whole", () => {
+    expect(commentErrorMessage("document_unreadable: draft: v2.docx")).toBe(
+      "draft: v2.docx could not be read. It can be damaged or encrypted.",
+    );
+  });
+
+  it("CMT-FR-LMMQ: a code without a filename still reads as a sentence", () => {
+    expect(commentErrorMessage("no_text_extracted")).toBe(
+      "This file has no text to read. Scanned documents are not supported.",
+    );
+    expect(commentErrorMessage("extracted_text_too_large")).toBe(
+      "The text of this file is above the Extracted text limit.",
+    );
+  });
+
+  it.each([
+    ["attachment_too_large: big.png", "big.png: This file is above the attachment size limit."],
+    ["malformed_attachment: odd.png", "odd.png: This attachment could not be read."],
+  ])("CMT-FR-QZXV: %j names the file", (raw, sentence) => {
+    expect(commentErrorMessage(raw)).toBe(sentence);
+  });
+
+  it("CMT-FR-34: an unknown refusal is shown as before", () => {
+    expect(commentErrorMessage("something_else: x")).toBe("something_else: x");
+  });
+});

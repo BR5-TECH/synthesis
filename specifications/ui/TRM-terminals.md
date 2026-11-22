@@ -36,36 +36,39 @@ The Terminals panel and the terminal tab let the author open an interactive term
 ### Row context menu
 23. **TRM-FR-EUMZ** A right-click on a row, or the context-menu key or Shift+F10 on the focused row, opens the row's context menu. It opens no tab. It is a floating overlay of `SNV-shell-navigation.md` SNV-FR-56, and it closes on a choice, on Escape (the focus goes back to the row), and on any activation outside it. The arrow keys move, and Enter chooses.
 24. **TRM-FR-KFCS** The menu holds exactly four entries in this order: the pin action, a separator, **Close terminal**, **Close other terminals**, **Close all terminals**. The pin action is **Pin terminal** on an unpinned row and **Unpin terminal** on a pinned row, never both, and it is never disabled. Each entry has a leading icon (per `LCM-library-context-menu.md` LCM-FR-07) and an accessible name.
-25. **TRM-FR-AHXU** **Pin terminal** and **Unpin terminal** call `"set terminal pinned (id, pinned)"` and do nothing else: no tab opens or closes, and no session ends.
-26. **TRM-FR-MANC** **Close terminal** ends the clicked row's session, pinned or not.
-27. **TRM-FR-BHYF** **Close other terminals** ends every unpinned session of the project window except the clicked one, in all groups. **Close all terminals** ends every unpinned session of the project window, in all groups. Neither ends a pinned session.
-28. **TRM-FR-EZMO** **Close other terminals** and **Close all terminals** are each disabled while the set of sessions they would end is empty.
-29. **TRM-FR-JJEY** Where a close would end at least one session in `starting` or `running`, a confirmation dialog states how many running terminals end. **End terminals** does the close, and **Cancel** changes nothing. A close of sessions that are all exited or target gone asks nothing.
-30. **TRM-FR-OCSN** A close calls `"close terminal (id)"` for each session it ends. The row and the tab of each one go away.
+25. **TRM-FR-EKGK** The menu has the same look as the other context menus of the app: its entries show no button border or fill, and an entry shows a highlight over the full row on hover and on keyboard focus. A disabled entry shows dimmed and gets no highlight on hover.
+26. **TRM-FR-AHXU** **Pin terminal** and **Unpin terminal** call `"set terminal pinned (id, pinned)"` and do nothing else: no tab opens or closes, and no session ends.
+27. **TRM-FR-MANC** **Close terminal** ends the clicked row's session, pinned or not.
+28. **TRM-FR-BHYF** **Close other terminals** ends every unpinned session of the project window except the clicked one, in all groups. **Close all terminals** ends every unpinned session of the project window, in all groups. Neither ends a pinned session.
+29. **TRM-FR-EZMO** **Close other terminals** and **Close all terminals** are each disabled while the set of sessions they would end is empty.
+30. **TRM-FR-JJEY** Where a close would end at least one session in `starting` or `running`, a confirmation dialog states how many running terminals end. **End terminals** does the close, and **Cancel** changes nothing. A close of sessions that are all exited or target gone asks nothing.
+31. **TRM-FR-OCSN** A close calls `"close terminal (id)"` for each session it ends. The row and the tab of each one go away.
 
 ### Terminal tab
-31. **TRM-FR-XBVB** A terminal tab shows its session in a `ghostty-web` terminal, at a version that `package.json` pins exactly.
-32. **TRM-FR-WRVB** The terminal uses the Source code typographic role (per `OVW-overview.md` OVW-FR-13) and colors from the app theme. A change of the role's font applies to an open tab at once. A change of the theme applies at once to a tab that shows. A hidden tab gets the new theme when it shows next, before it writes more output.
+32. **TRM-FR-XBVB** A terminal tab shows its session in a `ghostty-web` terminal, at a version that `package.json` pins exactly.
+33. **TRM-FR-CGRR** Each terminal that a tab makes has its own `ghostty-web` WebAssembly instance, also the terminal that a theme change makes again. A new terminal starts blank and shows only the output of its own session, never cells of another terminal.
+    - *Why:* `ghostty-web` frees the screen memory of a disposed terminal but does not clear it, so a terminal that shares one instance with an earlier terminal shows the old cells.
+34. **TRM-FR-WRVB** The terminal uses the Source code typographic role (per `OVW-overview.md` OVW-FR-13) and colors from the app theme. A change of the role's font applies to an open tab at once. A change of the theme applies at once to a tab that shows. A hidden tab gets the new theme when it shows next, before it writes more output.
     - *Why:* the terminal library cannot recolor an open terminal, so a theme change makes it again, and a terminal made out of the page cannot measure its size.
-33. **TRM-FR-ILRQ** The terminal fills the tab. When the tab's size changes, the terminal fits its columns and rows to the new size and calls `"resize terminal (id, cols, rows)"` once for each new size.
-34. **TRM-FR-AULS** When the tab opens, it calls `"attach terminal (id, output)"`, writes the history and then the live output into the terminal, and calls `"acknowledge terminal output (id, bytes)"` for each frame it received. A frame that the terminal fails to write is also acknowledged. The first failed write of each terminal emits one `WARN` record.
-35. **TRM-FR-ITAK** A tab that is not the active tab stays attached and keeps writing output, so the tab shows the current output when it becomes active again.
-36. **TRM-FR-JXLA** Closing a tab calls `"detach terminal (id)"` and ends no session. The row stays, with its pinned state.
-37. **TRM-FR-RFVP** While the terminal has the focus, every key without the platform's command modifier goes to the session, Ctrl with a letter included. On Linux, no application menu accelerator acts on a key that goes to the session.
-38. **TRM-FR-DHEM** The terminal copies selected text with Cmd+C on macOS and Ctrl+Shift+C on Linux, and pastes with Cmd+V and Ctrl+Shift+V. A paste uses bracketed paste where the session turned it on.
-39. **TRM-FR-DTCA** The terminal keeps a scrollback of 10,000 lines, which the user scrolls with the wheel, the scroll bar, and Shift+PageUp and Shift+PageDown.
-40. **TRM-FR-DPWA** The tab's title is the session's label. An exited session and a session with a gone target show a state marker on the tab.
-41. **TRM-FR-GMGF** While the session is `starting`, the tab shows "Starting" over the start output.
-42. **TRM-FR-FFPL** When the session is `exited`, the tab shows a line under the output with the exit code, or the error line of a failed start, and sends no more input.
-43. **TRM-FR-XVJT** When the target is gone, the tab stays open and shows a **Target gone** banner. The tab is a read-only view of the history until the user closes it.
-44. **TRM-FR-HQDM** A tab opened for an exited session that has no history shows the exit line of TRM-FR-FFPL and the text "The output of this terminal is gone."
-45. **TRM-FR-XVFQ** While the target is busy, the tab shows a persistent warning, "A graduation run is working in this target." Input still goes to the session.
-46. **TRM-FR-RCCE** When a terminal tab becomes the active tab, the panel selects its row on the terms of `SNV-shell-navigation.md` SNV-FR-64 and SNV-FR-66.
-47. **TRM-FR-DURY** The tab's **Pin tab** and **Unpin tab** set the session's pinned state, and the tab shows the pinned marker while the session is pinned (per `TAB-tabs.md` TAB-FR-KIIW).
+35. **TRM-FR-ILRQ** The terminal fills the tab. When the tab's size changes, the terminal fits its columns and rows to the new size and calls `"resize terminal (id, cols, rows)"` once for each new size.
+36. **TRM-FR-AULS** When the tab opens, it calls `"attach terminal (id, output)"`, writes the history and then the live output into the terminal, and calls `"acknowledge terminal output (id, bytes)"` for each frame it received. A frame that the terminal fails to write is also acknowledged. The first failed write of each terminal emits one `WARN` record.
+37. **TRM-FR-ITAK** A tab that is not the active tab stays attached and keeps writing output, so the tab shows the current output when it becomes active again.
+38. **TRM-FR-JXLA** Closing a tab calls `"detach terminal (id)"` and ends no session. The row stays, with its pinned state.
+39. **TRM-FR-RFVP** While the terminal has the focus, every key without the platform's command modifier goes to the session, Ctrl with a letter included. On Linux, no application menu accelerator acts on a key that goes to the session.
+40. **TRM-FR-DHEM** The terminal copies selected text with Cmd+C on macOS and Ctrl+Shift+C on Linux, and pastes with Cmd+V and Ctrl+Shift+V. A paste uses bracketed paste where the session turned it on.
+41. **TRM-FR-DTCA** The terminal keeps a scrollback of 10,000 lines, which the user scrolls with the wheel, the scroll bar, and Shift+PageUp and Shift+PageDown.
+42. **TRM-FR-DPWA** The tab's title is the session's label. An exited session and a session with a gone target show a state marker on the tab.
+43. **TRM-FR-GMGF** While the session is `starting`, the tab shows "Starting" over the start output.
+44. **TRM-FR-FFPL** When the session is `exited`, the tab shows a line under the output with the exit code, or the error line of a failed start, and sends no more input.
+45. **TRM-FR-XVJT** When the target is gone, the tab stays open and shows a **Target gone** banner. The tab is a read-only view of the history until the user closes it.
+46. **TRM-FR-HQDM** A tab opened for an exited session that has no history shows the exit line of TRM-FR-FFPL and the text "The output of this terminal is gone."
+47. **TRM-FR-XVFQ** While the target is busy, the tab shows a persistent warning, "A graduation run is working in this target." Input still goes to the session.
+48. **TRM-FR-RCCE** When a terminal tab becomes the active tab, the panel selects its row on the terms of `SNV-shell-navigation.md` SNV-FR-64 and SNV-FR-66.
+49. **TRM-FR-DURY** The tab's **Pin tab** and **Unpin tab** set the session's pinned state, and the tab shows the pinned marker while the session is pinned (per `TAB-tabs.md` TAB-FR-KIIW).
 
 ### Platform and logging
-48. **TRM-FR-DQYZ** On Windows, the Terminals toggle, the panel, the New terminal menu, and the terminal tab are not rendered.
-49. **TRM-FR-LNOZ** The panel and the tab emit a `DEBUG` record for each create, close, attach, and detach, and a `WARN` record for each failed call. No record carries input, output, or a path.
+50. **TRM-FR-DQYZ** On Windows, the Terminals toggle, the panel, the New terminal menu, and the terminal tab are not rendered.
+51. **TRM-FR-LNOZ** The panel and the tab emit a `DEBUG` record for each create, close, attach, and detach, and a `WARN` record for each failed call. No record carries input, output, or a path.
 
 ## Wireframes
 The Terminals panel with three sessions in two groups:

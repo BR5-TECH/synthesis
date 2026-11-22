@@ -19,7 +19,42 @@ export const fakeTerminals: FakeTerminal[] = [];
 /** Test hook: while set, `write()` of every fake terminal throws it. */
 export const fakeWriteFailure: { error: Error | null } = { error: null };
 
-export async function init(): Promise<void> {}
+/** How many times `init()` ran. It makes the one shared instance that TRM-FR-CGRR forbids. */
+export const fakeInitCalls = { count: 0 };
+
+export async function init(): Promise<void> {
+  fakeInitCalls.count += 1;
+}
+
+/** Each `Ghostty.load()` in order, so a test can check that no two terminals share one. */
+export const fakeInstances: FakeGhostty[] = [];
+
+/** Test hook: while set, `Ghostty.load()` rejects with it. */
+export const fakeLoadFailure: { error: Error | null } = { error: null };
+
+/**
+ * Test hook: while set, each `Ghostty.load()` waits for this promise, so a test
+ * can hold a load open and end it by hand.
+ */
+export const fakeLoadGate: { promise: Promise<void> | null; waiting: number } = { promise: null, waiting: 0 };
+
+/** A stand-in for the WebAssembly instance that each terminal owns (TRM-FR-CGRR). */
+export class FakeGhostty {
+  static async load(): Promise<FakeGhostty> {
+    const gate = fakeLoadGate.promise;
+    if (gate) {
+      fakeLoadGate.waiting += 1;
+      await gate;
+      fakeLoadGate.waiting -= 1;
+    }
+    if (fakeLoadFailure.error) throw fakeLoadFailure.error;
+    const instance = new FakeGhostty();
+    fakeInstances.push(instance);
+    return instance;
+  }
+}
+
+export { FakeGhostty as Ghostty };
 
 export class FakeTerminal {
   cols = 80;

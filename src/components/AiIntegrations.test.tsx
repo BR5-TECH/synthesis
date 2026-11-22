@@ -255,6 +255,7 @@ describe("the AI integrations section", () => {
         "list_agentic_integrations",
         "load_document_limit_percent",
         "load_history_limit_percent",
+        "load_extracted_text_limit_kb",
         "set_ai_api_model",
         "set_agentic_integration_model",
       ]),
@@ -321,6 +322,7 @@ describe("the AI integrations section", () => {
         // GLS-FR-DLMP, GLS-FR-UTNL: stored-state reads, not verifications.
         "load_document_limit_percent",
         "load_history_limit_percent",
+        "load_extracted_text_limit_kb",
       ]),
     );
   });

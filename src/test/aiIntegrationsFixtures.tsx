@@ -254,6 +254,9 @@ export function backendFor(invokeMock: Mock) {
           // GLS-FR-UTNL: the History size limit, read when the section mounts.
           case "load_history_limit_percent":
             return 20;
+          // GLS-FR-GLFQ: the Extracted text limit, read when the section mounts.
+          case "load_extracted_text_limit_kb":
+            return 1024;
           case "detect_agentic_cli_binary":
             return { path: null };
           case "get_project_agentic_integration":

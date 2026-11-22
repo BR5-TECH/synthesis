@@ -147,7 +147,9 @@ pub(in crate::agent_conversations) fn current_comment_section(
         AttachmentReads::default()
     };
     let parts = trigger
-        .map(|comment| comment_parts(roots, thread, comment, &handles, &reads))
+        .map(|comment| comment_parts_flagged(roots, thread, comment, &handles, &reads))
         .unwrap_or_default();
-    section_of_parts(TAG_CURRENT_COMMENT, Vec::new(), parts)
+    // AGC-FR-XDNX: a document attachment does not count against the bound of
+    // this section and is never cut; the rest of its text counts as before.
+    section_of_flagged_parts(TAG_CURRENT_COMMENT, Vec::new(), parts, SECTION_MAX_CHARS)
 }

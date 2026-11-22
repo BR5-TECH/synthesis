@@ -17,6 +17,8 @@ mod history_bound;
 pub(super) use history_bound::*;
 mod history;
 pub(super) use history::*;
+mod document_parts;
+pub(super) use document_parts::*;
 mod state;
 pub(super) use state::*;
 
@@ -92,30 +94,54 @@ pub(super) fn section_of_parts_within(
     parts: Vec<InputPart>,
     max_chars: usize,
 ) -> InputSection {
+    let flagged = parts.into_iter().map(|part| (part, false)).collect();
+    section_of_flagged_parts(tag, attributes, flagged, max_chars)
+}
+
+/// [`section_of_parts_within`] where a part flagged `true` is exempt from the
+/// bound (AGC-FR-XDNX): it is never cut, its text does not count, and it is
+/// kept after the other text was cut.
+pub(super) fn section_of_flagged_parts(
+    tag: &str,
+    attributes: Vec<(String, String)>,
+    parts: Vec<(InputPart, bool)>,
+    max_chars: usize,
+) -> InputSection {
     let mut body = String::new();
     let mut kept: Vec<InputPart> = Vec::new();
+    let mut counted = 0usize;
     let mut truncated = false;
-    for part in parts {
-        if truncated {
-            break;
+    for (part, exempt) in parts {
+        if truncated && !exempt {
+            continue;
         }
         match part {
+            InputPart::Text(text) if exempt => {
+                body.push_str(&text);
+                kept.push(InputPart::Text(text));
+            }
             InputPart::Text(text) => {
-                let remaining = max_chars.saturating_sub(body.chars().count());
-                if text.chars().count() > remaining {
+                let remaining = max_chars.saturating_sub(counted);
+                let length = text.chars().count();
+                if length > remaining {
                     let cut: String = text.chars().take(remaining).collect();
                     body.push_str(&cut);
                     body.push_str("\n\n[This material is partial: it was truncated here.]");
                     kept.push(InputPart::Text(format!(
                         "{cut}\n\n[This material is partial: it was truncated here.]"
                     )));
+                    counted = max_chars;
                     truncated = true;
                 } else {
+                    counted += length;
                     body.push_str(&text);
                     kept.push(InputPart::Text(text));
                 }
             }
             InputPart::Image(image) => {
+                if !exempt {
+                    counted += image.metadata.chars().count();
+                }
                 body.push_str(&image.metadata);
                 kept.push(InputPart::Image(image));
             }
@@ -652,8 +678,9 @@ pub(super) fn comment_text(comment: &comments::Comment, handles: &HashMap<&str, 
 /// attachments in the order the comment carries them, each in the position that
 /// comment occupies.
 ///
-/// A stored **image** `blob` becomes an image part carrying its bytes; every
-/// other attachment is metadata, and always was. Nothing here **fetches**: a
+/// A stored **image** `blob` becomes an image part carrying its bytes, a PDF
+/// or DOCX `blob` gives its text and images in place (AGC-FR-VQWY), and every
+/// other attachment is metadata. Nothing here **fetches**: a
 /// `url` attachment's address is never resolved, requested, or read, so what it
 /// serves reaches no request whatever the endpoint accepts (per
 /// `CMS-comments-storage.md` CMS-FR-43).
@@ -664,6 +691,21 @@ fn comment_parts(
     handles: &HashMap<&str, &str>,
     reads: &AttachmentReads,
 ) -> Vec<InputPart> {
+    comment_parts_flagged(roots, thread, comment, handles, reads)
+        .into_iter()
+        .map(|(part, _)| part)
+        .collect()
+}
+
+/// [`comment_parts`], each part flagged `true` where it belongs to a document
+/// attachment (AGC-FR-XDNX).
+fn comment_parts_flagged(
+    roots: Roots<'_>,
+    thread: &comments::Discussion,
+    comment: &comments::Comment,
+    handles: &HashMap<&str, &str>,
+    reads: &AttachmentReads,
+) -> Vec<(InputPart, bool)> {
     let mut prose = format!("@{}:\n", handle_of(&comment.author));
     for quote in &comment.quotes {
         prose.push_str(&quote_line(quote, handles.get(quote.comment_id.as_str()).copied()));
@@ -674,12 +716,17 @@ fn comment_parts(
     // reply. The stored comment is not changed.
     prose.push_str(&strip_citation_markers(&comment.body));
     prose.push('\n');
-    let mut parts = vec![InputPart::Text(prose)];
+    let mut parts = vec![(InputPart::Text(prose), false)];
     for attachment in &comment.attachments {
+        // AGC-FR-VQWY: a PDF or DOCX gives its text and images in place.
+        if let Some(document) = document_parts(roots, thread, comment, attachment) {
+            parts.extend(document.parts.into_iter().map(|part| (part, true)));
+            continue;
+        }
         let line = format!("{}\n", attachment_line(attachment, reads));
         match attachment_image(roots, thread, comment, attachment, &line) {
-            Some(image) => parts.push(InputPart::Image(image)),
-            None => parts.push(InputPart::Text(line)),
+            Some(image) => parts.push((InputPart::Image(image), false)),
+            None => parts.push((InputPart::Text(line), false)),
         }
     }
     parts

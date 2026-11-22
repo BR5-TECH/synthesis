@@ -4407,6 +4407,7 @@ function mockTurnContext(): Record<string, unknown> {
 /** GSS-FR-PCTL: the Document size limit the harness holds. */
 let documentLimitPercent = 30;
 let historyLimitPercent = 20;
+let extractedTextLimitKb = 1024;
 
 /**
  * AGC-FR-33 / CMT-FR-80: begin a tool call in a running turn, so its pending
@@ -11885,6 +11886,15 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       if (!Number.isInteger(percent) || percent < 1 || percent > 100) throw "percent_out_of_range";
       historyLimitPercent = percent;
       return historyLimitPercent;
+    }
+    // GSS-FR-IRYZ / GSS-FR-JGZY: the Extracted text limit.
+    case "load_extracted_text_limit_kb":
+      return extractedTextLimitKb;
+    case "save_extracted_text_limit_kb": {
+      const kb = a.kb;
+      if (!Number.isInteger(kb) || kb < 1 || kb > 10240) throw "kilobytes_out_of_range";
+      extractedTextLimitKb = kb;
+      return extractedTextLimitKb;
     }
     // AGC-FR-JFBZ: the context figures before any turn, all estimates.
     case "estimate_discussion_context": {

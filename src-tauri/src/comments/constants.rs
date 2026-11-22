@@ -38,6 +38,16 @@ pub const ERR_ATTACHMENT_TOO_LARGE: &str = "attachment_too_large";
 pub const ERR_UNSUPPORTED_MEDIA_TYPE: &str = "unsupported_media_type";
 /// CMS-FR-47: an attachment input that does not parse at all.
 pub const ERR_MALFORMED_ATTACHMENT: &str = "malformed_attachment";
+/// CMS-FR-LZZV: a document attachment whose extracted text is empty after
+/// trimming. Written as `<code>: <filename>`.
+pub const ERR_NO_TEXT_EXTRACTED: &str = "no_text_extracted";
+/// CMS-FR-LZZV: a document attachment that a parser cannot read, that is
+/// encrypted, or whose extraction panicked or passed its deadline. Written as
+/// `<code>: <filename>`.
+pub const ERR_DOCUMENT_UNREADABLE: &str = "document_unreadable";
+/// CMS-FR-LZZV, CMS-FR-YSRD: a document attachment whose extracted text is
+/// above the extracted text limit. Written as `<code>: <filename>`.
+pub const ERR_EXTRACTED_TEXT_TOO_LARGE: &str = "extracted_text_too_large";
 /// CMS-FR-48: a digest no attachment in the thread's scope carries.
 pub const ERR_ATTACHMENT_NOT_FOUND: &str = "attachment_not_found";
 
@@ -113,7 +123,12 @@ pub fn is_storage_digest(candidate: &str) -> bool {
 /// is the same type as a bare `text/plain`.
 pub fn media_type_accepted(media_type: &str) -> bool {
     let base = media_type.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
-    base.starts_with("image/") || base == "application/pdf" || base == "text/plain"
+    base.starts_with("image/")
+        || base == "application/pdf"
+        || base == crate::doc_extraction::DOCX_MEDIA_TYPE
+        || base == "text/plain"
+        || base == "text/markdown"
+        || base == "text/x-markdown"
 }
 /// CMS-FR-01: the conversation folder, relative to the repository machine store.
 ///

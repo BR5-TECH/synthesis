@@ -212,6 +212,31 @@
 
 .comment-attach__chip-type { color: var(--fg-3); flex: none; }
 
+/* CMT-FR-HQDV: a DOCX media type is longer than most filenames, so in a
+   document chip the media type yields first and the name, the size, and the
+   remove control stay in view. */
+.comment-attach__chip--document .comment-attach__chip-name { flex: 0 1 auto; min-width: 0; }
+.comment-attach__chip--document .comment-attach__chip-type {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* CMT-FR-HQDV: the size of a PDF or DOCX chip, after its media type. */
+.comment-attach__chip-size {
+  color: var(--fg-3);
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* CMT-FR-HQDV: a pending document chip takes focus with no action. */
+.comment-attach__chip[role="group"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .comment-attach__chip[data-broken] { color: var(--fg-3); }
 
 .comment-attach__chip button {

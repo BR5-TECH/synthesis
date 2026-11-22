@@ -698,6 +698,7 @@ mod custom_adapter;
 mod deadlines;
 mod disclosure;
 mod dispatch;
+mod document_input;
 mod document_limit;
 mod document_limit_turns;
 mod durable_record;

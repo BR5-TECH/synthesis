@@ -139,6 +139,7 @@ describe("the Agentic level", () => {
         "list_agentic_integrations",
         "load_document_limit_percent",
         "load_history_limit_percent",
+        "load_extracted_text_limit_kb",
         "set_agentic_integration_model",
         "set_agentic_integration_effort",
       ]),

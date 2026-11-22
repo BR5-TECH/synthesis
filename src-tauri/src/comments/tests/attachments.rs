@@ -581,21 +581,36 @@ fn a_crafted_digest_reads_nothing_outside_its_own_thread() {
     );
 }
 
-/// CMS-FR-47: what the accepted set actually admits. Pinned separately
+/// CMS-FR-47: what the accepted set actually admits, DOCX and Markdown among it. Pinned separately
 /// because it is the rule a reviewer is most likely to widen by accident.
 #[test]
-fn the_accepted_media_types_are_images_pdf_and_plain_text() {
+fn the_accepted_media_types_are_images_pdf_docx_plain_text_and_markdown() {
     for ok in [
         "image/png",
         "image/jpeg",
         "IMAGE/PNG",
         "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "Application/VND.openxmlformats-officedocument.wordprocessingml.document; x=y",
         "text/plain",
         "text/plain; charset=utf-8",
+        "text/markdown",
+        "Text/Markdown; charset=utf-8",
+        "text/x-markdown",
     ] {
         assert!(media_type_accepted(ok), "{ok} should be accepted");
     }
-    for bad in ["application/zip", "application/octet-stream", "text/html", "video/mp4", ""] {
+    for bad in [
+        "application/zip",
+        "application/octet-stream",
+        "application/msword",
+        "application/vnd.oasis.opendocument.text",
+        "text/markdownx",
+        "text/x-markdown-extra",
+        "text/html",
+        "video/mp4",
+        "",
+    ] {
         assert!(!media_type_accepted(bad), "{bad} should be refused");
     }
 }

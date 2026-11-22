@@ -276,7 +276,7 @@ describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-F
     expect(screen.queryByRole("button", { name: "Choose a token…" })).toBeNull();
   });
 
-  it("NAW-FR-33, CMT-FR-24, CMT-FR-25, CMT-FR-51: is disabled while no identity resolves, and keeps body and strip when a post is refused", async () => {
+  it("NAW-FR-33, CMT-FR-24, CMT-FR-25, CMT-FR-51, CMT-FR-QZXV: is disabled while no identity resolves, and keeps body and strip when a post is refused", async () => {
     // NAW-FR-33: a discussion is a comment thread and cannot be attributed to
     // nobody, so a binding that is still required keeps the composer disabled
     // with the picker's reason (CMT-FR-24, CMT-FR-25).
@@ -310,8 +310,9 @@ describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-F
 
     // The typed error renders in the composer, no thread was opened, no turn was
     // dispatched, and the body and the strip are still there (CMT-FR-51).
+    // CMT-FR-QZXV: the refusal reads as a sentence, not as the raw code.
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      /unsupported_media_type|media type/i,
+      "This file type cannot be attached.",
     );
     expect(callsTo("dispatch_agent_turn")).toHaveLength(0);
     expect(

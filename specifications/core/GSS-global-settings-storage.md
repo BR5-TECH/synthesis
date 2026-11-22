@@ -166,6 +166,8 @@ Document size limit (per `../ui/GLS-global-settings.md` AI API section, GLS-FR-D
 History size limit (per `../ui/GLS-global-settings.md` AI API section, GLS-FR-UTNL and GLS-FR-QHNI; also read by `AGC-agent-conversations.md` when it assembles a turn's input):
 - `"load history limit percent"` → `load_history_limit_percent()` → `number`, the stored percent, or `20` where nothing is stored (GSS-FR-USGD).
 - `"save history limit percent"` → `save_history_limit_percent(percent)` → `number`, the stored percent, or the typed error `percent_out_of_range` (GSS-FR-RMJH).
+- `"load extracted text limit kb"` → `load_extracted_text_limit_kb()` → `number`, the stored kilobytes, or `1024` where nothing is stored (GSS-FR-IRYZ).
+- `"save extracted text limit kb"` → `save_extracted_text_limit_kb(kb)` → `number`, the stored kilobytes, or the typed error `kilobytes_out_of_range` (GSS-FR-JGZY).
 
 Personal MCP servers of all projects (no UI consumer here; read and written by `MCS-mcp-server-connections.md`, which exposes the commands `../ui/MSS-mcp-servers-settings.md` invokes):
 - `load_global_mcp_servers()` / `save_global_mcp_servers(servers)` — the `personal_all` MCP server records of GSS-FR-RPBB (MCS-FR-OEDO).
@@ -259,6 +261,9 @@ The MRU append on project open/create is performed by `PST-project-storage.md` (
 58. **GSS-FR-RVQK** `save_document_limit_percent` refuses a value outside 1 to 100 with `percent_out_of_range` and writes nothing. This module persists the value and does not interpret it: what the percent limits is owned by `AGC-agent-conversations.md`.
 58. **GSS-FR-USGD** The user-global store holds the **history size limit**: one whole percent of a model's context window, from 1 to 100, that the discussion history may fill. It is 20 when unset. It is one value for every provider and every project, it is not part of the app-preferences record, and it is never written into a project.
 58. **GSS-FR-RMJH** `save_history_limit_percent` refuses a value outside 1 to 100 with `percent_out_of_range` and writes nothing. What the percent limits is owned by `AGC-agent-conversations.md`.
+58. **GSS-FR-IRYZ** The user-global store holds the **extracted text limit**: one whole number of kilobytes, from 1 to 10240, that the extracted text of one document attachment may hold. It is 1024 when unset. It is one value for every provider and every project, it is not part of the app-preferences record, and it is never written into a project.
+58. **GSS-FR-JGZY** `save_extracted_text_limit_kb` refuses a value outside 1 to 10240 with `kilobytes_out_of_range` and writes nothing. What the limit refuses is owned by `CMS-comments-storage.md` CMS-FR-YSRD.
+58. **GSS-FR-GRWY** A stored extracted text limit that is not a whole number from 1 to 10240 reads as unset, so the load returns 1024 and the rest of the store still loads.
 59. **GSS-FR-DSUG** The per-project slot records the project's **embeddings mode**, one of `use_global`, `on`, and `off`, and `use_global` when unset. The mode is keyed by project (GSS-FR-18), so every worktree of a repository reads the same mode. It is never written into a repository or into `.synthesis/`.
 60. **GSS-FR-DAKR** The per-project slot records the project's **model downgrade suppressions**: a list of `ModelDowngradeSuppression` rules, empty until the author suppresses a pair. It holds at most one rule for one requested→served pair. The list is keyed by project (GSS-FR-18), so all worktrees of a repository read one list. It is never written into a project.
 60. **GSS-FR-HECI** A rule covers exactly its own pair. The two ids are stored as given and compared as exact strings, with no normalisation of case, of a prefix, or of a version.

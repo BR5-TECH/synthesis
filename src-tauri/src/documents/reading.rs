@@ -10,6 +10,7 @@ use std::sync::atomic::Ordering;
 
 use base64::Engine;
 
+use crate::doc_extraction::bounded::{run_bounded, Bounded};
 use crate::fs::{FsAccess, FsAccessState, FsError};
 use crate::logging::LogLevel;
 
@@ -271,38 +272,33 @@ impl DocumentsCollection {
         }
         self.extractions.fetch_add(1, Ordering::Relaxed);
         let extractor = self.extractor;
-        let (send, receive) = std::sync::mpsc::channel();
-        let spawned = std::thread::Builder::new().name("documents-pdf-extract".to_string()).spawn(
-            move || {
-                let outcome =
-                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| extractor(&bytes)));
-                // The receiver is gone when the deadline has passed.
-                let _ = send.send(outcome);
-            },
-        );
-        if spawned.is_err() {
-            warn("extractor could not start");
-            return None;
-        }
-        match receive.recv_timeout(self.limits.extract_deadline) {
-            Ok(Ok(Ok(text))) if !text.trim().is_empty() => Some(text),
-            Ok(Ok(Ok(_))) => {
+        let outcome =
+            run_bounded("documents-pdf-extract", self.limits.extract_deadline, move || {
+                extractor(&bytes)
+            });
+        match outcome {
+            Bounded::Done(Ok(text)) if !text.trim().is_empty() => Some(text),
+            Bounded::Done(Ok(_)) => {
                 warn("no embedded text");
                 None
             }
-            Ok(Ok(Err(_))) => {
+            Bounded::Done(Err(_)) => {
                 warn("could not be parsed");
                 None
             }
-            Ok(Err(_)) => {
+            Bounded::Panicked => {
                 warn("extractor panicked");
                 None
             }
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            Bounded::PastDeadline => {
                 warn("extraction ran past its deadline");
                 None
             }
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            Bounded::NotStarted => {
+                warn("extractor could not start");
+                None
+            }
+            Bounded::Stopped => {
                 warn("extractor stopped");
                 None
             }

@@ -428,3 +428,28 @@ fn a_posted_document_is_read_whole_after_the_limit_is_lowered() {
     assert_eq!(document.text_bytes(), text.len() + 1, "the whole text and its paragraph end");
     crate::comments::set_test_text_limit_kb(None);
 }
+
+// CMS-FR-47: a Markdown file is accepted under either Markdown media type.
+// It is not a document attachment, so it is stored and not extracted.
+#[test]
+fn a_markdown_file_is_accepted_and_not_extracted() {
+    let dir = temp_root();
+    let root = &crate::fs::RootFs::for_root(dir.path());
+    let start = doc_extraction::extraction_count();
+    let thread = open_artifact_fragment_in(
+        root,
+        "specs/a.md",
+        anchor(0, 5, "hello"),
+        "notes".into(),
+        vec![
+            inline("text/markdown", "notes.md", b"# Notes\n"),
+            inline("text/x-markdown", "more.markdown", b"# More\n"),
+        ],
+        &human("ada"),
+        "2026-01-01T00:00:00Z",
+    )
+    .expect("markdown is accepted");
+    assert_eq!(only_attachments(&thread).len(), 2);
+    assert_eq!(stored_files(dir.path()).len(), 2);
+    assert_eq!(doc_extraction::extraction_count(), start);
+}

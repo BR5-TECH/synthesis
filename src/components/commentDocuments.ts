@@ -8,7 +8,7 @@ export const DOCX_MEDIA_TYPE =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 /** CVP-FR-YBTS: the files the Attach picker offers, the set the backend accepts. */
-export const ATTACH_ACCEPT = "image/*,.pdf,.docx,.txt,.log,.md";
+export const ATTACH_ACCEPT = "image/*,.pdf,.docx,.txt,.log,.md,.markdown";
 
 /** CMT-FR-HQDV: whether a media type is a PDF or DOCX document. */
 export function isDocumentMediaType(mediaType: string): boolean {

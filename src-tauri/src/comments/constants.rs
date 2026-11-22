@@ -127,6 +127,8 @@ pub fn media_type_accepted(media_type: &str) -> bool {
         || base == "application/pdf"
         || base == crate::doc_extraction::DOCX_MEDIA_TYPE
         || base == "text/plain"
+        || base == "text/markdown"
+        || base == "text/x-markdown"
 }
 /// CMS-FR-01: the conversation folder, relative to the repository machine store.
 ///

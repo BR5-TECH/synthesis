@@ -528,7 +528,7 @@ describe("CMT-FR-HQDV, CMT-FR-51: PDF and DOCX attachments", () => {
     await openColumn();
     expect(screen.getByTestId("comment-attach-file-input")).toHaveAttribute(
       "accept",
-      "image/*,.pdf,.docx,.txt,.log,.md",
+      "image/*,.pdf,.docx,.txt,.log,.md,.markdown",
     );
   });
 

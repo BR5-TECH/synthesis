@@ -89,7 +89,7 @@ describe("guessMediaType: a link's type, from its path alone", () => {
 describe("DOCX in the Attach picker", () => {
   it("CVP-FR-YBTS: the picker offers images and exactly the accepted document and text files", () => {
     expect(ATTACH_ACCEPT.split(",").sort()).toEqual(
-      [".docx", ".log", ".md", ".pdf", ".txt", "image/*"].sort(),
+      [".docx", ".log", ".markdown", ".md", ".pdf", ".txt", "image/*"].sort(),
     );
   });
 
@@ -105,6 +105,19 @@ describe("DOCX in the Attach picker", () => {
     }
     const named = await fileToInput(new File(["%PDF"], "a.pdf", { type: "application/pdf" }));
     expect(named).toMatchObject({ mediaType: "application/pdf" });
+  });
+
+  it("CVP-FR-YBTS: a Markdown file is sent as text/markdown, whatever the system names it", async () => {
+    expect(guessMediaType("notes.MD")).toBe("text/markdown");
+    expect(guessMediaType("notes.markdown")).toBe("text/markdown");
+    for (const name of ["notes.md", "notes.markdown"]) {
+      for (const type of ["", "application/octet-stream"]) {
+        const input = await fileToInput(new File(["# hi"], name, { type }));
+        expect(input).toMatchObject({ mediaType: "text/markdown", filename: name });
+      }
+    }
+    const named = await fileToInput(new File(["# hi"], "notes.md", { type: "text/markdown" }));
+    expect(named).toMatchObject({ mediaType: "text/markdown" });
   });
 });
 

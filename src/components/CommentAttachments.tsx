@@ -89,8 +89,10 @@ export function guessMediaType(pathOrName: string): string {
       return DOCX_MEDIA_TYPE;
     case "txt":
     case "log":
-    case "md":
       return "text/plain";
+    case "md":
+    case "markdown":
+      return "text/markdown";
     default:
       return "application/octet-stream";
   }
@@ -173,8 +175,8 @@ export async function fileToInput(file: File): Promise<AttachmentInput> {
     kind: "inline",
     // A browser leaves `type` empty for an extension it does not know; falling
     // back to the name keeps a legitimate `.png` from being refused for it.
-    // CVP-FR-YBTS: a `.docx` that the system names as generic bytes is sent
-    // as DOCX.
+    // CVP-FR-YBTS: a file that the system names as generic bytes is sent as
+    // the type of its extension, for example `.docx` and `.md`.
     mediaType:
       file.type !== "" && file.type !== "application/octet-stream"
         ? file.type

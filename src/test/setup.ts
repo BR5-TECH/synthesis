@@ -197,16 +197,20 @@ beforeEach(async () => {
   // wrapper switch the field on.
   // TRM-FR-LAZH / TRM-FR-ITAK: the terminal list and the terminal of each tab
   // are module stores of the window, so nothing of one test reaches the next.
-  const [{ resetTerminalsForTest }, { resetTerminalViewsForTest }, { fakeTerminals, fakeWriteFailure }] =
-    await Promise.all([
-      import("../state/terminals"),
-      import("../state/terminalViews"),
-      import("./ghosttyMock"),
-    ]);
+  const [{ resetTerminalsForTest }, { resetTerminalViewsForTest }, ghostty] = await Promise.all([
+    import("../state/terminals"),
+    import("../state/terminalViews"),
+    import("./ghosttyMock"),
+  ]);
   resetTerminalsForTest();
   resetTerminalViewsForTest();
-  fakeTerminals.length = 0;
-  fakeWriteFailure.error = null;
+  ghostty.fakeTerminals.length = 0;
+  ghostty.fakeWriteFailure.error = null;
+  ghostty.fakeInstances.length = 0;
+  ghostty.fakeLoadFailure.error = null;
+  ghostty.fakeLoadGate.promise = null;
+  ghostty.fakeLoadGate.waiting = 0;
+  ghostty.fakeInitCalls.count = 0;
   const { setPayloadProjectIdEnabled, setWindowProjectId } = await import("../api/invoke");
   setWindowProjectId(null);
   setPayloadProjectIdEnabled(false);

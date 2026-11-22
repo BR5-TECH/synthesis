@@ -160,11 +160,16 @@
   overflow-y: auto;
 }
 .new-terminal-menu:focus { outline: none; }
-.new-terminal-menu .menu-item:focus { outline: none; background: var(--bg-active); }
+/* TRM-FR-EKGK: the row menu shares the focus and icon look of the New terminal menu. */
+.new-terminal-menu .menu-item:focus,
+.terminal-menu .menu-item:focus { outline: none; background: var(--bg-active); }
 .new-terminal-menu .menu-item--disabled:focus { background: var(--bg-hover); }
-.new-terminal-menu .menu-item > svg { flex: none; color: var(--fg-3); }
+.new-terminal-menu .menu-item > svg,
+.terminal-menu .menu-item > svg { flex: none; color: var(--fg-3); }
 .new-terminal-menu .menu-item:not(.menu-item--disabled):hover > svg,
-.new-terminal-menu .menu-item:not(.menu-item--disabled):focus > svg { color: var(--fg-1); }
+.new-terminal-menu .menu-item:not(.menu-item--disabled):focus > svg,
+.terminal-menu .menu-item:not(.menu-item--disabled):hover > svg,
+.terminal-menu .menu-item:not(.menu-item--disabled):focus > svg { color: var(--fg-1); }
 /* TRM-FR-AASW: the header of the active worktree's section takes no focus. */
 .new-terminal-menu__head {
   display: flex;
@@ -328,6 +333,29 @@
 /* Hooks that the components name; each one keeps the shared look of its base class. */
 .end-terminals { width: min(440px, calc(100vw - 48px)); }
 .terminal-menu { min-width: 220px; }
+/* TRM-FR-EKGK: the row menu looks the same as the other context menus. Its
+   entries are buttons, so these rules remove the border, background, font and
+   width that a button has by default (the same resets as `.documents-menu`).
+   A button sizes its border box, so `content-box` keeps the row height of the
+   `div` entries. Each entry sits in a `role="none"` wrapper, and the column
+   makes the entry as wide as the menu without a width. */
+.terminal-menu > [role="none"] {
+  display: flex;
+  flex-direction: column;
+}
+.terminal-menu .menu-item {
+  box-sizing: content-box;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  appearance: none;
+}
+.terminal-menu .menu-item:not(.menu-item--disabled):hover { background: var(--bg-active); }
 .terminals-panel__new { flex: none; }
 .terminal-row__pin {
   display: inline-flex;

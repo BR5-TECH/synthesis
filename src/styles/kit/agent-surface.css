@@ -1,0 +1,384 @@
+/* ASF: the surface panel an agent shows under its comment. It reads as one of
+   the application's own blocks: the sunken card of a request, the app's
+   controls, and no colour of its own. The one mark is the settled state: a
+   submitted panel keeps the pressed button outlined and says what was sent. */
+
+.agent-surface {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1-5);
+  padding: var(--sp-2-5) var(--sp-3);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  background: var(--bg-sunken);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  font-size: var(--fs-ui-sm);
+  line-height: var(--lh-normal);
+  color: var(--fg-1);
+}
+
+.agent-surface--placeholder {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--fg-3);
+}
+
+.agent-surface__stack {
+  display: flex;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.agent-surface__stack--column {
+  flex-direction: column;
+}
+
+.agent-surface__stack--row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.agent-surface__card {
+  padding: var(--sp-2) var(--sp-2-5);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-canvas);
+  min-width: 0;
+}
+
+.agent-surface__text {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.agent-surface__text--caption {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+}
+
+.agent-surface__divider {
+  border: 0;
+  margin: 0;
+  background: var(--border-1);
+}
+
+.agent-surface__divider--horizontal {
+  height: 1px;
+  width: 100%;
+}
+
+.agent-surface__divider--vertical {
+  width: 1px;
+  align-self: stretch;
+}
+
+.agent-surface__icon {
+  display: inline-flex;
+  color: var(--fg-2);
+}
+
+.agent-surface__icon-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: currentColor;
+}
+
+.agent-surface__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.agent-surface__label {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 0;
+  font-weight: var(--fw-semi);
+  color: var(--fg-2);
+}
+
+.agent-surface__value {
+  font-variant-numeric: tabular-nums;
+  font-weight: normal;
+  color: var(--fg-3);
+}
+
+.agent-surface__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.agent-surface__choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-1-5);
+  cursor: pointer;
+}
+
+.agent-surface__choice > input {
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.agent-surface__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.agent-surface__chip {
+  padding: var(--sp-0-5) var(--sp-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--fg-1);
+  font: inherit;
+  cursor: pointer;
+}
+
+.agent-surface__chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.agent-surface__chip:focus-visible,
+.agent-surface input[type="radio"]:focus-visible,
+.agent-surface input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* The tab list scrolls, so an outer ring would be cut at its edge; the tab
+   draws its ring inside itself. */
+.agent-surface__tab:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: var(--r-sm);
+}
+
+.agent-surface__checks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+}
+
+.agent-surface__button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+}
+
+.agent-surface__button .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+/* ASF-FR-YCTE: the settled mark. The pressed button keeps its outline while
+   the rest of the panel rests. */
+.agent-surface[data-state="submitted"] .btn[data-pressed="true"] {
+  opacity: 1;
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.agent-surface__tabs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.agent-surface__tablist {
+  display: flex;
+  gap: var(--sp-3);
+  border-bottom: 1px solid var(--border-1);
+  overflow-x: auto;
+}
+
+.agent-surface__tab {
+  padding: var(--sp-1) 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  color: var(--fg-3);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.agent-surface__tab[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--fg-1);
+}
+
+/* ASF-FR-GZFO: a wide table scrolls inside the panel. */
+.agent-surface__table-wrap {
+  overflow-x: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.agent-surface__table {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-surface__table caption {
+  text-align: left;
+  padding-bottom: var(--sp-1);
+  color: var(--fg-3);
+}
+
+.agent-surface__table th,
+.agent-surface__table td {
+  padding: var(--sp-1) var(--sp-2);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border-1);
+}
+
+.agent-surface__table th {
+  font-weight: var(--fw-semi);
+  color: var(--fg-2);
+  border-bottom-color: var(--border-2);
+  white-space: nowrap;
+}
+
+.agent-surface__table tr:last-child td {
+  border-bottom: 0;
+}
+
+.agent-surface__unknown,
+.agent-surface__loading {
+  margin: 0;
+  color: var(--fg-3);
+}
+
+.agent-surface__error {
+  margin: 0;
+  color: var(--danger, var(--fg-1));
+}
+
+.agent-surface__sent {
+  margin: 0;
+  padding-top: var(--sp-1-5);
+  border-top: 1px solid var(--border-1);
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+}
+
+.agent-surface__list {
+  list-style: none;
+}
+
+.agent-surface__tabpanel {
+  min-width: 0;
+}
+
+.agent-surface__picker {
+  min-inline-size: 0;
+}
+
+/* ASF-FR-EKZW / ASF-FR-IBTY / ASF-FR-EOLY / ASF-FR-MXGW: the cards. */
+.agent-surface__card-kind {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.agent-surface__card-kind > .agent-surface__field,
+.agent-surface__card-kind > .agent-surface__options,
+.agent-surface__card-kind > .agent-surface__table-wrap {
+  align-self: stretch;
+}
+
+.agent-surface__question {
+  margin: 0;
+  padding: 0;
+  font-weight: var(--fw-semi);
+  color: var(--fg-1);
+  overflow-wrap: anywhere;
+}
+
+.agent-surface__choice--rich {
+  padding: var(--sp-1) 0;
+}
+
+.agent-surface__choice-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0-5);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.agent-surface__description {
+  font-size: var(--fs-ui-xs);
+  color: var(--fg-3);
+}
+
+.agent-surface__badge {
+  margin-left: var(--sp-1-5);
+  padding: 0 var(--sp-1-5);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-full);
+  font-size: var(--fs-ui-xs);
+  font-weight: normal;
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+
+.agent-surface__table th[scope="row"] {
+  font-weight: var(--fw-semi);
+  color: var(--fg-1);
+  border-bottom-color: var(--border-1);
+  white-space: normal;
+}
+
+.agent-surface__table tr[data-recommended="true"] > * {
+  background: var(--bg-canvas);
+}
+
+.agent-surface__visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.agent-surface[data-state="submitted"] .btn--danger[data-pressed="true"] {
+  opacity: 1;
+  outline: 1px solid var(--danger);
+  outline-offset: 1px;
+}
+
+.agent-surface__choice-card,
+.agent-surface__checklist-card,
+.agent-surface__confirm-card,
+.agent-surface__comparison-card {
+  align-self: stretch;
+}

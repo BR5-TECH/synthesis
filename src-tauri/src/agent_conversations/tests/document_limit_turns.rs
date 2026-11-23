@@ -88,7 +88,7 @@ fn a_compaction_call_reports_no_context() {
         ],
         // The window holds the comment prompt with its plan tools part
         // (CVL-FR-JMEP), so the compaction point stays where it is described.
-        Some(16_500),
+        Some(19_000),
         1,
     );
     // A fragment discussion opens its history with the fragment, which is the

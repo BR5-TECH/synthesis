@@ -282,6 +282,11 @@ pub enum Attachment {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         format: Option<String>,
     },
+    /// CMS-FR-RWQQ: a reference to a panel an agent showed the author
+    /// (`AUI-agent-ui-surfaces.md` AUI-FR-QRCX). Identity alone, appended
+    /// through `append_as` alone; no [`AttachmentInput`] produces one.
+    #[serde(rename_all = "camelCase")]
+    AgentSurface { surface_id: String },
     /// CMS-FR-QVZP: a reference to a run an agent asked the author to start
     /// on an OpenSpec change (`CAR-change-action-requests.md` CAR-FR-KZOZ).
     /// Identity alone, appended through `append_as` alone; no

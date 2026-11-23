@@ -691,9 +691,9 @@ impl CompletionSeam for ToolThenGated {
     }
 }
 
-/// CVL-FR-08 / RDX-FR-DFXB: the twelve, and `request_document_export` beside
-/// them on every turn.
-pub(super) const EXPECTED_TOOLS: [&str; 13] = [
+/// CVL-FR-08 / RDX-FR-DFXB / SSF-FR-DNZK: the twelve, and
+/// `request_document_export` and `show_surface` beside them on every turn.
+pub(super) const EXPECTED_TOOLS: [&str; 14] = [
     "search_specifications",
     "read_file",
     "search_drafts",
@@ -707,6 +707,7 @@ pub(super) const EXPECTED_TOOLS: [&str; 13] = [
     "measure_document",
     "ask_user_comment",
     "request_document_export",
+    "show_surface",
 ];
 
 /// CVL-FR-08: the tool a **discussion** origin is attached beside the nine, and

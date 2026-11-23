@@ -35,6 +35,9 @@ pub(super) use action_requests::*;
 /// AGC-FR-JNOS / AGC-FR-LTLT: the split of a change.
 mod split;
 pub(super) use split::*;
+/// AGC-FR-JYBM / AGC-FR-TJDG: the agent surfaces of a thread.
+mod surfaces;
+pub(super) use surfaces::*;
 mod kind_label;
 /// AGC-FR-DKHT: a prompt proposal's hunk in a draft hunk's shape.
 mod prompt_view;
@@ -259,6 +262,11 @@ fn attachment_line(attachment: &comments::Attachment, reads: &AttachmentReads) -
             None => format!("[asked the author to export {path}]"),
         },
         comments::Attachment::ChangeActionRequest { .. } => action_request_line(attachment),
+        // AGC-FR-JYBM / AGC-FR-TJDG: the surface as the agent showed it, and
+        // what the author sent where they pressed a button.
+        comments::Attachment::AgentSurface { surface_id } => {
+            surface_line(surface_id, &reads.surfaces)
+        }
         // MPR-FR-PMLX: the focus of the turn the comment triggers. The same
         // line serves the history, so the agent sees what each comment pointed at.
         comments::Attachment::MapNode { node } => {
@@ -377,6 +385,8 @@ pub(super) struct AttachmentReads {
     new_drafts: NewDraftReads,
     /// AGC-FR-LTLT: the new-change proposals of the thread's change, by id.
     new_changes: NewChangeReads,
+    /// AGC-FR-JYBM: the agent surfaces of the thread, by id.
+    surfaces: SurfaceReads,
 }
 
 /// AGC-FR-RVQP / AGC-FR-DKHT: read every proposal the thread's `proposal`
@@ -559,7 +569,13 @@ fn attachment_reads(
         }
     }
     let new_changes = new_change_reads(roots, thread);
-    AttachmentReads { digests, hunks, new_drafts: new_draft_reads(roots, thread), new_changes }
+    AttachmentReads {
+        digests,
+        hunks,
+        new_drafts: new_draft_reads(roots, thread),
+        new_changes,
+        surfaces: surface_reads(roots, thread),
+    }
 }
 
 /// AGC-FR-RVQP: one proposal's changes and how each was decided.

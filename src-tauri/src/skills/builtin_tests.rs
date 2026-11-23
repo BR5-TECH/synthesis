@@ -87,6 +87,55 @@ fn the_roadmap_skill_names_its_references_and_each_exists() {
     }
 }
 
+// DSL-FR-HDPD / DSL-FR-KBME: the `a2ui` skill names its references, each is
+// embedded, every surface example in its files is valid against the
+// discussion catalog, and its description names panels and no diagram.
+#[test]
+fn the_a2ui_skill_names_its_references_and_its_examples_are_valid() {
+    let skill = builtin_skill_file("a2ui", "SKILL.md").expect("SKILL.md");
+    assert!(skill.contains("name: a2ui"));
+    assert!(skill.contains("`show_surface`"));
+    let mut named: Vec<&str> = skill
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .filter(|token| token.starts_with("references/") && token.ends_with(".md"))
+        .collect();
+    named.sort_unstable();
+    named.dedup();
+    assert_eq!(
+        named,
+        ["references/cards.md", "references/components.md", "references/examples.md"]
+    );
+    let mut examples = 0;
+    for file in std::iter::once("SKILL.md").chain(named.iter().copied()) {
+        let text = builtin_skill_file("a2ui", file).unwrap_or_else(|| panic!("{file} is embedded"));
+        for block in text.split("```json\n").skip(1) {
+            let json = block.split("\n```").next().expect("a closed fence");
+            let example: serde_json::Value =
+                serde_json::from_str(json).unwrap_or_else(|e| panic!("{file}: {e}"));
+            let components = example["components"].as_array().expect("components");
+            let model = example.get("data_model").cloned().unwrap_or(serde_json::json!({}));
+            crate::agent_surfaces::validate_surface(components, &model)
+                .unwrap_or_else(|v| panic!("{file}: {v:?}"));
+            examples += 1;
+        }
+    }
+    assert!(examples >= 7, "one example for each card and the examples file: {examples}");
+    let description = skill.lines().find(|l| l.starts_with("description:")).unwrap().to_lowercase();
+    for word in ["panel", "form", "choice", "checklist", "comparison", "a2ui"] {
+        assert!(description.contains(word), "{word}");
+    }
+    for word in ["diagram", "chart"] {
+        assert!(!description.contains(word), "{word}");
+    }
+    // AUI-FR-PMXJ: the cards reference names every card of the catalog.
+    let cards = builtin_skill_file("a2ui", "references/cards.md").unwrap();
+    for card in crate::agent_surfaces::validate::CARD_COMPONENTS {
+        assert!(cards.contains(&format!("## {card}")), "{card}");
+    }
+}
+
 // DSL-FR-VTMI: the `mermaid` skill names one reference file per diagram type,
 // and every file it names is embedded and holds at least one diagram.
 #[test]
@@ -313,6 +362,9 @@ fn a_calm_query_ranks_calm_first_and_a_mermaid_query_ranks_mermaid_first() {
         ("draw a gantt chart of the release", "mermaid"),
         ("a timeline diagram of the project history", "mermaid"),
         ("a kanban board diagram", "mermaid"),
+        // DSL-FR-KBME: a panel query ranks `a2ui` first.
+        ("show the author a checklist panel", "a2ui"),
+        ("let the author pick from a choice of options in a form", "a2ui"),
     ] {
         let ranked = search_skills(&indexer, query, 5, &SkillFilter::empty());
         let names: Vec<&str> = ranked.iter().map(|r| r.skill.name.as_str()).collect();

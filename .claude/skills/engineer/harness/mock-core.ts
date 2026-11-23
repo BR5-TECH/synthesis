@@ -1604,6 +1604,25 @@ function spokenComments(id: string): any[] {
   ];
 }
 
+/**
+ * CMT-FR-DBQC / ASF-FR-ASQV: one agent comment with a surface panel, on the
+ * draft discussion `disc-1` (stream variant) and the Flow discussion
+ * `disc-flow-1` (card variant). The record is `seededSurface` below.
+ */
+function surfaceComments(id: string): any[] {
+  if (id !== "disc-1" && id !== "disc-flow-1") return [];
+  return [
+    {
+      id: `${id}-surf`,
+      author: agent,
+      body: "Before I write the storage section, pick one option.",
+      quotes: [],
+      attachments: [{ kind: "agentSurface", surfaceId: `surf-${id}` }],
+      createdAt: "2026-07-28T10:16:00Z",
+    },
+  ];
+}
+
 function thread(id: string, over: Record<string, unknown> = {}) {
   return {
     id,
@@ -1780,6 +1799,7 @@ function discussion(id: string, draftId: string, over: Record<string, unknown> =
       // to reach the control's **missing** rendering, since nothing the author
       // can do in the window removes a proposal record while leaving the comment
       // that announced it behind.
+      ...surfaceComments(id),
       ...spokenComments(id),
       // MPV-FR-HGLN: `?planProposal` adds a plan proposal comment (mock-map-discussions.ts).
       ...planProposalComments(id),
@@ -4092,6 +4112,53 @@ let agentTurns: any[] = [
 // DXP-FR-YEAQ: the export requests the harness answers for.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const exportRequests: Record<string, any> = {};
+
+// AUI-FR-IAAP: the agent surfaces the harness answers for, one per seeded comment.
+const agentSurfaces: Record<string, any> = {};
+function seededSurface(id: string): any {
+  const discussionId = id.replace(/^surf-/, "");
+  return {
+    id,
+    discussionId,
+    target:
+      discussionId === "disc-flow-1"
+        ? { kind: "artifact", artifactId: "flows/release.flow.md" }
+        : { kind: "draft", draftId: "d-1" },
+    commentId: `${discussionId}-surf`,
+    catalogId: "synthesis:discussion/v1",
+    components: [
+      { id: "root", component: "Column", children: ["q", "pick", "note", "tabs", "send"] },
+      { id: "q", component: "Text", text: "Which storage do you want for the cleanup log?" },
+      {
+        id: "pick", component: "ChoicePicker", label: "Storage", value: { "@path": "/choice" },
+        options: [{ label: "SQLite", value: "sqlite" }, { label: "Plain files", value: "files" }],
+      },
+      { id: "note", component: "TextField", label: "Note", value: { "@path": "/note" } },
+      { id: "tabs", component: "Tabs", tabs: [{ title: "Compare", child: "table" }, { title: "Risks", child: "risks" }] },
+      {
+        id: "table", component: "Table", caption: "Options",
+        columns: [{ key: "name", title: "Option" }, { key: "cost", title: "Cost" }, { key: "notes", title: "Notes" }],
+        rows: [
+          { name: "SQLite", cost: "Low", notes: "One file" },
+          { name: "Plain files", cost: "None", notes: "Easy to read with any editor or pager, and easy to diff in review" },
+          { name: "Remote store", cost: "High", notes: "Needs a network_connection_that_is_always_available_and_fast" },
+          { name: "Memory", cost: "None", notes: "Lost on exit" },
+        ],
+      },
+      { id: "risks", component: "Text", text: "Plain files can grow without a limit.", variant: "caption" },
+      {
+        id: "send", component: "Button", variant: "primary", child: "send_label",
+        action: { event: { name: "choose_storage", context: { choice: { "@path": "/choice" }, note: { "@path": "/note" } } } },
+        "@checks": [{ condition: { "@call": "required", args: { value: { "@path": "/choice" } } }, message: "Pick one option." }],
+      },
+      { id: "send_label", component: "Text", text: "Send" },
+    ],
+    dataModel: { choice: [], note: "" },
+    authoredBy: agent,
+    createdAt: "2026-07-28T10:16:00Z",
+    state: "open",
+  };
+}
 
 function fireBus(name: string, payload?: unknown): void {
   const fire = (globalThis as Record<string, unknown>).__fireBusEvent as
@@ -8870,6 +8937,38 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       exportRequests[id] = next;
       fireBus("export-request-changed", next);
       return { request: next, commentFailed: false };
+    }
+    // AUI-FR-QBXZ / AUI-FR-KBVY: one record per seeded surface, held in memory.
+    // A submission appends the author's comment and locks the record.
+    case "get_agent_surface": {
+      const id = String(a.surfaceId);
+      if (!id.startsWith("surf-")) throw "surface_not_found";
+      return (agentSurfaces[id] ??= seededSurface(id));
+    }
+    case "submit_surface_action": {
+      const id = String(a.surfaceId);
+      const current = (agentSurfaces[id] ??= seededSurface(id));
+      if (current.state === "submitted") throw "already_submitted";
+      const action = a.action as Record<string, any>;
+      const at = new Date().toISOString();
+      const commentId = `${current.discussionId}-surf-reply`;
+      const stored = allDiscussions().find((t) => t.id === current.discussionId);
+      if (stored) {
+        stored.comments = [...stored.comments, {
+          id: commentId, author: human, body: `Sent “Send”: ${JSON.stringify(action.context)}`,
+          quotes: [], attachments: [], createdAt: at,
+        }];
+        stored.updatedAt = at;
+        fireBus("comment-thread-changed", foldedThread(current.discussionId));
+      }
+      const next = {
+        ...current,
+        state: "submitted",
+        submission: { ...action, by: human, at, commentId },
+      };
+      agentSurfaces[id] = next;
+      fireBus("agent-surface-changed", next);
+      return { surface: next, commentId };
     }
     // LCM-FR-04: an assignment returns the one node it changed. The folders
     // whose answer it changed reload on the structural-change event, as the

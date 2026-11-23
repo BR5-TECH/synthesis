@@ -337,3 +337,73 @@ fn a_tag_that_is_not_ready_is_refused_beside_the_group() {
     let candidates = classifier.input.iter().find(|s| s.tag == "candidates").unwrap();
     assert!(!candidates.body.contains("GHOST-PERSONA"));
 }
+
+// SSF-FR-TRIB / AGC-FR-DIZM: an addressed agent of a synthesis group that shows
+// a surface records it on its own turn, as on any other turn. The group holds
+// no surface for the synthesis turn: the surface reaches it through the
+// conversation alone.
+#[test]
+fn a_surface_of_a_group_agent_is_recorded_on_its_own_turn() {
+    let seam = RoutedSeam::replying(|r, exchange| {
+        let first_call = exchange <= 1;
+        if r.instructions.contains(CLASSIFIER_MARK) {
+            Ok(text_reply("sec".into()))
+        } else if r.instructions.contains(SYNTHESIS_MARK) {
+            Ok(text_reply(said("The synthesis.")))
+        } else if persona_of(r) == "ARCH" && first_call {
+            Ok(tool_reply(
+                crate::tools::show_surface::NAME,
+                serde_json::json!({
+                    "message": said("Pick a storage."),
+                    "components": [{"id":"root","component":"Text","text":"Which storage?"}],
+                }),
+            ))
+        } else {
+            Ok(text_reply(said(format!("reply of {}", persona_of(r)))))
+        }
+    });
+    let h = Harness::with_patient_seam(Box::new(seam.clone()));
+    h.mount();
+    h.create_agent("arch", "ARCH-PERSONA");
+    h.create_agent("sec", "SEC-PERSONA");
+    let (draft_id, thread) = seed_discussion(&h, &["@arch @sec what now?"]);
+    switch(&h, true, 60);
+    let group = dispatch_group_impl(
+        &h.app.handle().clone(),
+        Roots::same(&h.root()),
+        PROJECT_KEY,
+        &["arch".to_string(), "sec".to_string()],
+        ConversationOrigin::of(&thread),
+        &thread.comments[0].id,
+    )
+    .expect("dispatch");
+    h.join_turns();
+    assert_eq!(group.mode, "synthesis");
+    let arch = h.terminal.lock().unwrap().iter().find(|t| t.nickname == "arch").cloned().unwrap();
+    assert_eq!(arch.state, AgentTurnState::AwaitingReply);
+    let folded = folded_discussion(&h, &draft_id, &thread.id);
+    let shown: Vec<_> = folded
+        .comments
+        .iter()
+        .filter(|c| matches!(c.attachments.as_slice(), [comments::Attachment::AgentSurface { .. }]))
+        .collect();
+    assert_eq!(shown.len(), 1, "the surface is recorded once");
+    assert!(matches!(&shown[0].author, Participant::Agent { handle, .. } if handle == "arch"));
+    // The synthesis turn ran, and no group section held the surface.
+    let synthesis: Vec<_> =
+        seam.requests().into_iter().filter(|r| r.instructions.contains(SYNTHESIS_MARK)).collect();
+    assert!(!synthesis.is_empty(), "a synthesis turn ran");
+    for request in &synthesis {
+        for section in request.input.iter().filter(|s| s.body.contains("Which storage?")) {
+            assert!(
+                section.tag == "discussion_history" || section.tag == "current_comment",
+                "a group section holds the surface: <{}>",
+                section.tag
+            );
+        }
+    }
+    assert!(
+        folded.comments.iter().any(|c| c.attachments.contains(&comments::Attachment::Synthesis)),
+        "the synthesis is posted"
+    );
+}

@@ -7,6 +7,7 @@
 import type { NewDraftProposalReference, NewDraftSubjectReference } from "./newDraftProposals";
 import type { NewChangeProposalReference, NewChangeSubjectReference } from "./newChangeProposals";
 import type { ExportRequestReference } from "./documentExport";
+import type { AgentSurfaceReference } from "./agentSurfaces";
 import { GITHUB_TOKEN_ERRORS } from "./github";
 import type { AdvisorsList, SynthesisMark } from "./groupAttachments";
 
@@ -215,6 +216,8 @@ export type Attachment =
   | ExportRequestReference
   /** CMS-FR-QVZP: a run an agent asked the author to start on a change. */
   | ChangeActionRequestReference
+  /** CMS-FR-RWQQ: a panel an agent showed the author. */
+  | AgentSurfaceReference
   /** CMS-FR-TUHL: the comment is the Synthesis of an agent group. */
   | SynthesisMark
   /** CMS-FR-KVDV: the advisors of a Meta reply. */
@@ -267,6 +270,7 @@ export function attachmentName(a: Attachment): string {
   if (a.kind === "newChangeProposal" || a.kind === "newChangeSubject") return "Proposed change";
   if (a.kind === "exportRequest") return a.path;
   if (a.kind === "changeActionRequest") return a.change;
+  if (a.kind === "agentSurface") return "Panel";
   if (a.kind === "synthesis") return "Synthesis";
   if (a.kind === "advisors") return "Advisors";
   if (a.kind === "mapNode") return a.node.label;
@@ -292,6 +296,7 @@ export function isImageAttachment(a: Attachment): boolean {
     a.kind === "newChangeProposal" ||
     a.kind === "newChangeSubject" ||
     a.kind === "exportRequest" ||
+    a.kind === "agentSurface" ||
     a.kind === "changeActionRequest" ||
     a.kind === "synthesis" ||
     a.kind === "advisors" ||

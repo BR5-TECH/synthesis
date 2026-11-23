@@ -1,0 +1,1638 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "synthesis:discussion/v1",
+  "catalogId": "synthesis:discussion/v1",
+  "protocolVersion": "1.0",
+  "title": "Synthesis discussion catalog",
+  "instructions": "Load the `a2ui` skill with `load_skill` before you compose a panel: it has the rules and examples. The essentials: `components` is a flat list; each component has a unique `id` and a `component` type, and exactly one has the id `root`. A container names its children by id. Bind a value with {\"@path\": \"/pointer\"} and give start values in `data_model`. For a common case use one card as `root`: ChoiceCard for a question with options, ConfirmCard for a yes or no decision, ComparisonCard for options against criteria, ChecklistCard for a set of items to keep. Example: [{\"id\":\"root\",\"component\":\"ConfirmCard\",\"title\":\"Apply the migration?\",\"confirm\":{\"label\":\"Apply\",\"name\":\"apply\"},\"decline\":{\"label\":\"Not now\",\"name\":\"skip\"}}]",
+  "components": {
+    "Row": {
+      "type": "object",
+      "description": "Children side by side.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "Row"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "children": {
+          "$ref": "#/$defs/ChildList"
+        },
+        "justify": {
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "spaceBetween",
+            "spaceAround",
+            "spaceEvenly",
+            "stretch"
+          ]
+        },
+        "align": {
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "children"
+      ],
+      "additionalProperties": false
+    },
+    "Column": {
+      "type": "object",
+      "description": "Children one below the other.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "Column"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "children": {
+          "$ref": "#/$defs/ChildList"
+        },
+        "justify": {
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "spaceBetween",
+            "spaceAround",
+            "spaceEvenly",
+            "stretch"
+          ]
+        },
+        "align": {
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "children"
+      ],
+      "additionalProperties": false
+    },
+    "List": {
+      "type": "object",
+      "description": "A list of children, often a template over a data-model list.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "List"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "children": {
+          "$ref": "#/$defs/ChildList"
+        },
+        "direction": {
+          "enum": [
+            "vertical",
+            "horizontal"
+          ]
+        },
+        "align": {
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "children"
+      ],
+      "additionalProperties": false
+    },
+    "Card": {
+      "type": "object",
+      "description": "A bordered block around one child.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "Card"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "child": {
+          "$ref": "#/$defs/ComponentId"
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "child"
+      ],
+      "additionalProperties": false
+    },
+    "Tabs": {
+      "type": "object",
+      "description": "Tabs, one child per tab.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "Tabs"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "tabs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "$ref": "#/$defs/DynamicString"
+              },
+              "child": {
+                "$ref": "#/$defs/ComponentId"
+              }
+            },
+            "required": [
+              "title",
+              "child"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "tabs"
+      ],
+      "additionalProperties": false
+    },
+    "Divider": {
+      "type": "object",
+      "description": "A separating line.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "Divider"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "axis": {
+          "enum": [
+            "horizontal",
+            "vertical"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "component"
+      ],
+      "additionalProperties": false
+    },
+    "Text": {
+      "type": "object",
+      "description": "Plain text. No Markdown.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "Text"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "text": {
+          "$ref": "#/$defs/DynamicString"
+        },
+        "variant": {
+          "enum": [
+            "body",
+            "caption"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "Icon": {
+      "type": "object",
+      "description": "An icon by name.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "Icon"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "name": {
+          "enum": [
+            "accountCircle",
+            "add",
+            "arrowBack",
+            "arrowForward",
+            "attachFile",
+            "calendarToday",
+            "call",
+            "camera",
+            "check",
+            "close",
+            "delete",
+            "download",
+            "edit",
+            "event",
+            "error",
+            "fastForward",
+            "favorite",
+            "favoriteOff",
+            "folder",
+            "help",
+            "home",
+            "info",
+            "locationOn",
+            "lock",
+            "lockOpen",
+            "mail",
+            "menu",
+            "moreVert",
+            "moreHoriz",
+            "notificationsOff",
+            "notifications",
+            "pause",
+            "payment",
+            "person",
+            "phone",
+            "photo",
+            "play",
+            "print",
+            "refresh",
+            "rewind",
+            "search",
+            "send",
+            "settings",
+            "share",
+            "shoppingCart",
+            "skipNext",
+            "skipPrevious",
+            "star",
+            "starHalf",
+            "starOff",
+            "stop",
+            "upload",
+            "visibility",
+            "visibilityOff",
+            "volumeDown",
+            "volumeMute",
+            "volumeOff",
+            "volumeUp",
+            "warning"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "Button": {
+      "type": "object",
+      "description": "A button. Its child is a Text with the label. Pressing it sends its action and locks the panel.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "Button"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "@checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CheckRule"
+          }
+        },
+        "child": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "variant": {
+          "enum": [
+            "default",
+            "primary",
+            "borderless"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "child",
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "TextField": {
+      "type": "object",
+      "description": "A text input. Bind value with @path.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "TextField"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "@checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CheckRule"
+          }
+        },
+        "label": {
+          "$ref": "#/$defs/DynamicString"
+        },
+        "value": {
+          "$ref": "#/$defs/DynamicString"
+        },
+        "placeholder": {
+          "$ref": "#/$defs/DynamicString"
+        },
+        "variant": {
+          "enum": [
+            "shortText",
+            "longText",
+            "number"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "label",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "CheckBox": {
+      "type": "object",
+      "description": "A checkbox. Bind value with @path.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "CheckBox"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "@checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CheckRule"
+          }
+        },
+        "label": {
+          "$ref": "#/$defs/DynamicString"
+        },
+        "value": {
+          "$ref": "#/$defs/DynamicBoolean"
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "label",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "ChoicePicker": {
+      "type": "object",
+      "description": "Choices. value is the list of selected option values; bind it with @path.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "ChoicePicker"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "@checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CheckRule"
+          }
+        },
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "$ref": "#/$defs/DynamicString"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "value": {
+          "$ref": "#/$defs/DynamicStringList"
+        },
+        "label": {
+          "$ref": "#/$defs/DynamicString"
+        },
+        "variant": {
+          "enum": [
+            "mutuallyExclusive",
+            "multipleSelection"
+          ]
+        },
+        "displayStyle": {
+          "enum": [
+            "checkbox",
+            "chips"
+          ]
+        },
+        "filterable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "options",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "Slider": {
+      "type": "object",
+      "description": "A number slider. Bind value with @path.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "Slider"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "@checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CheckRule"
+          }
+        },
+        "max": {
+          "type": "number"
+        },
+        "value": {
+          "$ref": "#/$defs/DynamicNumber"
+        },
+        "min": {
+          "type": "number"
+        },
+        "steps": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "label": {
+          "$ref": "#/$defs/DynamicString"
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "max",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "DateTimeInput": {
+      "type": "object",
+      "description": "A date or time input with an ISO 8601 value. Start it with an empty string.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "DateTimeInput"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "@checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CheckRule"
+          }
+        },
+        "value": {
+          "$ref": "#/$defs/DynamicString"
+        },
+        "label": {
+          "$ref": "#/$defs/DynamicString"
+        },
+        "enableDate": {
+          "type": "boolean"
+        },
+        "enableTime": {
+          "type": "boolean"
+        },
+        "min": {
+          "$ref": "#/$defs/DynamicString"
+        },
+        "max": {
+          "$ref": "#/$defs/DynamicString"
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "Table": {
+      "type": "object",
+      "description": "A table. rows is a list of objects, literal or bound with @path; a cell shows row[key] as text.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "Table"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "title": {
+                "$ref": "#/$defs/DynamicString"
+              }
+            },
+            "required": [
+              "key",
+              "title"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "rows": {
+          "$ref": "#/$defs/DynamicValue"
+        },
+        "caption": {
+          "$ref": "#/$defs/DynamicString"
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "columns",
+        "rows"
+      ],
+      "additionalProperties": false
+    },
+    "ChoiceCard": {
+      "type": "object",
+      "description": "A question with options and a Send button. Sends {selected: [values], other?}.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "ChoiceCard"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "required": [
+              "value",
+              "label"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "multiple": {
+          "type": "boolean"
+        },
+        "allowOther": {
+          "type": "boolean"
+        },
+        "sendLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "action": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/ActionName"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "question",
+        "options",
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "ConfirmCard": {
+      "type": "object",
+      "description": "A yes or no decision. Each button sends its own action name with {}.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "ConfirmCard"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "confirm": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "name": {
+              "$ref": "#/$defs/ActionName"
+            }
+          },
+          "required": [
+            "label",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "decline": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "name": {
+              "$ref": "#/$defs/ActionName"
+            }
+          },
+          "required": [
+            "label",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "tone": {
+          "enum": [
+            "default",
+            "danger"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "title",
+        "confirm"
+      ],
+      "additionalProperties": false
+    },
+    "ComparisonCard": {
+      "type": "object",
+      "description": "Options against criteria. With pick, sends {picked: value}.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "ComparisonCard"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "criteria": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "required": [
+              "key",
+              "title"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "values": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
+              },
+              "recommended": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "value",
+              "label",
+              "values"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "pick": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/ActionName"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "criteria",
+        "options"
+      ],
+      "additionalProperties": false
+    },
+    "ChecklistCard": {
+      "type": "object",
+      "description": "Items with checkboxes and a Send button. Sends {checked: [values]}.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ComponentId"
+        },
+        "component": {
+          "const": "ChecklistCard"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "@accessibility": {
+          "$ref": "#/$defs/Accessibility"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 30,
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "checked": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "value",
+              "label"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "sendLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "action": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/ActionName"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "component",
+        "items",
+        "action"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "functions": {
+    "formatString": {
+      "type": "object",
+      "description": "Interpolates ${/pointer} values into a text.",
+      "returnType": "string",
+      "properties": {
+        "@call": {
+          "const": "formatString"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/DynamicString"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "@call",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "formatNumber": {
+      "type": "object",
+      "description": "Formats a number.",
+      "returnType": "string",
+      "properties": {
+        "@call": {
+          "const": "formatNumber"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/DynamicNumber"
+            },
+            "decimals": {
+              "$ref": "#/$defs/DynamicNumber"
+            },
+            "grouping": {
+              "$ref": "#/$defs/DynamicBoolean"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "@call",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "formatDate": {
+      "type": "object",
+      "description": "Formats a date with a Unicode TR35 pattern.",
+      "returnType": "string",
+      "properties": {
+        "@call": {
+          "const": "formatDate"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/DynamicValue"
+            },
+            "format": {
+              "$ref": "#/$defs/DynamicString"
+            }
+          },
+          "required": [
+            "value",
+            "format"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "@call",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "pluralize": {
+      "type": "object",
+      "description": "Chooses a text by a count.",
+      "returnType": "string",
+      "properties": {
+        "@call": {
+          "const": "pluralize"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/DynamicNumber"
+            },
+            "other": {
+              "$ref": "#/$defs/DynamicString"
+            },
+            "zero": {
+              "$ref": "#/$defs/DynamicString"
+            },
+            "one": {
+              "$ref": "#/$defs/DynamicString"
+            },
+            "two": {
+              "$ref": "#/$defs/DynamicString"
+            },
+            "few": {
+              "$ref": "#/$defs/DynamicString"
+            },
+            "many": {
+              "$ref": "#/$defs/DynamicString"
+            }
+          },
+          "required": [
+            "value",
+            "other"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "@call",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "required": {
+      "type": "object",
+      "description": "True when the value is not empty.",
+      "returnType": "boolean",
+      "properties": {
+        "@call": {
+          "const": "required"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/DynamicValue"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "@call",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "length": {
+      "type": "object",
+      "description": "True when the text length is within min and max.",
+      "returnType": "boolean",
+      "properties": {
+        "@call": {
+          "const": "length"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/DynamicString"
+            },
+            "min": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "@call",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "numeric": {
+      "type": "object",
+      "description": "True when the number is within min and max.",
+      "returnType": "boolean",
+      "properties": {
+        "@call": {
+          "const": "numeric"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/DynamicNumber"
+            },
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "@call",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "and": {
+      "type": "object",
+      "description": "True when every value is true.",
+      "returnType": "boolean",
+      "properties": {
+        "@call": {
+          "const": "and"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "values": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/DynamicBoolean"
+              }
+            }
+          },
+          "required": [
+            "values"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "@call",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "or": {
+      "type": "object",
+      "description": "True when one value is true.",
+      "returnType": "boolean",
+      "properties": {
+        "@call": {
+          "const": "or"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "values": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/DynamicBoolean"
+              }
+            }
+          },
+          "required": [
+            "values"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "@call",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "not": {
+      "type": "object",
+      "description": "The opposite of the value.",
+      "returnType": "boolean",
+      "properties": {
+        "@call": {
+          "const": "not"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/DynamicBoolean"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "@call",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "@index": {
+      "type": "object",
+      "description": "The index of the current item in a template.",
+      "returnType": "number",
+      "properties": {
+        "@call": {
+          "const": "@index"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "offset": {
+              "$ref": "#/$defs/DynamicNumber"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "@call",
+        "args"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "ComponentId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "Weight": {
+      "type": "number",
+      "minimum": 0
+    },
+    "Accessibility": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/DynamicString"
+        },
+        "description": {
+          "$ref": "#/$defs/DynamicString"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ChildList": {
+      "oneOf": [
+        {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/ComponentId"
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "componentId": {
+              "$ref": "#/$defs/ComponentId"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "componentId",
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "DataBinding": {
+      "type": "object",
+      "properties": {
+        "@path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "@path"
+      ],
+      "additionalProperties": false
+    },
+    "FunctionCall": {
+      "type": "object",
+      "properties": {
+        "@call": {
+          "type": "string"
+        },
+        "args": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "@call",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "DynamicString": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/DataBinding"
+        },
+        {
+          "$ref": "#/$defs/FunctionCall"
+        }
+      ]
+    },
+    "DynamicNumber": {
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/DataBinding"
+        },
+        {
+          "$ref": "#/$defs/FunctionCall"
+        }
+      ]
+    },
+    "DynamicBoolean": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/$defs/DataBinding"
+        },
+        {
+          "$ref": "#/$defs/FunctionCall"
+        }
+      ]
+    },
+    "DynamicStringList": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "$ref": "#/$defs/DataBinding"
+        },
+        {
+          "$ref": "#/$defs/FunctionCall"
+        }
+      ]
+    },
+    "DynamicValue": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/DataBinding"
+        },
+        {
+          "$ref": "#/$defs/FunctionCall"
+        },
+        {
+          "type": [
+            "string",
+            "number",
+            "boolean",
+            "array",
+            "object",
+            "null"
+          ]
+        }
+      ]
+    },
+    "ContextValue": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/DataBinding"
+        },
+        {
+          "type": [
+            "string",
+            "number",
+            "boolean",
+            "array",
+            "object",
+            "null"
+          ]
+        }
+      ]
+    },
+    "Action": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/ActionName"
+            },
+            "context": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/ContextValue"
+              }
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "event"
+      ],
+      "additionalProperties": false
+    },
+    "CheckRule": {
+      "type": "object",
+      "properties": {
+        "condition": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/DataBinding"
+            },
+            {
+              "$ref": "#/$defs/FunctionCall"
+            }
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "condition"
+      ],
+      "additionalProperties": false
+    },
+    "ActionName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$"
+    }
+  }
+}

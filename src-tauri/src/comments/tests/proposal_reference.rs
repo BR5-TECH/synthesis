@@ -62,11 +62,11 @@ fn no_frontend_route_can_put_a_proposal_reference_on_a_comment() {
     );
 }
 
-// CMS-FR-42 / CMS-FR-QVZP / CMS-FR-OIUO: a stored attachment is one of exactly
-// sixteen kinds, `change_action_request` and the two Map kinds among them, and
-// each has its wire kind.
+// CMS-FR-42 / CMS-FR-QVZP / CMS-FR-OIUO / CMS-FR-RWQQ: a stored attachment is
+// one of exactly seventeen kinds, `change_action_request`, `agent_surface`, and
+// the two Map kinds among them, and each has its wire kind.
 #[test]
-fn a_stored_attachment_is_one_of_sixteen_kinds() {
+fn a_stored_attachment_is_one_of_seventeen_kinds() {
     const MODEL: &str = include_str!("../model.rs");
     let body = MODEL
         .split_once("pub enum Attachment {")
@@ -90,6 +90,7 @@ fn a_stored_attachment_is_one_of_sixteen_kinds() {
             "NewChangeProposal",
             "NewChangeSubject",
             "ExportRequest",
+            "AgentSurface",
             "ChangeActionRequest",
             "MapNode",
             "MapPlanProposal",
@@ -115,6 +116,9 @@ fn a_stored_attachment_is_one_of_sixteen_kinds() {
             "action": "apply",
         })
     );
+    let wire =
+        serde_json::to_value(Attachment::AgentSurface { surface_id: "s1".into() }).expect("json");
+    assert_eq!(wire, serde_json::json!({ "kind": "agentSurface", "surfaceId": "s1" }));
 }
 
 // CMS-FR-MKEV: the Synthesis participant is one fixed agent participant:

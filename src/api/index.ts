@@ -20,6 +20,7 @@ export * from "./docker";
 export * from "./isolation";
 export * from "./documents";
 export * from "./documentExport";
+export * from "./agentSurfaces";
 export * from "./embeddings";
 export * from "./flowPlan";
 export * from "./delivery";

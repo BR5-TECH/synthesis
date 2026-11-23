@@ -35,6 +35,7 @@ import type {
   DocumentsSnapshot,
   ExportProgress,
   ExportRequest,
+  AgentSurface,
   EmbeddingsStatus,
   McpServerStatusChanged,
   DraftPromptChangedPayload,
@@ -212,6 +213,8 @@ export const DOCUMENTS_CHANGED = "documents-changed";
 export const DOCUMENT_EXPORT_PROGRESS = "document-export-progress";
 /** DXP-FR-FVTK: an export request changed. */
 export const EXPORT_REQUEST_CHANGED = "export-request-changed";
+/** AUI-FR-WDZG: a change of an agent surface record. */
+export const AGENT_SURFACE_CHANGED = "agent-surface-changed";
 
 /**
  * DCL-FR-PTRP: the Documents collection changed. The payload is the whole
@@ -963,6 +966,12 @@ export const onExportRequestChanged = (
   handler: (request: ExportRequest) => void,
 ): Promise<UnlistenFn> =>
   listenProject<ExportRequest>(EXPORT_REQUEST_CHANGED, (ev) => handler(ev.payload));
+
+/** AUI-FR-WDZG: subscribe to [`AGENT_SURFACE_CHANGED`]. */
+export const onAgentSurfaceChanged = (
+  handler: (surface: AgentSurface) => void,
+): Promise<UnlistenFn> =>
+  listenProject<AgentSurface>(AGENT_SURFACE_CHANGED, (ev) => handler(ev.payload));
 
 /** PWN-FR-NEYF: the list of project windows changed. */
 export const PROJECT_WINDOWS_CHANGED = "project-windows-changed";

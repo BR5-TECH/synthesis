@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use super::convert::diagrams::{self, DiagramFailure, DiagramRenderer};
 use super::convert::model::DiagramKind;
-use super::convert::{self, calm_raster, Format, Input, Stage};
+use super::convert::{self, calm_raster, Format, Input, Picture, Stage};
 use super::source::check_doc_artifact;
 use super::{
     ERR_CONVERSION_FAILED, ERR_INVALID_DESTINATION, ERR_INVALID_FORMAT, ERR_NOT_FOUND,
@@ -84,8 +84,8 @@ pub struct ExportJob {
 /// rasterises it. A CALM fence with no picture does not render.
 pub fn diagram_renderer<'a>(
     pictures: &'a [CalmPicture],
-    render_mermaid: &'a dyn Fn(&str) -> Result<Vec<u8>, DiagramFailure>,
-) -> impl Fn(DiagramKind, &str) -> Result<Vec<u8>, DiagramFailure> + 'a {
+    render_mermaid: &'a dyn Fn(&str) -> Result<Picture, DiagramFailure>,
+) -> impl Fn(DiagramKind, &str) -> Result<Picture, DiagramFailure> + 'a {
     let mut by_source: HashMap<&str, &str> = HashMap::new();
     for picture in pictures {
         by_source.entry(picture.source.as_str()).or_insert(picture.svg.as_str());

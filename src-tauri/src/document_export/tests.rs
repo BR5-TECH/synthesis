@@ -52,7 +52,7 @@ impl Project {
 fn no_diagram(
     _: convert::model::DiagramKind,
     _: &str,
-) -> Result<Vec<u8>, convert::diagrams::DiagramFailure> {
+) -> Result<convert::Picture, convert::diagrams::DiagramFailure> {
     Err(convert::diagrams::DiagramFailure::Invalid)
 }
 

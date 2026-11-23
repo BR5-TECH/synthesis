@@ -10,18 +10,15 @@ use std::sync::{Arc, OnceLock};
 use resvg::tiny_skia;
 use resvg::usvg::{self, fontdb, ImageHrefResolver};
 
-use super::diagrams::{DiagramFailure, RASTER_SCALE};
+use super::diagrams::{raster_scale, DiagramFailure, MAX_RASTER_PIXELS, MAX_RASTER_SIDE};
 use super::pdf_lines;
+use super::Picture;
 
 /// DXP-FR-DMUH: the largest SVG the raster reads, in bytes.
 pub const MAX_SVG_BYTES: usize = 2 * 1024 * 1024;
 
 /// DXP-FR-DMUH: the largest width or height of an SVG, in CSS pixels.
 pub const MAX_SVG_SIDE: f32 = 8000.0;
-
-/// DXP-FR-DMUH: the longest side of a raster, in pixels. A larger raster adds
-/// no detail on a page, and it keeps one raster at about 64 MB at most.
-pub const MAX_RASTER_SIDE: f32 = 4000.0;
 
 /// DXP-FR-DMUH: the bundled faces, and no host font.
 fn fonts() -> Arc<fontdb::Database> {
@@ -54,32 +51,48 @@ fn options() -> usvg::Options<'static> {
     }
 }
 
-/// DXP-FR-WGLT: the PNG bytes of `svg` at `RASTER_SCALE` times its size,
-/// scaled down so that its longest side is at most `MAX_RASTER_SIDE`, or
-/// `Invalid` for an SVG that does not rasterise (DXP-FR-DMUH).
-pub fn rasterise_svg(svg: &str) -> Result<Vec<u8>, DiagramFailure> {
+/// DXP-FR-DMUH: the pixel size of a raster of `width` × `height` at `scale`.
+/// It rounds to the nearest pixel, and rounds down where the nearest pixel
+/// would pass a raster limit.
+fn raster_size(width: f32, height: f32, scale: f32) -> (u32, u32) {
+    let side = |v: f32, round: fn(f32) -> f32| (round(v * scale) as u32).clamp(1, MAX_RASTER_SIDE);
+    let (w, h) = (side(width, f32::round), side(height, f32::round));
+    if u64::from(w) * u64::from(h) <= MAX_RASTER_PIXELS {
+        return (w, h);
+    }
+    (side(width, f32::floor), side(height, f32::floor))
+}
+
+/// DXP-FR-WGLT: the picture of `svg` at `RASTER_SCALE` times its size, scaled
+/// down to keep in the raster limits (`raster_scale`), or `Invalid` for an SVG
+/// that does not rasterise (DXP-FR-DMUH). Its natural size is the size of the
+/// SVG.
+pub fn rasterise_svg(svg: &str) -> Result<Picture, DiagramFailure> {
     if svg.trim().is_empty() || svg.len() > MAX_SVG_BYTES {
         return Err(DiagramFailure::Invalid);
     }
-    let outcome = catch_unwind(AssertUnwindSafe(|| -> Option<Vec<u8>> {
+    let outcome = catch_unwind(AssertUnwindSafe(|| -> Option<Picture> {
         let tree = usvg::Tree::from_str(svg, &options()).ok()?;
         let size = tree.size();
         let in_bounds = |side: f32| (1.0..=MAX_SVG_SIDE).contains(&side);
         if !in_bounds(size.width()) || !in_bounds(size.height()) {
             return None;
         }
-        let longest = size.width().max(size.height());
-        let scale = RASTER_SCALE.min(MAX_RASTER_SIDE / longest);
-        let width = ((size.width() * scale).round() as u32).max(1);
-        let height = ((size.height() * scale).round() as u32).max(1);
+        let scale = raster_scale(size.width(), size.height());
+        let (width, height) = raster_size(size.width(), size.height(), scale);
         let mut pixmap = tiny_skia::Pixmap::new(width, height)?;
         pixmap.fill(tiny_skia::Color::WHITE);
         let transform = tiny_skia::Transform::from_scale(scale, scale);
         resvg::render(&tree, transform, &mut pixmap.as_mut());
-        pixmap.encode_png().ok()
+        let png = pixmap.encode_png().ok()?;
+        Some(Picture {
+            png,
+            width: (size.width().round() as u32).max(1),
+            height: (size.height().round() as u32).max(1),
+        })
     }));
     match outcome {
-        Ok(Some(png)) if !png.is_empty() => Ok(png),
+        Ok(Some(picture)) if !picture.png.is_empty() => Ok(picture),
         _ => Err(DiagramFailure::Invalid),
     }
 }

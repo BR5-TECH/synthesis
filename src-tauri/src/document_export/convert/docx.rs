@@ -7,7 +7,8 @@
 //!
 //! The document names Arial for the body and Courier New for code
 //! (DXP-FR-OSRE). The sizes and the spaces come from `super::typography`
-//! (DXP-FR-ODVI, DXP-FR-RBAQ).
+//! (DXP-FR-ODVI, DXP-FR-RBAQ). A picture fits its page, and a wide diagram
+//! goes on a landscape page (`super::docx_page`, DXP-FR-HKFT, DXP-FR-LQWZ).
 
 use docx_rs::{
     AlignmentType, BorderType, Docx, Hyperlink, HyperlinkType, LineSpacing, LineSpacingType,
@@ -16,6 +17,7 @@ use docx_rs::{
     TableBorderPosition, TableCell, TableCellMargins, TableRow, WidthType,
 };
 
+use super::docx_page::{self as page, Orientation, PageBox};
 use super::model::{plain_text, Align, Block, Document, Inline, ListItem};
 use super::typography as ty;
 use super::{Assets, Picture};
@@ -29,11 +31,6 @@ const LINE_COLOR: &str = "D0D0D0";
 const MUTED_COLOR: &str = "666666";
 /// The fill of a code block, a code span, and a table header.
 const SUNKEN_FILL: &str = "F3F3F3";
-/// The text width of the default `docx-rs` page, in EMU: an A4 page of 11906
-/// twips with side margins of 1701 twips, so 8504 twips of text.
-const TEXT_WIDTH_EMU: u32 = 8_504 * 635;
-/// EMU per pixel at 96 dpi.
-const EMU_PER_PX: u32 = 9_525;
 const INDENT_TWIPS: i32 = 360;
 
 /// The body text size, in half-points.
@@ -78,9 +75,9 @@ fn body_paragraph() -> Paragraph {
     Paragraph::new().line_spacing(spacing(0.0, ty::PARAGRAPH_AFTER_PT, ty::BODY_LINE_HEIGHT))
 }
 
-/// The text width of the page, in twentieths of a point.
+/// The text width of the portrait page, in twentieths of a point.
 fn text_width_twips() -> usize {
-    TEXT_WIDTH_EMU as usize / 635
+    page::text_width_twips(Orientation::Portrait) as usize
 }
 
 /// The widths of the columns of a table at the text width, in twentieths of a
@@ -177,18 +174,28 @@ fn heading_style(level: u8) -> Style {
 
 /// DXP-FR-CPPT: the bytes of the `.docx` file of `doc`.
 pub fn write(doc: &Document, assets: &Assets) -> Result<Vec<u8>, String> {
-    let mut docx = new_document();
+    let mut parts = Vec::new();
     for top in &doc.blocks {
         for part in block_parts(&top.block, top.align, 0, assets) {
-            docx = match part {
-                Part::Paragraph(p) => docx.add_paragraph(*p),
+            match part {
                 // DXP-FR-RBAQ: a table has no space after it of its own, so
                 // an empty paragraph of that height follows it.
                 Part::Table(t) => {
-                    docx.add_table(*t).add_paragraph(gap(ty::twips(ty::BLOCK_AFTER_PT) as i32))
+                    parts.push(Part::Table(t));
+                    parts.push(para(gap(ty::twips(ty::BLOCK_AFTER_PT) as i32)));
                 }
-            };
+                other => parts.push(other),
+            }
         }
+    }
+    let (body, last) = sections(parts);
+    let mut docx = body.into_iter().fold(new_document(), |docx, part| match part {
+        Part::Table(t) => docx.add_table(*t),
+        Part::Paragraph(p) | Part::Landscape(p) | Part::PageBreak(p) => docx.add_paragraph(*p),
+    });
+    // DXP-FR-LQWZ: the body section is the last section of the document.
+    if last == Orientation::Landscape {
+        docx.document.section_property = page::section(Orientation::Landscape);
     }
     let mut out = std::io::Cursor::new(Vec::new());
     docx.build().pack(&mut out).map_err(|e| e.to_string())?;
@@ -198,6 +205,71 @@ pub fn write(doc: &Document, assets: &Assets) -> Result<Vec<u8>, String> {
 enum Part {
     Paragraph(Box<Paragraph>),
     Table(Box<Table>),
+    /// DXP-FR-LQWZ: the paragraph of a diagram on a landscape page.
+    Landscape(Box<Paragraph>),
+    /// DXP-FR-SEDX: the paragraph of a page break.
+    PageBreak(Box<Paragraph>),
+}
+
+/// DXP-FR-LQWZ: put each run of landscape diagrams in a landscape section of
+/// its own. Returns the parts, each section ended by the section properties
+/// on its last paragraph, and the orientation of the last section, which the
+/// body carries.
+///
+/// A section break starts a new page, so a page break next to one is dropped:
+/// it would add a page with nothing on it (DXP-FR-RWWA).
+fn sections(parts: Vec<Part>) -> (Vec<Part>, Orientation) {
+    let mut out: Vec<Part> = Vec::new();
+    let mut current = Orientation::Portrait;
+    for part in parts {
+        match part {
+            Part::Landscape(p) => {
+                if current == Orientation::Portrait {
+                    end_section(&mut out, Orientation::Portrait);
+                    current = Orientation::Landscape;
+                }
+                out.push(Part::Paragraph(p));
+            }
+            Part::PageBreak(p) => {
+                if current == Orientation::Landscape {
+                    end_section(&mut out, Orientation::Landscape);
+                    current = Orientation::Portrait;
+                } else {
+                    out.push(Part::PageBreak(p));
+                }
+            }
+            other => {
+                if current == Orientation::Landscape {
+                    end_section(&mut out, Orientation::Landscape);
+                    current = Orientation::Portrait;
+                }
+                out.push(other);
+            }
+        }
+    }
+    (out, current)
+}
+
+/// DXP-FR-LQWZ: end the section of `orientation` at the last part of `out`.
+/// With nothing before, there is no section to end, so a landscape diagram
+/// that is the first block opens no portrait page. A paragraph that ends a
+/// section already leaves no content to end, so two landscape sections can
+/// follow each other. A page break before the section end becomes the section
+/// end itself.
+fn end_section(out: &mut Vec<Part>, orientation: Orientation) {
+    let section = page::section(orientation);
+    match out.last_mut() {
+        None => {}
+        Some(Part::Paragraph(p)) if p.property.section_property.is_some() => {}
+        Some(Part::PageBreak(_)) => {
+            out.pop();
+            out.push(para(gap(20).section_property(section)));
+        }
+        Some(Part::Paragraph(p)) | Some(Part::Landscape(p)) => {
+            p.property = std::mem::take(&mut p.property).section_property(section);
+        }
+        Some(Part::Table(_)) => out.push(para(gap(20).section_property(section))),
+    }
 }
 
 fn para(p: Paragraph) -> Part {
@@ -247,20 +319,24 @@ fn block_parts(block: &Block, align: Align, depth: i32, assets: &Assets) -> Vec<
             vec![para(indent(aligned(p, align)))]
         }
         Block::Code { text, .. } => vec![code_box(text, align)],
-        Block::Diagram { source, png, .. } => match png {
-            Some(bytes) => match super::diagrams::png_size(bytes) {
-                Some((w, h)) => {
-                    let picture = Picture {
-                        png: bytes.clone(),
-                        width: (w as f32 / super::diagrams::RASTER_SCALE) as u32,
-                        height: (h as f32 / super::diagrams::RASTER_SCALE) as u32,
-                    };
-                    let run = Run::new().add_image(pic(&picture));
-                    vec![para(indent(aligned(body_paragraph().add_run(run), align)))]
+        Block::Diagram { source, image, .. } => match image {
+            Some(picture) if super::diagrams::png_size(&picture.png).is_some() => {
+                // DXP-FR-HKFT, DXP-FR-LQWZ: the diagram fits the page it
+                // goes on, less the indent of its paragraph. Its paragraph
+                // has a single line, so the line of the picture is as tall as
+                // the picture.
+                let indent_twips = (depth.max(0) * INDENT_TWIPS) as u32;
+                let orientation = page::diagram_orientation(picture, indent_twips);
+                let frame = page::page_box(orientation).indented(indent_twips);
+                let run = Run::new().add_image(pic(picture, frame));
+                let p = Paragraph::new().line_spacing(spacing(0.0, ty::PARAGRAPH_AFTER_PT, 1.0));
+                let p = Box::new(indent(aligned(p.add_run(run), align)));
+                match orientation {
+                    Orientation::Portrait => vec![Part::Paragraph(p)],
+                    Orientation::Landscape => vec![Part::Landscape(p)],
                 }
-                None => vec![code_box(source, align)],
-            },
-            None => vec![code_box(source, align)],
+            }
+            _ => vec![code_box(source, align)],
         },
         Block::List { start, items } => {
             list_parts(*start, items, align, depth, list_end_space(depth), assets)
@@ -270,6 +346,7 @@ fn block_parts(block: &Block, align: Align, depth: i32, assets: &Assets) -> Vec<
             .flat_map(|b| block_parts(b, align, depth + 1, assets))
             .map(|part| match part {
                 Part::Paragraph(p) => para(quoted(*p)),
+                Part::Landscape(p) => Part::Landscape(Box::new(quoted(*p))),
                 other => other,
             })
             .collect(),
@@ -296,7 +373,8 @@ fn block_parts(block: &Block, align: Align, depth: i32, assets: &Assets) -> Vec<
         Block::Spacer { lines } => vec![para(gap(body_line_twips() * (*lines as i32)))],
         // DXP-FR-SEDX: the block after a V1 break starts on a new page.
         Block::PageBreak => {
-            vec![para(Paragraph::new().add_run(Run::new().add_break(docx_rs::BreakType::Page)))]
+            let p = Paragraph::new().add_run(Run::new().add_break(docx_rs::BreakType::Page));
+            vec![Part::PageBreak(Box::new(p))]
         }
         Block::Html(text) => text
             .lines()
@@ -510,7 +588,9 @@ fn add_inlines(
                 p.add_hyperlink(Hyperlink::new(url.as_str(), HyperlinkType::External).add_run(run))
             }
             Inline::Image { url, alt } => match assets.images.get(url) {
-                Some(picture) => p.add_run(Run::new().add_image(pic(picture))),
+                Some(picture) => p.add_run(
+                    Run::new().add_image(pic(picture, page::page_box(Orientation::Portrait))),
+                ),
                 None => p.add_run(styled(&format!("[{alt}]"), RunStyle { italic: true, ..style })),
             },
             Inline::SoftBreak => p.add_run(styled(" ", style)),
@@ -520,17 +600,9 @@ fn add_inlines(
     p
 }
 
-/// A picture at its natural size, scaled down to the text width.
-fn pic(picture: &Picture) -> Pic {
-    // u64, so a very wide picture can not overflow the EMU size.
-    let mut w = u64::from(picture.width.max(1)) * u64::from(EMU_PER_PX);
-    let mut h = u64::from(picture.height.max(1)) * u64::from(EMU_PER_PX);
-    if w > u64::from(TEXT_WIDTH_EMU) {
-        h = h * u64::from(TEXT_WIDTH_EMU) / w;
-        w = u64::from(TEXT_WIDTH_EMU);
-    }
-    let w = u32::try_from(w).unwrap_or(TEXT_WIDTH_EMU);
-    let h = u32::try_from(h).unwrap_or(u32::MAX);
+/// DXP-FR-HKFT: a picture at its natural size, scaled down to fit `frame`.
+fn pic(picture: &Picture, frame: PageBox) -> Pic {
+    let (w, h) = page::fit(picture, frame);
     Pic::new_with_dimensions(picture.png.clone(), picture.width.max(1), picture.height.max(1))
         .size(w, h)
 }

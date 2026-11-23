@@ -142,8 +142,14 @@ const CSS_DPI: f32 = 96.0;
 /// A project image is at its natural size in CSS pixels.
 const IMAGE_SCALE: f32 = IMAGE_DPI / CSS_DPI;
 
-/// A diagram PNG is already `RASTER_SCALE` times its natural size.
-const DIAGRAM_SCALE: f32 = IMAGE_DPI / CSS_DPI / super::diagrams::RASTER_SCALE;
+/// DXP-FR-RKJC: the scale that brings the PNG of `picture` to its natural
+/// size at `IMAGE_DPI`. A diagram PNG has more pixels than its natural size.
+fn picture_scale(picture: &super::Picture) -> f32 {
+    match super::diagrams::png_size(&picture.png) {
+        Some((w, _)) => IMAGE_SCALE * picture.width as f32 / w as f32,
+        None => IMAGE_SCALE,
+    }
+}
 
 /// The longest side `markdown2pdf` keeps; it shrinks a larger image itself.
 const MAX_SIDE_PX: f32 = 4000.0;
@@ -418,10 +424,11 @@ impl Writer<'_> {
                 });
                 paragraph_end(out);
             }
-            Block::Diagram { source, png, .. } => {
-                match png {
-                    Some(bytes) => {
-                        let token = self.image_token(bytes, "diagram", DIAGRAM_SCALE);
+            Block::Diagram { source, image, .. } => {
+                match image {
+                    Some(picture) => {
+                        let scale = picture_scale(picture);
+                        let token = self.image_token(&picture.png, "diagram", scale);
                         out.push(token);
                     }
                     None => out.push(Token::Code {

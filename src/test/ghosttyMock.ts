@@ -68,6 +68,13 @@ export class FakeTerminal {
   disposed = false;
   selection = "";
   keyHandler: ((event: KeyboardEvent) => boolean) | null = null;
+  wheelHandler: ((event: WheelEvent) => boolean) | null = null;
+  /** Test hook: whether the program turned mouse reporting on. */
+  mouseTracking = false;
+  /** Test hook: the DEC private modes that are on, for `getMode`. */
+  modes = new Set<number>();
+  /** The pages `scrollPages` moved, in order. */
+  scrolled: number[] = [];
   private data = emitter<string>();
   private resizes = emitter<{ cols: number; rows: number }>();
   readonly onData = this.data.event;
@@ -114,13 +121,24 @@ export class FakeTerminal {
   attachCustomKeyEventHandler(handler: (event: KeyboardEvent) => boolean) {
     this.keyHandler = handler;
   }
+  attachCustomWheelEventHandler(handler?: (event: WheelEvent) => boolean) {
+    this.wheelHandler = handler ?? null;
+  }
+  hasMouseTracking() {
+    return this.mouseTracking;
+  }
+  getMode(mode: number, _isAnsi = false) {
+    return this.modes.has(mode);
+  }
   hasSelection() {
     return this.selection.length > 0;
   }
   getSelection() {
     return this.selection;
   }
-  scrollPages(_amount: number) {}
+  scrollPages(amount: number) {
+    this.scrolled.push(amount);
+  }
   focus() {}
   dispose() {
     this.disposed = true;

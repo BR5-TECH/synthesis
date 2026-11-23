@@ -9,13 +9,15 @@
  * when the tab is hidden. Closing the tab detaches the session and disposes
  * the terminal (TRM-FR-JXLA); it never ends the session.
  */
-import type { FitAddon, Ghostty as GhosttyInstance, ITheme, Terminal } from "ghostty-web";
+import type { FitAddon, Ghostty as GhosttyInstance, Terminal } from "ghostty-web";
 import * as api from "../api";
 import { logDebug, logWarn } from "../logging";
-import { currentTheme, subscribeTheme } from "../components/markdownMermaidRender";
+import { subscribeTheme } from "../components/markdownMermaidRender";
 import { isMacPlatform } from "../platform";
 import { TERMINAL_INPUT_LIMIT } from "../api/terminals";
 import { errorCode, findTerminal, subscribeTerminals } from "./terminals";
+import { handleTerminalWheel, newWheelTravel } from "./terminalWheel";
+import { resolveTerminalTheme, subscribeTerminalThemePreference, type ResolvedTerminalTheme } from "./terminalThemes";
 
 /** TRM-FR-DTCA: the scrollback of each terminal, in lines. */
 export const TERMINAL_SCROLLBACK_LINES = 10_000;
@@ -39,6 +41,8 @@ interface ViewEntry {
   released: boolean;
   /** TRM-FR-WRVB: the theme changed while the tab was hidden; the next show makes the terminal again. */
   stale: boolean;
+  /** TRM-FR-IUMC: the key of the theme that the terminal shows, or null before the first terminal. */
+  themeKey: string | null;
   /** Counts the terminals made for this tab; output of an older one is dropped. */
   generation: number;
   dispose: (() => void)[];
@@ -48,6 +52,7 @@ const views = new Map<string, ViewEntry>();
 type Ghostty = typeof import("ghostty-web");
 let ready: Promise<Ghostty> | null = null;
 let stopTheme: (() => void) | null = null;
+let stopPreference: (() => void) | null = null;
 let stopFonts: (() => void) | null = null;
 
 /**
@@ -69,32 +74,6 @@ function cssVar(name: string, fallback: string): string {
   if (typeof document === "undefined") return fallback;
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return value || fallback;
-}
-
-const LIGHT_ANSI: ITheme = {
-  black: "#24292f", red: "#cf222e", green: "#116329", yellow: "#4d2d00",
-  blue: "#0969da", magenta: "#8250df", cyan: "#1b7c83", white: "#6e7781",
-  brightBlack: "#57606a", brightRed: "#a40e26", brightGreen: "#1a7f37", brightYellow: "#633c01",
-  brightBlue: "#218bff", brightMagenta: "#a475f9", brightCyan: "#3192aa", brightWhite: "#8c959f",
-};
-
-const DARK_ANSI: ITheme = {
-  black: "#484f58", red: "#ff7b72", green: "#3fb950", yellow: "#d29922",
-  blue: "#58a6ff", magenta: "#bc8cff", cyan: "#39c5cf", white: "#b1bac4",
-  brightBlack: "#6e7681", brightRed: "#ffa198", brightGreen: "#56d364", brightYellow: "#e3b341",
-  brightBlue: "#79c0ff", brightMagenta: "#d2a8ff", brightCyan: "#56d4dd", brightWhite: "#f0f6fc",
-};
-
-/** TRM-FR-WRVB: the terminal colors of the app theme. */
-export function terminalTheme(): ITheme {
-  const dark = currentTheme() === "dark";
-  return {
-    ...(dark ? DARK_ANSI : LIGHT_ANSI),
-    background: cssVar("--bg-canvas", dark ? "#16181d" : "#ffffff"),
-    foreground: cssVar("--fg-1", dark ? "#e6e6e6" : "#1f2328"),
-    cursor: cssVar("--accent", dark ? "#7aa2f7" : "#0969da"),
-    selectionBackground: cssVar("--bg-selection", dark ? "#2d3a55" : "#cfe3ff"),
-  };
 }
 
 /** TRM-FR-WRVB: the Source code typographic role. */
@@ -172,8 +151,40 @@ export function handleTerminalKey(
     term.scrollPages(event.code === "PageUp" ? -1 : 1);
     return true;
   }
+  // TRM-FR-AWXC: ghostty-web 0.4.0 drops Shift from these keys, so the
+  // terminal sends their shifted form itself.
+  if (event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+    const shifted = SHIFTED_KEYS[event.code];
+    if (shifted !== undefined) {
+      send(shifted);
+      return true;
+    }
+  }
   return false;
 }
+
+/** TRM-FR-AWXC: what a key with Shift alone sends to the session. */
+export const SHIFTED_KEYS: Readonly<Record<string, string>> = {
+  Tab: "\x1b[Z",
+  Enter: "\x1b\r",
+  NumpadEnter: "\x1b\r",
+  Home: "\x1b[1;2H",
+  End: "\x1b[1;2F",
+  Insert: "\x1b[2;2~",
+  Delete: "\x1b[3;2~",
+  F1: "\x1b[1;2P",
+  F2: "\x1b[1;2Q",
+  F3: "\x1b[1;2R",
+  F4: "\x1b[1;2S",
+  F5: "\x1b[15;2~",
+  F6: "\x1b[17;2~",
+  F7: "\x1b[18;2~",
+  F8: "\x1b[19;2~",
+  F9: "\x1b[20;2~",
+  F10: "\x1b[21;2~",
+  F11: "\x1b[23;2~",
+  F12: "\x1b[24;2~",
+};
 
 /**
  * TRM-FR-RFVP: whether a keydown that the terminal saw must stay away from the
@@ -190,25 +201,21 @@ let stopSessions: (() => void) | null = null;
 function followAppearance() {
   if (!stopSessions) {
     // TRM-FR-ILRQ: a session that becomes running gets the size its tab fitted.
+    // TRM-FR-IUMC: a session whose theme override changed gets its new theme.
     stopSessions = subscribeTerminals(() => {
       for (const entry of views.values()) sendSize(entry);
+      restyle(false);
     });
   }
   if (!stopTheme) {
-    // TRM-FR-WRVB: the theme of an open terminal cannot change in place, so a
-    // theme change makes the terminal again. The new attach sends the history.
-    // A terminal made out of the page cannot measure its size, and ghostty-web
-    // 0.4.0 then fails on each write. So a hidden tab keeps its terminal until
-    // it shows again.
-    stopTheme = subscribeTheme(() => {
-      for (const entry of views.values()) {
-        if (entry.host.isConnected) rebuild(entry);
-        else if (!entry.stale) {
-          entry.stale = true;
-          logDebug(["frontend"], "terminal theme deferred until shown", { terminalId: entry.id });
-        }
-      }
-    });
+    // TRM-FR-WRVB: an app theme change recolours every terminal that follows it.
+    // A terminal that is not made yet (its load is pending or failed) is made
+    // again too, as each theme change did before themes were resolved.
+    stopTheme = subscribeTheme(() => restyle(true));
+  }
+  if (!stopPreference) {
+    // TRM-FR-IUMC, GLS-FR-VTVK: so does a change of the Terminal theme of Settings.
+    stopPreference = subscribeTerminalThemePreference(() => restyle(false));
   }
   if (!stopFonts && typeof MutationObserver !== "undefined" && typeof document !== "undefined") {
     const observer = new MutationObserver(() => {
@@ -222,6 +229,37 @@ function followAppearance() {
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
     stopFonts = () => observer.disconnect();
+  }
+}
+
+/** TRM-FR-IUMC: the theme that the terminal of `entry` shows now. */
+function themeOf(entry: ViewEntry): ResolvedTerminalTheme {
+  return resolveTerminalTheme(findTerminal(entry.id)?.theme);
+}
+
+/** TRM-FR-IUMC: the tab's surface around the terminal has the terminal's background. */
+function paint(entry: ViewEntry, theme: ResolvedTerminalTheme) {
+  const background = theme.theme.background ?? "";
+  entry.host.style.background = background;
+  if (entry.host.parentElement) entry.host.parentElement.style.background = background;
+}
+
+/**
+ * TRM-FR-WRVB, TRM-FR-IUMC: the theme of an open terminal cannot change in
+ * place, so a change of the theme it shows makes the terminal again. The new
+ * attach sends the history. A terminal made out of the page cannot measure its
+ * size, and ghostty-web 0.4.0 then fails on each write. So a hidden tab keeps
+ * its terminal until it shows again.
+ */
+function restyle(remakeUnmade: boolean) {
+  for (const entry of views.values()) {
+    if (entry.released) continue;
+    if (entry.themeKey === null ? !remakeUnmade : themeOf(entry).key === entry.themeKey) continue;
+    if (entry.host.isConnected) rebuild(entry);
+    else if (!entry.stale) {
+      entry.stale = true;
+      logDebug(["frontend"], "terminal theme deferred until shown", { terminalId: entry.id });
+    }
   }
 }
 
@@ -269,13 +307,16 @@ async function start(entry: ViewEntry, size: { cols: number; rows: number } | nu
   }
   if (entry.released || generation !== entry.generation) return;
   const font = terminalFont();
+  const theme = themeOf(entry);
+  entry.themeKey = theme.key;
+  paint(entry, theme);
   const term = new ghostty.Terminal({
     ...(size ?? {}),
     ghostty: instance,
     scrollback: TERMINAL_SCROLLBACK_BYTES,
     fontFamily: font.fontFamily,
     fontSize: font.fontSize,
-    theme: terminalTheme(),
+    theme: theme.theme,
     cursorBlink: true,
   });
   const fit = new ghostty.FitAddon();
@@ -286,6 +327,13 @@ async function start(entry: ViewEntry, size: { cols: number; rows: number } | nu
   const id = entry.id;
   const send = (data: string) => sendInput(id, data);
   term.attachCustomKeyEventHandler((event) => handleTerminalKey(event, term, send));
+  // TRM-FR-QMXG, TRM-FR-PACR: the wheel goes to a program that reports the mouse.
+  const travel = newWheelTravel();
+  const host = entry.host;
+  term.attachCustomWheelEventHandler((event) => {
+    const cellsBox = (host.querySelector("canvas") ?? host).getBoundingClientRect();
+    return handleTerminalWheel(event, term, cellsBox, travel, send);
+  });
   const data = term.onData(send);
   const resized = term.onResize(({ cols, rows }) => reportSize(entry, cols, rows));
   const stopKeys = (event: KeyboardEvent) => {
@@ -371,6 +419,7 @@ export function showTerminalView(id: string, container: HTMLElement): void {
       starting: null,
       released: false,
       stale: false,
+      themeKey: null,
       generation: 0,
       dispose: [],
     };
@@ -378,6 +427,7 @@ export function showTerminalView(id: string, container: HTMLElement): void {
     followAppearance();
   }
   container.appendChild(entry.host);
+  if (entry.themeKey !== null) paint(entry, themeOf(entry));
   if (entry.stale) rebuild(entry);
   else if (!entry.term && !entry.starting) entry.starting = start(entry);
   else entry.fit?.fit();
@@ -444,6 +494,8 @@ export function resetTerminalViewsForTest(): void {
   views.clear();
   stopTheme?.();
   stopTheme = null;
+  stopPreference?.();
+  stopPreference = null;
   stopFonts?.();
   stopFonts = null;
   stopSessions?.();

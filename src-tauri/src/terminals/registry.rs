@@ -75,7 +75,8 @@ impl Registry {
         if inner.sessions.len() >= MAX_SESSIONS {
             return Err(TerminalError::new("terminal_limit_reached"));
         }
-        let labels: Vec<String> = inner.sessions.iter().map(|s| s.spec.label.clone()).collect();
+        // TRS-FR-LRYH: the number looks at the current labels.
+        let labels: Vec<String> = inner.sessions.iter().map(|s| s.label()).collect();
         let label = next_label(label_name(new.kind, new.vendor), &labels);
         Ok(Self::insert(&mut inner, id, label, created_at, new))
     }
@@ -235,6 +236,22 @@ mod tests {
         agent.vendor = Some(CliVendor::Codex);
         let d = registry.add("d".into(), String::new(), agent).unwrap();
         assert_eq!(d.spec.label, "Codex 1");
+    }
+
+    // TRS-FR-LRYH, TRS-FR-BTMT: the number looks at the current labels, so a
+    // renamed session frees its number and a label taken by a rename is skipped.
+    #[test]
+    fn numbers_follow_the_current_labels() {
+        let registry = Registry::default();
+        let a = registry.add("a".into(), String::new(), host("/r")).unwrap();
+        a.set_label("build".into());
+        let b = registry.add("b".into(), String::new(), host("/r")).unwrap();
+        assert_eq!(b.label(), "Host shell 1");
+        b.set_label("Host shell 2".into());
+        let c = registry.add("c".into(), String::new(), host("/r")).unwrap();
+        assert_eq!(c.label(), "Host shell 1");
+        let d = registry.add("d".into(), String::new(), host("/r")).unwrap();
+        assert_eq!(d.label(), "Host shell 3");
     }
 
     // TRS-FR-TEHT, TRS-FR-OTLH: a drain takes every session out.

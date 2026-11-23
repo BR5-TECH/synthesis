@@ -282,6 +282,12 @@
   overflow: hidden;
 }
 .terminal-view__host { width: 100%; height: 100%; }
+/* TRM-FR-DUAC: ghostty-web makes the host editable and focuses it, so WebKit
+   draws its own blinking caret beside the canvas. The terminal draws its own
+   cursor, so the caret of the page shows nowhere in it. */
+.terminal-view__host,
+.terminal-view__host * { caret-color: transparent; }
+.terminal-view__host:focus { outline: none; }
 .terminal-banner {
   display: flex;
   align-items: center;
@@ -385,3 +391,83 @@
 
 /* TRM-FR-EAUY: the icons of a group header keep their size. */
 .terminals-group__head svg { flex: none; }
+
+/* TRM-FR-QXIY: the Theme entry shows where its submenu opens. */
+.terminal-menu .menu-item__caret,
+.menu--tab .menu-item__caret { margin-inline-start: auto; color: var(--fg-3); }
+/* TRM-FR-QXIY: the Theme submenu stays inside the window. */
+.terminal-theme-menu { max-width: calc(100vw - 16px); }
+.terminal-theme-menu__item { gap: var(--sp-2); }
+/* TRM-FR-QXIY: the check column is reserved on every entry, so a check moves no name. */
+.terminal-theme-menu__check { display: inline-flex; width: 12px; flex: none; color: var(--accent); }
+.terminal-theme-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 16px;
+  border-radius: var(--r-xs);
+  box-shadow: inset 0 0 0 1px var(--border-1);
+  font-family: var(--font-source-family);
+  font-size: var(--fs-ui-2xs);
+  line-height: 1;
+}
+.terminal-theme-swatch--default {
+  background: linear-gradient(135deg, var(--bg-canvas) 50%, var(--fg-1) 50%);
+}
+
+/* TRM-FR-SHKD, TRM-FR-MOVS: the label field takes the place of the label. */
+.terminal-label-field {
+  display: inline-flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 2px;
+}
+.terminal-label-field__input { width: 100%; min-width: 0; }
+/* The field keeps the height of the label, so no row and no tab moves. */
+.terminal-row__label-field { flex: 1 1 auto; }
+.terminal-row__label-field .terminal-label-field__input { height: 18px; padding-block: 0; }
+.tab__label-field { flex: 0 1 auto; width: 120px; }
+.tab__label-field .terminal-label-field__input { height: 18px; padding-block: 0; }
+.terminal-label-field__error { font-size: var(--fs-ui-xs); color: var(--danger); white-space: normal; }
+
+/* GLS-FR-SOJD: each Terminal theme is a small terminal in its own colours. */
+.terminal-theme-setting { display: block; }
+.terminal-theme-setting__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: var(--sp-2);
+}
+.terminal-theme-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: var(--fs-ui-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.terminal-theme-tile:hover { background: var(--bg-hover); }
+.terminal-theme-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.terminal-theme-tile[data-active] { border-color: var(--accent); background: var(--bg-active); color: var(--fg-1); }
+.terminal-theme-tile:disabled { cursor: default; opacity: 0.6; }
+.terminal-theme-tile__screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 44px;
+  padding: 6px 7px;
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px var(--border-1);
+}
+.terminal-theme-tile__prompt { font-family: var(--font-source-family); font-size: var(--fs-ui-xs); line-height: 1; }
+.terminal-theme-tile__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.terminal-theme-tile__ansi { display: flex; gap: 3px; }
+.terminal-theme-tile__ansi > span { width: 12px; height: 4px; border-radius: 1px; }

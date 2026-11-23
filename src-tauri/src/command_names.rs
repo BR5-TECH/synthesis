@@ -175,6 +175,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     "resize_terminal",
     "acknowledge_terminal_output",
     "set_terminal_pinned",
+    "set_terminal_label",
+    "set_terminal_theme",
     "close_terminal",
     "list_removed_work_streams",
     "dismiss_removed_work_stream",

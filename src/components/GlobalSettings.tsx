@@ -1,3 +1,4 @@
+import { TerminalThemeSetting } from "./TerminalThemeSetting";
 import { VoiceAiSettings } from "./VoiceAiSettings";
 import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
@@ -537,6 +538,9 @@ export function GlobalSettings({
               Unsaved theme change.
             </p>
           )}
+
+          {/* GLS-FR-SOJD: the Terminal theme, below the theme selector. */}
+          <TerminalThemeSetting />
 
           {/* GLS-FR-17: the three typographic roles. Placed in Appearance
               rather than a section of their own — the theme and the fonts are

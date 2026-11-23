@@ -197,13 +197,17 @@ beforeEach(async () => {
   // wrapper switch the field on.
   // TRM-FR-LAZH / TRM-FR-ITAK: the terminal list and the terminal of each tab
   // are module stores of the window, so nothing of one test reaches the next.
-  const [{ resetTerminalsForTest }, { resetTerminalViewsForTest }, ghostty] = await Promise.all([
-    import("../state/terminals"),
-    import("../state/terminalViews"),
-    import("./ghosttyMock"),
-  ]);
+  const [{ resetTerminalsForTest }, { resetTerminalViewsForTest }, { resetTerminalThemePreferenceForTest }, ghostty] =
+    await Promise.all([
+      import("../state/terminals"),
+      import("../state/terminalViews"),
+      import("../state/terminalThemes"),
+      import("./ghosttyMock"),
+    ]);
   resetTerminalsForTest();
   resetTerminalViewsForTest();
+  // TRM-FR-IUMC: the Terminal theme of Settings is a module store of the window too.
+  resetTerminalThemePreferenceForTest();
   ghostty.fakeTerminals.length = 0;
   ghostty.fakeWriteFailure.error = null;
   ghostty.fakeInstances.length = 0;

@@ -442,6 +442,36 @@ pub fn set_pinned<R: Runtime>(
     Ok(session.summary())
 }
 
+/// TRS-FR-BTMT.
+pub fn set_label<R: Runtime>(
+    app: &AppHandle<R>,
+    terminal_id: &str,
+    label: &str,
+) -> Result<TerminalSummary, TerminalError> {
+    ensure_platform()?;
+    let session = registry(app).get(terminal_id)?;
+    let label = clean_label(label)?;
+    session.set_label(label);
+    super::persistent::set_label(app, &session);
+    announce(app);
+    Ok(session.summary())
+}
+
+/// TRS-FR-DOMD.
+pub fn set_theme<R: Runtime>(
+    app: &AppHandle<R>,
+    terminal_id: &str,
+    theme: Option<&str>,
+) -> Result<TerminalSummary, TerminalError> {
+    ensure_platform()?;
+    let session = registry(app).get(terminal_id)?;
+    let theme = parse_theme(theme)?;
+    session.set_theme(theme);
+    super::persistent::set_theme(app, &session);
+    announce(app);
+    Ok(session.summary())
+}
+
 /// TRS-FR-CXSV.
 pub fn close<R: Runtime>(app: &AppHandle<R>, terminal_id: &str) -> Result<(), TerminalError> {
     ensure_platform()?;

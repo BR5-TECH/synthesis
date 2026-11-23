@@ -165,16 +165,27 @@ describe("Terminals panel rows", () => {
 describe("Terminals row context menu", () => {
   const menuItems = () => screen.getAllByRole("menuitem").map((m) => m.getAttribute("aria-label"));
 
-  it("TRM-FR-EUMZ, TRM-FR-KFCS: a right-click opens four entries in order, with a separator after the pin action", async () => {
+  it("TRM-FR-EUMZ, TRM-FR-KFCS: a right-click opens six entries in order, with a separator after the pin action", async () => {
     await seed([session({ id: "a" }), session({ id: "b", label: "Host shell 2" })]);
     const props = renderPanel();
     fireEvent.contextMenu(row("Host shell 1"));
     expect(props.onOverlayOpening).toHaveBeenCalled();
     expect(props.onOpenTerminal).not.toHaveBeenCalled();
-    expect(menuItems()).toEqual(["Pin terminal", "Close terminal", "Close other terminals", "Close all terminals"]);
+    expect(menuItems()).toEqual([
+      "Rename terminal",
+      "Theme",
+      "Pin terminal",
+      "Close terminal",
+      "Close other terminals",
+      "Close all terminals",
+    ]);
     const menu = screen.getByRole("menu");
-    expect(within(menu).getAllByRole("separator")).toHaveLength(1);
-    expect(menu.querySelectorAll("svg").length).toBe(4);
+    const separator = within(menu).getAllByRole("separator");
+    expect(separator).toHaveLength(1);
+    expect(separator[0].previousElementSibling).toHaveAccessibleName("Pin terminal");
+    // Each entry has a leading icon; Theme also has the caret of its submenu.
+    for (const item of within(menu).getAllByRole("menuitem")) expect(item.firstElementChild?.tagName).toBe("svg");
+    expect(menu.querySelectorAll("svg").length).toBe(7);
   });
 
   it("TRM-FR-EUMZ: Shift+F10 and the context-menu key open it; Escape closes it and returns focus to the row", async () => {
@@ -196,9 +207,11 @@ describe("Terminals row context menu", () => {
     serve("close_terminal", null);
     renderPanel();
     fireEvent.contextMenu(row("Host shell 1"));
-    expect(screen.getByRole("menuitem", { name: "Pin terminal" })).toHaveFocus();
-    fireEvent.keyDown(screen.getByRole("menu"), { key: "ArrowDown" });
-    expect(screen.getByRole("menuitem", { name: "Close terminal" })).toHaveFocus();
+    expect(screen.getByRole("menuitem", { name: "Rename terminal" })).toHaveFocus();
+    for (const name of ["Theme", "Pin terminal", "Close terminal"]) {
+      fireEvent.keyDown(screen.getByRole("menu"), { key: "ArrowDown" });
+      expect(screen.getByRole("menuitem", { name })).toHaveFocus();
+    }
     await userEvent.keyboard("{Enter}");
     // The row is running, so the choice asks first.
     expect(await screen.findByRole("dialog", { name: "End running terminals" })).toBeInTheDocument();

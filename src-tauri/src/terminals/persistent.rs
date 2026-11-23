@@ -37,12 +37,13 @@ pub fn start<R: Runtime>(
     let spec = &session.spec;
     let record = Meta {
         project: project_key.to_string(),
-        label: spec.label.clone(),
+        label: session.label(),
         target: spec.target.clone(),
         kind: spec.kind,
         vendor: spec.vendor,
         runs_in: spec.runs_in,
         pinned: session.pinned(),
+        theme: session.theme(),
         created_at: spec.created_at.clone(),
     };
     let name = meta::session_name(project_key, &spec.id);
@@ -116,6 +117,28 @@ pub fn set_pinned<R: Runtime>(app: &AppHandle<R>, session: &Arc<Session>) {
     off_thread(app, session, move |app, session| {
         let Some(persistence) = session.persistence().filter(|p| !p.is_gone()) else { return };
         if let Err(e) = persistence.write_pinned(|| session.pinned()) {
+            warn(app, "terminal tmux call failed", &session.spec.id, e.cause());
+        }
+    });
+}
+
+/// TRS-FR-QMZM, TRS-FR-BTMT: keeps a label change in the tmux session, off
+/// the caller's thread, on the terms of [`set_pinned`].
+pub fn set_label<R: Runtime>(app: &AppHandle<R>, session: &Arc<Session>) {
+    off_thread(app, session, move |app, session| {
+        let Some(persistence) = session.persistence().filter(|p| !p.is_gone()) else { return };
+        if let Err(e) = persistence.write_label(|| session.label()) {
+            warn(app, "terminal tmux call failed", &session.spec.id, e.cause());
+        }
+    });
+}
+
+/// TRS-FR-QMZM, TRS-FR-DOMD: keeps a theme change in the tmux session, off
+/// the caller's thread, on the terms of [`set_pinned`].
+pub fn set_theme<R: Runtime>(app: &AppHandle<R>, session: &Arc<Session>) {
+    off_thread(app, session, move |app, session| {
+        let Some(persistence) = session.persistence().filter(|p| !p.is_gone()) else { return };
+        if let Err(e) = persistence.write_theme(|| session.theme()) {
             warn(app, "terminal tmux call failed", &session.spec.id, e.cause());
         }
     });
@@ -277,6 +300,7 @@ pub fn restore_with<R: Runtime>(
             Err(_) => break,
         };
         session.set_pinned(item.meta.pinned);
+        session.set_theme(item.meta.theme);
         let persistence = Arc::new(Persistence::new(tmux.clone(), item.name.clone()));
         session.set_persistence(persistence.clone());
         if !present {

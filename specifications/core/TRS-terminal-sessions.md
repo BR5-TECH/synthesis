@@ -13,7 +13,7 @@ The backend module that runs the author's own interactive terminals. A terminal 
 3. **TRS-FR-IZWM** Each session keeps an **output history** of at most 4 MiB in memory: every byte the process wrote, in order, after the restored scrollback of TRS-FR-TCBS where the session is restored. When new output passes the cap, the module drops the oldest bytes first, up to the start of a line where the dropped range holds a line break.
 4. **TRS-FR-BWVT** The module never writes a session's history, its input, its environment, or its metadata to disk, to a log record, or to any store. The scrollback and the metadata of a persistent session are in the memory of the tmux server alone.
 5. **TRS-FR-TEHT** Only a persistent session survives the application process. Nothing about any other session is kept. After an application start, `list_terminals` returns only the sessions that TRS-FR-IEKU restored.
-6. **TRS-FR-LRYH** Each session gets a **label** at creation: the kind name (`Host shell`, `Container shell`, `Microsandbox shell`) or the vendor's display name for an Agent CLI, then a space and the lowest positive number that no other session of the project with the same name holds.
+6. **TRS-FR-LRYH** Each session gets a **label** at creation: the kind name (`Host shell`, `Container shell`, `Microsandbox shell`) or the vendor's display name for an Agent CLI, then a space and the lowest positive number that no current label of another session of the project holds with the same name.
 7. **TRS-FR-VTYD** Every command of this module takes `project_id` and acts on the sessions of that project alone. `"terminals changed"` carries `project_id` and goes to the window of that project only (per `PWN-project-windows.md` PWN-FR-ISOL).
 
 ### Targets
@@ -48,7 +48,9 @@ The backend module that runs the author's own interactive terminals. A terminal 
 30. **TRS-FR-CXSV** `close_terminal` ends the session in any state. It removes the tmux session of a persistent session, sends `SIGHUP` to the process group, sends `SIGKILL` after 3 seconds where a process still runs, removes the container or dev container of the session, drops the history, and removes the session.
 31. **TRS-FR-OTLH** A project close ends every session of that project, and an application exit ends every session, on the terms of TRS-FR-CXSV. For a persistent session, both end only the tmux client: the tmux session, its process, and the tmux server keep running. Neither asks for a confirmation from this module.
 32. **TRS-FR-KOYL** `set_terminal_pinned` sets or clears the session's **pinned** flag and does nothing else. The flag is in memory and goes with the session. A persistent session also keeps it in its tmux session (TRS-FR-QMZM). A pinned session ends on a close, a project close, and an application exit as any other does.
-33. **TRS-FR-EHXS** The module emits one `"terminals changed"` after each create, each change of state, each pin change, each change of a target's run state, and each close.
+32. **TRS-FR-BTMT** `set_terminal_label` trims the given label and sets it as the session's label, and does nothing else. An empty label, or one longer than 64 characters after the trim, returns `invalid_label` and changes nothing. Two sessions can have the same label. A persistent session also keeps the label in its tmux session (TRS-FR-QMZM).
+32. **TRS-FR-DOMD** `set_terminal_theme` sets the session's **theme** override to one of `paper`, `sand`, `mist`, `night`, `ember`, or clears it with null, and does nothing else. Any other value returns `invalid_theme`. A new session has no override. A persistent session also keeps the override in its tmux session (TRS-FR-QMZM).
+33. **TRS-FR-EHXS** The module emits one `"terminals changed"` after each create, each change of state, each pin change, each label change, each theme change, each change of a target's run state, and each close.
 34. **TRS-FR-HWNA** A Microsandbox shell ends with the end reason `vm_stopped` when its VM stops or reboots (per `../tools/EAC-execute-agent-cli.md` EAC-FR-INWE). The module never boots, reboots, or keeps a VM for a session.
 
 ### Target gone
@@ -64,10 +66,11 @@ The backend module that runs the author's own interactive terminals. A terminal 
     - *Why:* an application that Finder starts on macOS has a short `PATH` that does not hold Homebrew.
 40. **TRS-FR-FKVW** A Host shell and an Agent CLI with `runs_in = host` are **persistent** where tmux is usable at their create. Every other kind, and a host session created while tmux is not usable, runs on a pseudo-terminal of its own as TRS-FR-QPBL and TRS-FR-ASKO say, and is not persistent.
 41. **TRS-FR-ZOZO** Every persistent session runs in one tmux server of the application, on the socket name `synthesis` (`tmux -L synthesis`). The module never reads, changes, or ends another tmux server or a session of one.
-42. **TRS-FR-ANJK** The server shows a session as a plain terminal: no status bar, no prefix key and no key binding, so no key detaches the client; mouse off, so the terminal handles the mouse; no alternate screen in the client; and a history limit of 10,000 lines (per `../ui/TRM-terminals.md` TRM-FR-DTCA).
+42. **TRS-FR-ANJK** The server shows a session as a plain terminal: no status bar, no prefix key and no key binding, so no key detaches the client; mouse off, so the terminal handles the mouse and tmux makes no mouse binding; no alternate screen in the client; and a history limit of 10,000 lines (per `../ui/TRM-terminals.md` TRM-FR-DTCA).
+42. **TRS-FR-WINB** While the program in a persistent session has mouse reporting on, the tmux server turns the same mouse mode on in its client and gives each mouse report of the client to the program unchanged.
 43. **TRS-FR-BHCB** The module creates a persistent session with `new-session -d`, with the target's directory as its start directory and the environment of TRS-FR-KMWO. Its name is `syn-`, the first 12 hex digits of the SHA-256 of the project key (`DVC-devcontainer-environment.md` DVC-FR-QGUT), `-`, and the session id. A `tmux attach-session` client is the process on the session's pseudo-terminal.
 44. **TRS-FR-FIIJ** When a tmux call of a create fails, the module emits a `WARN` record, removes the tmux session where one exists, and starts the session as a session that is not persistent.
-45. **TRS-FR-QMZM** The tmux session holds the metadata of the session as session options: `@synthesis_project` (the project key), `@synthesis_label`, `@synthesis_target`, `@synthesis_kind`, `@synthesis_vendor`, `@synthesis_runs_in`, `@synthesis_pinned`, and `@synthesis_created_at`. A pin change sets `@synthesis_pinned`.
+45. **TRS-FR-QMZM** The tmux session holds the metadata of the session as session options: `@synthesis_project` (the project key), `@synthesis_label`, `@synthesis_target`, `@synthesis_kind`, `@synthesis_vendor`, `@synthesis_runs_in`, `@synthesis_pinned`, `@synthesis_theme`, and `@synthesis_created_at`. A pin change sets `@synthesis_pinned`, a label change sets `@synthesis_label`, and a theme change sets `@synthesis_theme`, with an empty value for no override. A session that has no `@synthesis_theme` has no override.
 46. **TRS-FR-CKIC** When the tmux client ends while its tmux session and process live, and the module did not end the client, the module attaches a new client. This is not an end of the session. After 3 clients that end in 10 seconds, the session goes to `exited` with no exit code, a `WARN` record, and its tmux session stays.
 47. **TRS-FR-KBOS** The tmux server keeps the pane of a process that ended. When the process of a persistent session ends, the module reads its exit status, removes the tmux session, and the session goes to `exited` as TRS-FR-DVBF says. A tmux session that ends with no exit status gives `exited` with no exit code.
 48. **TRS-FR-IEKU** When a project window opens a project, the module reads from the socket each tmux session whose `@synthesis_project` is that project's key and that it does not hold yet. It adds each one with its id and metadata, `persistent = true`, in the state `running`, and then emits one `"terminals changed"`.
@@ -96,6 +99,8 @@ Names match `../ui/TRM-terminals.md` byte-for-byte:
 - `"resize terminal (id, cols, rows)"` → `resize_terminal(project_id, terminal_id, cols, rows)` → `()`.
 - `"acknowledge terminal output (id, bytes)"` → `acknowledge_terminal_output(project_id, terminal_id, bytes)` → `()`.
 - `"set terminal pinned (id, pinned)"` → `set_terminal_pinned(project_id, terminal_id, pinned)` → `TerminalSummary`. Side effect: one `"terminals changed"`.
+- `"set terminal label (id, label)"` → `set_terminal_label(project_id, terminal_id, label)` → `TerminalSummary`. Side effect: one `"terminals changed"`.
+- `"set terminal theme (id, theme)"` → `set_terminal_theme(project_id, terminal_id, theme: string | null)` → `TerminalSummary`. Side effect: one `"terminals changed"`.
 - `"close terminal (id)"` → `close_terminal(project_id, terminal_id)` → `()`. Side effects: the process ends, the container or the tmux session goes, the history and the session are removed; one `"terminals changed"`.
 
 ### Events (Tauri event bus)
@@ -126,7 +131,7 @@ KindAvailability {
 
 TerminalSummary {
   id,                  // unique across application processes
-  label,               // TRS-FR-LRYH
+  label,               // TRS-FR-LRYH, TRS-FR-BTMT
   target:              TargetRef,
   target_name,
   branch?,
@@ -139,6 +144,7 @@ TerminalSummary {
   end_reason?:         "process_exited" | "start_failed" | "vm_stopped" | "target_gone",
   end_detail?,         // the error line of a failed start
   pinned,
+  theme?,             // TRS-FR-DOMD: the override, or null
   busy_run_id,
   has_history,
   persistent,          // TRS-FR-FKVW
@@ -153,7 +159,7 @@ TerminalAttachment {
 
 Each message on the `output` channel is one binary frame of raw output bytes (TRS-FR-PACY).
 
-Typed errors: `platform_unsupported`, `terminal_limit_reached`, `unknown_target`, `unknown_terminal`, `target_gone`, `kind_unavailable` (with its reason), `terminal_not_running`, `invalid_size`, `input_too_large`, `start_failed`.
+Typed errors: `platform_unsupported`, `terminal_limit_reached`, `unknown_target`, `unknown_terminal`, `target_gone`, `kind_unavailable` (with its reason), `terminal_not_running`, `invalid_size`, `invalid_label`, `invalid_theme`, `input_too_large`, `start_failed`.
 
 ### Internal (Rust API, not registered as Tauri commands)
 - `end_terminals_for_target(project_id, target)` — called by `WTC-worktree-context.md` and `WKS-work-streams.md` when a target is gone (TRS-FR-RKAW).

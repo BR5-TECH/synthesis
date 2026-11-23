@@ -188,6 +188,25 @@ export function terminalsInvoke(cmd: string, a: Record<string, any>): unknown {
       fireChanged();
       return { ...s };
     }
+    case "set_terminal_label": {
+      const s = sessions.find((x) => x.id === a.terminalId);
+      if (!s) return Promise.reject({ code: "unknown_terminal" });
+      const label = String(a.label ?? "").trim();
+      if (label === "" || [...label].length > 64) return Promise.reject({ code: "invalid_label" });
+      s.label = label;
+      fireChanged();
+      return { ...s };
+    }
+    case "set_terminal_theme": {
+      const s = sessions.find((x) => x.id === a.terminalId);
+      if (!s) return Promise.reject({ code: "unknown_terminal" });
+      const theme = a.theme ?? null;
+      if (theme !== null && !["paper", "sand", "mist", "night", "ember"].includes(String(theme)))
+        return Promise.reject({ code: "invalid_theme" });
+      (s as { theme?: unknown }).theme = theme;
+      fireChanged();
+      return { ...s };
+    }
     case "close_terminal":
       sessions = sessions.filter((x) => x.id !== a.terminalId);
       channels.delete(a.terminalId);

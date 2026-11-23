@@ -27,11 +27,13 @@ pub struct Meta {
     pub vendor: Option<CliVendor>,
     pub runs_in: RunsIn,
     pub pinned: bool,
+    /// TRS-FR-DOMD: the theme override.
+    pub theme: Option<TerminalTheme>,
     pub created_at: String,
 }
 
 /// The option names, in the order of [`list_format`] after the session name.
-const KEYS: [&str; 8] = [
+const KEYS: [&str; 9] = [
     "@synthesis_project",
     "@synthesis_label",
     "@synthesis_target",
@@ -39,10 +41,18 @@ const KEYS: [&str; 8] = [
     "@synthesis_vendor",
     "@synthesis_runs_in",
     "@synthesis_pinned",
+    "@synthesis_theme",
     "@synthesis_created_at",
 ];
 
 pub const PINNED_KEY: &str = "@synthesis_pinned";
+pub const LABEL_KEY: &str = "@synthesis_label";
+pub const THEME_KEY: &str = "@synthesis_theme";
+
+/// TRS-FR-QMZM: the value of `@synthesis_theme`, empty for no override.
+pub fn theme_value(theme: Option<TerminalTheme>) -> &'static str {
+    theme.map(TerminalTheme::id).unwrap_or("")
+}
 
 /// Keeps a value on one field of the list output: `%`, tab, line feed, and
 /// carriage return are written as `%XX`.
@@ -97,7 +107,7 @@ fn target_from(code: &str) -> Option<TargetRef> {
 
 impl Meta {
     /// The option values, in the order of `KEYS`.
-    fn values(&self) -> [String; 8] {
+    fn values(&self) -> [String; 9] {
         [
             self.project.clone(),
             self.label.clone(),
@@ -106,6 +116,7 @@ impl Meta {
             self.vendor.map(|v| v.id().to_string()).unwrap_or_default(),
             code_of(self.runs_in),
             if self.pinned { "1".into() } else { "0".into() },
+            theme_value(self.theme).to_string(),
             self.created_at.clone(),
         ]
     }
@@ -119,7 +130,8 @@ impl Meta {
     }
 
     fn parse(fields: &[&str]) -> Option<Self> {
-        let [project, label, target, kind, vendor, runs_in, pinned, created_at] = fields else {
+        let [project, label, target, kind, vendor, runs_in, pinned, theme, created_at] = fields
+        else {
             return None;
         };
         Some(Meta {
@@ -130,6 +142,8 @@ impl Meta {
             vendor: if vendor.is_empty() { None } else { Some(CliVendor::from_id(vendor)?) },
             runs_in: from_code(runs_in)?,
             pinned: *pinned == "1",
+            // TRS-FR-QMZM: an empty or unknown value is no override.
+            theme: TerminalTheme::from_id(theme),
             created_at: decode(created_at),
         })
     }
@@ -219,6 +233,7 @@ mod tests {
             vendor: None,
             runs_in: RunsIn::Host,
             pinned: true,
+            theme: None,
             created_at: "2026-11-22T10:00:00Z".into(),
         }
     }
@@ -252,6 +267,7 @@ mod tests {
         agent.vendor = Some(CliVendor::ClaudeCode);
         agent.pinned = false;
         agent.label = "50%\ttab".into();
+        agent.theme = Some(TerminalTheme::Night);
         let text = format!(
             "{}\n{}\n",
             line(&session_name("/p", "t1"), &meta("/p"), "0\t"),

@@ -31,6 +31,7 @@ import { NotificationToasts } from "./components/NotificationToasts";
 import { useThemePreference } from "./hooks/useThemePreference";
 import { useFontRoles } from "./hooks/useFontRoles";
 import { useEditorZoomSync } from "./hooks/useEditorZoom";
+import { useTerminalThemeSync } from "./hooks/useTerminalThemeSync";
 import { useEditorZoomGestures } from "./hooks/useEditorZoomGestures";
 import { useEditorZoomMenu } from "./hooks/useEditorZoomMenu";
 import { isZoomableTab } from "./state/editorZoom";
@@ -88,6 +89,9 @@ function App({ projectWindowBoot = null }: AppProps = {}) {
   // in step with the other windows, and the gestures that change it.
   useEditorZoomSync();
   useEditorZoomGestures();
+  // TRM-FR-IUMC / GLS-FR-VTVK: the Terminal theme of Settings, read at startup
+  // and kept in step with the Settings window.
+  useTerminalThemeSync();
   const s = useShellSession();
 
   /**

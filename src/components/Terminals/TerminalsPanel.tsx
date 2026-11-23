@@ -4,8 +4,9 @@
  *
  * It lists every terminal session of the project window, grouped by target,
  * and opens a session's tab on a click. New terminal opens the New terminal
- * menu under the button that was activated. The row context menu pins and closes
- * sessions, and a close that ends a running process asks first.
+ * menu under the button that was activated. The row context menu renames,
+ * re-themes, pins, and closes sessions, and a close that ends a running
+ * process asks first.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../../api";
@@ -29,12 +30,14 @@ import {
   type CloseScope,
 } from "../../state/terminalGroups";
 import { releaseTerminalView } from "../../state/terminalViews";
+import { setTerminalThemeOverride } from "../../state/terminalActions";
 import { useTerminalsSnapshot } from "../../hooks/shell/useTerminalTabs";
 import type { PanelRevealRequest, TerminalSummary } from "../../types";
 import { Icon } from "../icons";
 import { EMPTY_BODY_CLASS, PanelEmptyState } from "../PanelEmptyState";
 import { EndTerminalsConfirm } from "./EndTerminalsConfirm";
 import { NewTerminalMenu } from "./NewTerminalMenu";
+import { TerminalLabelField } from "./TerminalLabelField";
 import { TerminalPersistMark } from "./TerminalPersistMark";
 import { TerminalRowMenu, type TerminalMenuChoice } from "./TerminalRowMenu";
 
@@ -87,6 +90,8 @@ export function TerminalsPanel({
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [newAnchor, setNewAnchor] = useState<HTMLElement | null>(null);
   const [pending, setPending] = useState<PendingClose | null>(null);
+  /** TRM-FR-SHKD: the row whose label shows the label field. */
+  const [renamingId, setRenamingId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const headerButton = useRef<HTMLButtonElement | null>(null);
   const atLimit = sessions.length >= MAX_TERMINALS;
@@ -151,6 +156,13 @@ export function TerminalsPanel({
 
   const choose = (choice: TerminalMenuChoice, session: TerminalSummary) => {
     setMenu(null);
+    if (choice === "rename") {
+      // TRM-FR-SHKD: the label turns into the label field, which takes the focus.
+      setSelectedId(session.id);
+      setFocusId(session.id);
+      setRenamingId(session.id);
+      return;
+    }
     if (choice === "pin") {
       // TRM-FR-AHXU: the pin changes nothing else.
       api
@@ -222,6 +234,8 @@ export function TerminalsPanel({
           onKeyDown={(e) => {
             // TRM-FR-UIWG: the arrow keys move between rows, across groups.
             if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+            // TRM-FR-SHKD: the label field keeps its own keys.
+            if (renamingId !== null) return;
             e.preventDefault();
             const from = (e.target as HTMLElement).closest<HTMLElement>("[data-terminal-row]")?.dataset.terminalRow;
             const at = rows.findIndex((r) => r.id === (from ?? focusId));
@@ -241,6 +255,7 @@ export function TerminalsPanel({
               </div>
               {group.sessions.map((session) => {
                 const tabbable = (focusId ?? rows[0]?.id) === session.id;
+                const renaming = renamingId === session.id;
                 return (
                   <div
                     key={session.id}
@@ -252,13 +267,16 @@ export function TerminalsPanel({
                     data-terminal-row={session.id}
                     data-state={session.state}
                     data-pinned={session.pinned ? "true" : undefined}
-                    onClick={() => open(session)}
+                    onClick={() => {
+                      if (!renaming) open(session);
+                    }}
                     onFocus={() => setFocusId(session.id)}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       openMenu(session.id, e.clientX, e.clientY);
                     }}
                     onKeyDown={(e) => {
+                      if (renaming) return;
                       if (e.key === "Enter") {
                         e.preventDefault();
                         open(session);
@@ -279,7 +297,19 @@ export function TerminalsPanel({
                     </span>
                     <span className="terminal-row__main">
                       <span className="terminal-row__line">
-                        <span className="terminal-row__label">{session.label}</span>
+                        {renaming ? (
+                          <TerminalLabelField
+                            terminalId={session.id}
+                            label={session.label}
+                            className="terminal-row__label-field"
+                            onDone={(restoreFocus) => {
+                              setRenamingId(null);
+                              if (restoreFocus) focusRow(session.id);
+                            }}
+                          />
+                        ) : (
+                          <span className="terminal-row__label">{session.label}</span>
+                        )}
                         {session.busyRunId && (
                           <span
                             className="terminal-busy"
@@ -311,9 +341,17 @@ export function TerminalsPanel({
           y={menu.y}
           terminalLabel={menuSession.label}
           pinned={menuSession.pinned}
+          theme={menuSession.theme ?? null}
           othersDisabled={closeSet(sessions, "others", menuSession.id).length === 0}
           allDisabled={closeSet(sessions, "all", menuSession.id).length === 0}
           onChoose={(choice) => choose(choice, menuSession)}
+          onChooseTheme={(theme) => {
+            // TRM-FR-QXIY: a choice closes both menus, and the focus goes back to the row.
+            const id = menuSession.id;
+            setMenu(null);
+            focusRow(id);
+            void setTerminalThemeOverride(id, theme);
+          }}
           onClose={(restoreFocus) => {
             const id = menu.id;
             setMenu(null);

@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { useState } from "react";
-import { refreshTerminals, removeTerminal } from "../../state/terminals";
+import { refreshTerminals, removeTerminal, upsertTerminal } from "../../state/terminals";
 import { hasTerminalView, showTerminalView, terminalViewStarted } from "../../state/terminalViews";
 import { eligibleMassCloseTargets } from "./tabStripActions";
 import { DASHBOARD_TAB } from "./tabRecords";
@@ -79,6 +79,26 @@ describe("Terminal tabs", () => {
     const terminalTabs = result.current.tabs.filter((t) => t.kind === "terminal");
     expect(terminalTabs).toEqual([{ id: "terminal:a", label: "Host shell 1", kind: "terminal", terminalId: "a" }]);
     expect(result.current.active).toBe("terminal:a");
+  });
+
+  it("TRM-FR-DPWA: the tab's title follows each change of the session's label, and other tabs stay", async () => {
+    const a = session({ id: "a", label: "Host shell 1" });
+    const b = session({ id: "b", label: "Host shell 2" });
+    await seed([a, b]);
+    const { result } = renderHook(useHarness);
+    act(() => result.current.openTerminalTab(a));
+    act(() => result.current.openTerminalTab(b));
+    // The backend holds the new label too, as a list read gives it back.
+    serve("list_terminals", () => [{ ...a, label: "build box" }, b]);
+    act(() => upsertTerminal({ ...a, label: "build box" }));
+    await waitFor(() => expect(result.current.tabs.find((t) => t.id === "terminal:a")?.label).toBe("build box"));
+    expect(result.current.tabs.find((t) => t.id === "terminal:b")?.label).toBe("Host shell 2");
+    act(() => upsertTerminal({ ...b, pinned: true }));
+    // A change that is no label change keeps every title.
+    expect(result.current.tabs.filter((t) => t.kind === "terminal").map((t) => t.label)).toEqual([
+      "build box",
+      "Host shell 2",
+    ]);
   });
 
   it("TAB-FR-KIIW, TRM-FR-DURY: Pin tab on a Terminal tab pins the session, and the tab shows it pinned", async () => {

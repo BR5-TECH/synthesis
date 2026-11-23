@@ -422,6 +422,8 @@ pub fn run() {
             terminals::commands::resize_terminal,
             terminals::commands::acknowledge_terminal_output,
             terminals::commands::set_terminal_pinned,
+            terminals::commands::set_terminal_label,
+            terminals::commands::set_terminal_theme,
             terminals::commands::close_terminal,
             streams::list_removed_work_streams,
             streams::dismiss_removed_work_stream,

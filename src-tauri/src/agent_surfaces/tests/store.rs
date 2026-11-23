@@ -572,7 +572,7 @@ fn the_log_carries_ids_and_counts_only() {
     assert_eq!(refused.level, LogLevel::Warn);
     assert_eq!(refused.fields["error"], ERR_UNKNOWN_ACTION);
     let text = serde_json::to_string(&records).unwrap();
-    for secret in ["Which storage", "sqlite", "fast", "Pick a storage", "choose_storage"] {
-        assert!(!text.contains(secret), "the log carries `{secret}`: {text}");
+    for sample in ["Which storage", "sqlite", "fast", "Pick a storage", "choose_storage"] {
+        assert!(!text.contains(sample), "the log carries `{sample}`: {text}");
     }
 }

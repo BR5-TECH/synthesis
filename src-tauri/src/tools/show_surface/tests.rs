@@ -352,8 +352,8 @@ fn the_log_carries_counts_and_rules_only() {
     assert_eq!(warn.fields["refusal"], "invalid_surface");
     assert_eq!(warn.fields["rule"], "unknown_component");
     let text = serde_json::to_string(&all).unwrap();
-    for secret in ["Which storage", "SQLite", "Pick a storage", "choose"] {
-        assert!(!text.contains(secret), "the log carries `{secret}`: {text}");
+    for sample in ["Which storage", "SQLite", "Pick a storage", "choose"] {
+        assert!(!text.contains(sample), "the log carries `{sample}`: {text}");
     }
 }
 

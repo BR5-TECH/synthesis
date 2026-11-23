@@ -217,8 +217,10 @@ describe("surface cards", () => {
       }),
     );
     await loaded();
+    expect(screen.getByText("Delete the drafts?")).toBeInTheDocument();
     expect(screen.getByText("Their discussions go too.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete" })).toHaveClass("btn--danger");
+    expect(screen.getByRole("button", { name: "Keep" })).not.toHaveClass("btn--danger");
     fireEvent.click(screen.getByRole("button", { name: "Keep" }));
     expect((submitCalls()[0] as { action: { name: string; context: unknown } }).action).toMatchObject({
       name: "keep",
@@ -275,6 +277,9 @@ describe("surface cards", () => {
       }),
     );
     await loaded();
+    expect(screen.getByText("Files")).toBeInTheDocument();
+    expect(screen.getByText("Usage only.")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /README.md/ })).not.toBeChecked();
     const api = screen.getByRole("checkbox", { name: /src\/api.ts/ });
     expect(api).toBeChecked();
     fireEvent.click(api);
@@ -316,5 +321,65 @@ describe("surface cards", () => {
     mount(cardSurface(CHOICE));
     await loaded();
     expect(screen.getByRole("radio", { name: /SQLite/ })).toBeChecked();
+  });
+
+  it("ASF-FR-EKZW: an option alone frees Send, and an own answer of spaces alone does not", async () => {
+    publish();
+    handlers.submit_surface_action = () => new Promise(() => {});
+    mount(cardSurface(CHOICE));
+    await loaded();
+    const send = screen.getByRole("button", { name: "Send" });
+    fireEvent.change(screen.getByLabelText("Own answer"), { target: { value: "   " } });
+    expect(send).toBeDisabled();
+    fireEvent.click(screen.getByRole("radio", { name: /SQLite/ }));
+    expect(send).toBeEnabled();
+    fireEvent.click(send);
+    expect((submitCalls()[0] as { action: { context: unknown } }).action.context).toEqual({
+      selected: ["sqlite"],
+      other: "   ",
+    });
+  });
+
+  it("ASF-FR-IBTY: the confirm button of a confirm card sends its own name", async () => {
+    publish();
+    handlers.submit_surface_action = () => new Promise(() => {});
+    mount(
+      cardSurface({
+        component: "ConfirmCard",
+        title: "Publish the note?",
+        confirm: { label: "Publish", name: "publish" },
+        decline: { label: "Wait", name: "wait" },
+      }),
+    );
+    await loaded();
+    expect(screen.getByRole("button", { name: "Publish" })).not.toHaveClass("btn--danger");
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    expect(submitCalls()).toHaveLength(1);
+    expect((submitCalls()[0] as { action: { name: string; context: unknown } }).action).toMatchObject({
+      name: "publish",
+      sourceComponentId: "root",
+      context: {},
+    });
+  });
+
+  it("ASF-FR-MXGW: a checklist card sends the checked items in the order of the card", async () => {
+    publish();
+    handlers.submit_surface_action = () => new Promise(() => {});
+    mount(
+      cardSurface({
+        component: "ChecklistCard",
+        items: [
+          { value: "a", label: "First" },
+          { value: "b", label: "Second" },
+          { value: "c", label: "Third", checked: true },
+        ],
+        action: { name: "pick" },
+        sendLabel: "Use these",
+      }),
+    );
+    await loaded();
+    fireEvent.click(screen.getByRole("checkbox", { name: /First/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Use these" }));
+    expect((submitCalls()[0] as { action: { context: unknown } }).action.context).toEqual({ checked: ["a", "c"] });
   });
 });

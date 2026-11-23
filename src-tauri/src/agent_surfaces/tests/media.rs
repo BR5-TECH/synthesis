@@ -276,3 +276,41 @@ fn every_media_component_checks_its_url() {
         validate_surface(&good, &json!({})).unwrap_or_else(|v| panic!("{kind}: {v:?}"));
     }
 }
+
+// AUI-FR-YXMD: an attachment that the discussion holds, but that is not an
+// image, a video, or audio, is `not_media`, and nothing is read.
+#[test]
+fn an_attachment_that_is_not_media_is_refused() {
+    let f = Fixture::new();
+    let root = f.root();
+    let thread = comments::fold_discussion(&root, &f.draft_id)
+        .into_iter()
+        .find(|t| t.id == f.thread_id)
+        .unwrap();
+    let appended = comments::add_comment_to(
+        &root,
+        thread.log_ref(),
+        &thread.id,
+        "Here are the notes.".into(),
+        Vec::new(),
+        vec![comments::AttachmentInput::Inline {
+            media_type: "text/plain".into(),
+            filename: "notes.txt".into(),
+            data: base64::engine::general_purpose::STANDARD.encode(b"plain notes"),
+        }],
+        comments::Stamp { by: &human(), at: "2999-01-01T00:00:00Z" },
+    )
+    .expect("appended");
+    let digest = appended
+        .comments
+        .iter()
+        .flat_map(|c| &c.attachments)
+        .find_map(|a| match a {
+            comments::Attachment::Blob { digest, .. } => Some(digest.clone()),
+            _ => None,
+        })
+        .expect("a blob");
+    let source = format!("attachment:{digest}");
+    let surface = f.record(media(&source));
+    assert_eq!(read_media_impl(&root, &root, &surface.id, &source).unwrap_err(), ERR_NOT_MEDIA);
+}

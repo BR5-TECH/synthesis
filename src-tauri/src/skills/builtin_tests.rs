@@ -136,6 +136,35 @@ fn the_a2ui_skill_names_its_references_and_its_examples_are_valid() {
     }
 }
 
+// DSL-FR-HDPD: the `a2ui` skill names the media sources, and its components
+// reference names every component and every function of the catalog.
+#[test]
+fn the_a2ui_skill_names_the_media_sources_and_the_whole_catalog() {
+    let skill = builtin_skill_file("a2ui", "SKILL.md").expect("SKILL.md");
+    let components = builtin_skill_file("a2ui", "references/components.md").expect("components");
+    for text in [&skill, &components] {
+        for source in ["`https://…`", "`project:<path>`", "`attachment:<digest>`"] {
+            assert!(text.contains(source), "{source}");
+        }
+    }
+    let catalog = crate::agent_surfaces::catalog();
+    let names = |name: &str| {
+        components.contains(&format!("`{name}`")) || components.contains(&format!("\"{name}\""))
+    };
+    let cards = crate::agent_surfaces::validate::CARD_COMPONENTS;
+    let basic: Vec<&str> =
+        catalog.component_names().into_iter().filter(|n| !cards.contains(n)).collect();
+    assert!(basic.len() >= 19, "the basic components and the table: {basic:?}");
+    for component in basic {
+        assert!(names(component), "component {component}");
+    }
+    let functions = catalog.document()["functions"].as_object().expect("functions");
+    assert_eq!(functions.len(), 14);
+    for function in functions.keys() {
+        assert!(names(function), "function {function}");
+    }
+}
+
 // DSL-FR-VTMI: the `mermaid` skill names one reference file per diagram type,
 // and every file it names is embedded and holds at least one diagram.
 #[test]

@@ -1,0 +1,377 @@
+{
+  "components": {
+    "Table": {
+      "type": "object",
+      "description": "A table. rows is a list of objects, literal or bound with @path; a cell shows row[key] as text.",
+      "properties": {
+        "component": {
+          "const": "Table"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "title": {
+                "$ref": "#/$defs/DynamicString"
+              }
+            },
+            "required": [
+              "key",
+              "title"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "rows": {
+          "$ref": "#/$defs/DynamicValue"
+        },
+        "caption": {
+          "$ref": "#/$defs/DynamicString"
+        }
+      },
+      "required": [
+        "component",
+        "columns",
+        "rows"
+      ]
+    },
+    "ChoiceCard": {
+      "type": "object",
+      "description": "A question with options and a Send button. Sends {selected: [values], other?}.",
+      "properties": {
+        "component": {
+          "const": "ChoiceCard"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "required": [
+              "value",
+              "label"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "multiple": {
+          "type": "boolean"
+        },
+        "allowOther": {
+          "type": "boolean"
+        },
+        "sendLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "action": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/ActionName"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "component",
+        "question",
+        "options",
+        "action"
+      ]
+    },
+    "ConfirmCard": {
+      "type": "object",
+      "description": "A yes or no decision. Each button sends its own action name with {}.",
+      "properties": {
+        "component": {
+          "const": "ConfirmCard"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "confirm": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "name": {
+              "$ref": "#/$defs/ActionName"
+            }
+          },
+          "required": [
+            "label",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "decline": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "name": {
+              "$ref": "#/$defs/ActionName"
+            }
+          },
+          "required": [
+            "label",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "tone": {
+          "enum": [
+            "default",
+            "danger"
+          ]
+        }
+      },
+      "required": [
+        "component",
+        "title",
+        "confirm"
+      ]
+    },
+    "ComparisonCard": {
+      "type": "object",
+      "description": "Options against criteria. With pick, sends {picked: value}.",
+      "properties": {
+        "component": {
+          "const": "ComparisonCard"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "criteria": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "required": [
+              "key",
+              "title"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "values": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
+              },
+              "recommended": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "value",
+              "label",
+              "values"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "pick": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/ActionName"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "component",
+        "criteria",
+        "options"
+      ]
+    },
+    "ChecklistCard": {
+      "type": "object",
+      "description": "Items with checkboxes and a Send button. Sends {checked: [values]}.",
+      "properties": {
+        "component": {
+          "const": "ChecklistCard"
+        },
+        "weight": {
+          "$ref": "#/$defs/Weight"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 30,
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "checked": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "value",
+              "label"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "sendLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "action": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/ActionName"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "component",
+        "items",
+        "action"
+      ]
+    }
+  },
+  "$defs": {
+    "ActionName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$"
+    }
+  },
+  "instructions": "Load the `a2ui` skill with `load_skill` before you compose a panel: it has the rules and examples. The essentials: `components` is a flat list; each component has a unique `id` and a `component` type, and exactly one has the id `root`. A container names its children by id. Bind a value with {\"@path\": \"/pointer\"} and give start values in `data_model`. Text is Markdown. An image, video, or audio `url` is an https address, `project:<path>`, or `attachment:<digest>`. For a common case use one card as `root`: ChoiceCard for a question with options, ConfirmCard for a yes or no decision, ComparisonCard for options against criteria, ChecklistCard for a set of items to keep. Example: [{\"id\":\"root\",\"component\":\"ConfirmCard\",\"title\":\"Apply the migration?\",\"confirm\":{\"label\":\"Apply\",\"name\":\"apply\"},\"decline\":{\"label\":\"Not now\",\"name\":\"skip\"}}]"
+}

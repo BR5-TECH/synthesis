@@ -4125,9 +4125,9 @@ function seededSurface(id: string): any {
         ? { kind: "artifact", artifactId: "flows/release.flow.md" }
         : { kind: "draft", draftId: "d-1" },
     commentId: `${discussionId}-surf`,
-    catalogId: "synthesis:discussion/v1",
-    components: [
-      { id: "root", component: "Column", children: ["q", "pick", "note", "tabs", "send"] },
+    catalogId: "synthesis:a2ui/v1",
+    messages: [{ version: "1.0", createSurface: { surfaceId: id, catalogId: "synthesis:a2ui/v1", dataModel: { choice: [], note: "" }, components: [
+      { id: "root", component: "Column", children: ["intro", "icon", "q", "pick", "note", "tabs", "shot", "more", "send"] },
       { id: "q", component: "Text", text: "Which storage do you want for the cleanup log?" },
       {
         id: "pick", component: "ChoicePicker", label: "Storage", value: { "@path": "/choice" },
@@ -4149,11 +4149,17 @@ function seededSurface(id: string): any {
       {
         id: "send", component: "Button", variant: "primary", child: "send_label",
         action: { event: { name: "choose_storage", context: { choice: { "@path": "/choice" }, note: { "@path": "/note" } } } },
-        "@checks": [{ condition: { "@call": "required", args: { value: { "@path": "/choice" } } }, message: "Pick one option." }],
+        checks: [{ condition: { "@call": "required", args: { value: { "@path": "/choice" } } }, message: "Pick one option." }],
       },
       { id: "send_label", component: "Text", text: "Send" },
-    ],
-    dataModel: { choice: [], note: "" },
+      { id: "intro", component: "Text", text: "**Pick one.** See [the spec](https://a2ui.org) for the details." },
+      { id: "shot", component: "Image", url: "https://picsum.photos/320/120" },
+      { id: "more", component: "Modal", trigger: "more_btn", content: "more_body" },
+      { id: "more_btn", component: "Button", child: "more_label", action: { event: { name: "noop" } } },
+      { id: "more_label", component: "Text", text: "More detail" },
+      { id: "more_body", component: "Text", text: "Plain files are easy to read, but they grow without a limit." },
+      { id: "icon", component: "Icon", name: "info" },
+    ] } }],
     authoredBy: agent,
     createdAt: "2026-07-28T10:16:00Z",
     state: "open",
@@ -8945,6 +8951,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       if (!id.startsWith("surf-")) throw "surface_not_found";
       return (agentSurfaces[id] ??= seededSurface(id));
     }
+    // AUI-FR-JUDL: the harness serves no project media; an https image loads as it is.
+    case "read_surface_media":
+      throw "media_not_found";
     case "submit_surface_action": {
       const id = String(a.surfaceId);
       const current = (agentSurfaces[id] ??= seededSurface(id));

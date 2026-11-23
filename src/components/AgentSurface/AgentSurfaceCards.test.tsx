@@ -3,10 +3,11 @@
  * ASF-FR-MLKG), and the parts of the panel the first file leaves open.
  *
  * The backend is a strict `invoke` mock routed by command name, and the
- * events are delivered by hand.
+ * events are delivered by hand. The official controls are custom elements, so
+ * each check waits for the state it reads.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -26,6 +27,11 @@ vi.mock("@tauri-apps/api/event", () => ({
   }),
 }));
 
+const openUrlMock = vi.fn(async () => {});
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openUrl: (...args: unknown[]) => openUrlMock(...(args as [])),
+}));
+
 const dispatchMock = vi.fn(async () => {});
 vi.mock("../DraftDiscussion/decisionDispatch", () => ({
   dispatchDecision: (...args: unknown[]) => dispatchMock(...(args as [])),
@@ -33,44 +39,56 @@ vi.mock("../DraftDiscussion/decisionDispatch", () => ({
 
 import { AgentSurfacePanel } from ".";
 import { resetSurfaceModelsForTest } from "./model";
+import { resetSurfaceRenderersForTest } from "./a2ui/SurfaceRenderer";
 import { clearConversationThreads, publishThread } from "../../state/conversationThreads";
 import { flushLogs, resetLogBufferForTest } from "../../logging";
+import {
+  THREAD,
+  loadedPanel,
+  officialButton,
+  routeInvoke,
+  surfaceOf,
+  textFieldInput,
+  type Handler,
+} from "../../test/agentSurfaceSupport";
 import type { AgentSurface, Discussion, SurfaceComponent } from "../../types";
-
-type Handler = (args: Record<string, unknown>) => unknown;
 
 type LoggedRecord = { message: string; fields?: Record<string, unknown> };
 
-/** Every log record the module has flushed through the mock. */
-function logRecordsForTest(): LoggedRecord[] {
+function logRecords(): LoggedRecord[] {
   flushLogs();
   return invokeMock.mock.calls
     .filter(([cmd]) => cmd === "append_log_records")
     .flatMap(([, args]) => (args as { records: LoggedRecord[] }).records);
 }
+
 let handlers: Record<string, Handler> = {};
+
+// ASF-FR-RTRX: the renderer is a chunk of its own; load it once before the
+// tests, so no test waits on its first transform.
+beforeAll(async () => {
+  await import("./a2ui/SurfaceRenderer");
+  // The catalog and the custom elements are built once, outside every wait.
+  const { discussionCatalog } = await import("./a2ui/catalog");
+  discussionCatalog();
+});
 
 beforeEach(() => {
   resetLogBufferForTest();
   resetSurfaceModelsForTest();
+  resetSurfaceRenderersForTest();
   clearConversationThreads();
   listeners.clear();
   dispatchMock.mockReset();
+  openUrlMock.mockClear();
   invokeMock.mockReset();
   handlers = {};
-  invokeMock.mockImplementation(async (cmd: string, args: Record<string, unknown>) => {
-    if (cmd === "append_log_records") return undefined;
-    const handler = handlers[cmd];
-    if (!handler) throw new Error(`unexpected command ${cmd}`);
-    return handler(args ?? {});
-  });
+  routeInvoke(invokeMock, handlers);
 });
 
 afterEach(() => {
   cleanup();
 });
-
-const THREAD = "thread-1";
 
 function publish(resolved = false) {
   publishThread({
@@ -83,63 +101,32 @@ function publish(resolved = false) {
 
 function form(): SurfaceComponent[] {
   return [
-    { id: "root", component: "Column", children: ["q", "echo", "pick", "note", "send"] },
+    { id: "root", component: "Column", children: ["q", "echo", "note", "send"] },
     { id: "q", component: "Text", text: "Which storage do you want?" },
     { id: "echo", component: "Text", text: { "@call": "formatString", args: { value: "Note: ${/note}" } } },
-    {
-      id: "pick",
-      component: "ChoicePicker",
-      label: "Storage",
-      options: [
-        { label: "SQLite", value: "sqlite" },
-        { label: "Files", value: "files" },
-      ],
-      value: { "@path": "/choice" },
-    },
     { id: "note", component: "TextField", label: "Note", value: { "@path": "/note" } },
     {
       id: "send",
       component: "Button",
       variant: "primary",
       child: "send_label",
-      action: {
-        event: {
-          name: "choose_storage",
-          context: { choice: { "@path": "/choice" }, note: { "@path": "/note" }, kind: "storage" },
-        },
-      },
-      "@checks": [
-        { condition: { "@call": "required", args: { value: { "@path": "/choice" } } }, message: "Pick one." },
+      action: { event: { name: "save_note", context: { note: { "@path": "/note" }, kind: "storage" } } },
+      checks: [
+        { condition: { "@call": "required", args: { value: { "@path": "/note" } } }, message: "Write a note." },
       ],
     },
     { id: "send_label", component: "Text", text: "Send" },
-  ];
-}
-
-function surface(over: Partial<AgentSurface> = {}): AgentSurface {
-  return {
-    id: "s-1",
-    discussionId: THREAD,
-    target: { kind: "draft", draftId: "draft-1" },
-    commentId: "c-1",
-    catalogId: "synthesis:discussion/v1",
-    components: form(),
-    dataModel: { choice: [], note: "" },
-    authoredBy: { kind: "agent", agentId: "a-1", handle: "arch" },
-    createdAt: "2026-01-01T00:00:00Z",
-    state: "open",
-    ...over,
-  } as AgentSurface;
+  ] as SurfaceComponent[];
 }
 
 function submitted(): AgentSurface {
-  return surface({
+  return surfaceOf(form(), { note: "" }, {
     state: "submitted",
     submission: {
-      name: "choose_storage",
+      name: "save_note",
       sourceComponentId: "send",
-      context: { choice: ["files"], note: "fast", kind: "storage" },
-      dataModel: { choice: ["files"], note: "fast" },
+      context: { note: "fast", kind: "storage" },
+      dataModel: { note: "fast" },
       by: { kind: "human", login: "ada" },
       at: "2026-01-02T10:00:00Z",
       commentId: "c-2",
@@ -147,23 +134,17 @@ function submitted(): AgentSurface {
   });
 }
 
-function mount(record: AgentSurface = surface()) {
+function mount(record: AgentSurface = surfaceOf(form(), { note: "" })) {
   handlers.get_agent_surface = () => record;
   return render(
     <AgentSurfacePanel attachment={{ kind: "agentSurface", surfaceId: record.id }} threadId={THREAD} />,
   );
 }
 
-async function loaded() {
-  await waitFor(() =>
-    expect(screen.getByTestId("agent-surface").dataset.state).not.toBe("loading"),
-  );
-  return screen.getByTestId("agent-surface");
-}
-
+const loaded = () => loadedPanel(screen.getByTestId);
 
 function cardSurface(card: Record<string, unknown>, extra: Partial<AgentSurface> = {}): AgentSurface {
-  return surface({ components: [{ id: "root", ...card } as SurfaceComponent], dataModel: {}, ...extra });
+  return surfaceOf([{ id: "root", ...card } as SurfaceComponent], {}, extra);
 }
 
 function submitCalls() {
@@ -236,8 +217,10 @@ describe("surface cards", () => {
       }),
     );
     await loaded();
+    expect(screen.getByText("Delete the drafts?")).toBeInTheDocument();
     expect(screen.getByText("Their discussions go too.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete" })).toHaveClass("btn--danger");
+    expect(screen.getByRole("button", { name: "Keep" })).not.toHaveClass("btn--danger");
     fireEvent.click(screen.getByRole("button", { name: "Keep" }));
     expect((submitCalls()[0] as { action: { name: string; context: unknown } }).action).toMatchObject({
       name: "keep",
@@ -294,6 +277,9 @@ describe("surface cards", () => {
       }),
     );
     await loaded();
+    expect(screen.getByText("Files")).toBeInTheDocument();
+    expect(screen.getByText("Usage only.")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /README.md/ })).not.toBeChecked();
     const api = screen.getByRole("checkbox", { name: /src\/api.ts/ });
     expect(api).toBeChecked();
     fireEvent.click(api);
@@ -336,62 +322,64 @@ describe("surface cards", () => {
     await loaded();
     expect(screen.getByRole("radio", { name: /SQLite/ })).toBeChecked();
   });
-});
 
-describe("the panel parts the first file leaves open", () => {
-  it("ASF-FR-GKYM / ASF-FR-TAVD: an input shows its own check messages, and takes its name from its accessibility label", async () => {
+  it("ASF-FR-EKZW: an option alone frees Send, and an own answer of spaces alone does not", async () => {
     publish();
-    mount(
-      surface({
-        components: [
-          { id: "root", component: "Column", children: ["field", "go"] },
-          {
-            id: "field",
-            component: "TextField",
-            label: "",
-            "@accessibility": { label: "Release name" },
-            value: { "@path": "/name" },
-            "@checks": [
-              { condition: { "@call": "length", args: { value: { "@path": "/name" }, max: 3 } }, message: "At most 3." },
-            ],
-          },
-          { id: "go", component: "Button", child: "go_label", action: { event: { name: "go" } } },
-          { id: "go_label", component: "Text", text: "Go" },
-        ],
-        dataModel: { name: "" },
-      }),
-    );
+    handlers.submit_surface_action = () => new Promise(() => {});
+    mount(cardSurface(CHOICE));
     await loaded();
-    const field = screen.getByLabelText("Release name");
-    expect(screen.queryByText("At most 3.")).not.toBeInTheDocument();
-    fireEvent.change(field, { target: { value: "toolong" } });
-    expect(screen.getByText("At most 3.")).toBeInTheDocument();
+    const send = screen.getByRole("button", { name: "Send" });
+    fireEvent.change(screen.getByLabelText("Own answer"), { target: { value: "   " } });
+    expect(send).toBeDisabled();
+    fireEvent.click(screen.getByRole("radio", { name: /SQLite/ }));
+    expect(send).toBeEnabled();
+    fireEvent.click(send);
+    expect((submitCalls()[0] as { action: { context: unknown } }).action.context).toEqual({
+      selected: ["sqlite"],
+      other: "   ",
+    });
   });
 
-  it("ASF-FR-TURS / ASF-FR-GHUZ: a Row template draws each item with its index, and a failing call draws an empty value", async () => {
+  it("ASF-FR-IBTY: the confirm button of a confirm card sends its own name", async () => {
     publish();
+    handlers.submit_surface_action = () => new Promise(() => {});
     mount(
-      surface({
-        components: [
-          { id: "root", component: "Column", children: ["row", "broken"] },
-          { id: "row", component: "Row", children: { componentId: "cell", path: "/items" } },
-          {
-            id: "cell",
-            component: "Text",
-            text: {
-              "@call": "formatString",
-              args: { value: { "@call": "formatNumber", args: { value: { "@call": "@index", args: { offset: 1 } } } } },
-            },
-          },
-          { id: "broken", component: "Text", text: { "@call": "formatDate", args: { value: "never", format: "yyyy" } } },
-        ],
-        dataModel: { items: ["a", "b", "c"] },
+      cardSurface({
+        component: "ConfirmCard",
+        title: "Publish the note?",
+        confirm: { label: "Publish", name: "publish" },
+        decline: { label: "Wait", name: "wait" },
       }),
     );
     await loaded();
-    const row = document.querySelector(".agent-surface__stack--row") as HTMLElement;
-    expect(within(row).getAllByText(/^[123]$/).map((n) => n.textContent)).toEqual(["1", "2", "3"]);
-    const texts = [...document.querySelectorAll(".agent-surface__text")].map((n) => n.textContent);
-    expect(texts[texts.length - 1]).toBe("");
+    expect(screen.getByRole("button", { name: "Publish" })).not.toHaveClass("btn--danger");
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    expect(submitCalls()).toHaveLength(1);
+    expect((submitCalls()[0] as { action: { name: string; context: unknown } }).action).toMatchObject({
+      name: "publish",
+      sourceComponentId: "root",
+      context: {},
+    });
+  });
+
+  it("ASF-FR-MXGW: a checklist card sends the checked items in the order of the card", async () => {
+    publish();
+    handlers.submit_surface_action = () => new Promise(() => {});
+    mount(
+      cardSurface({
+        component: "ChecklistCard",
+        items: [
+          { value: "a", label: "First" },
+          { value: "b", label: "Second" },
+          { value: "c", label: "Third", checked: true },
+        ],
+        action: { name: "pick" },
+        sendLabel: "Use these",
+      }),
+    );
+    await loaded();
+    fireEvent.click(screen.getByRole("checkbox", { name: /First/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Use these" }));
+    expect((submitCalls()[0] as { action: { context: unknown } }).action.context).toEqual({ checked: ["a", "c"] });
   });
 });

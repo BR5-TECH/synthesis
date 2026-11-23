@@ -6,15 +6,16 @@
  * its buttons send the context its kind declares (`AUI-agent-ui-surfaces.md`
  * AUI-FR-XCXV). A submitted card shows what was sent.
  */
-import { useId, useMemo, type ReactNode } from "react";
+import { useId, useMemo } from "react";
+import { createComponentImplementation } from "@a2ui/react";
+import { z } from "zod";
 
-import { Icon } from "../icons";
-import { useRender } from "./context";
-import type { Scope } from "./functions";
-import { useCardState } from "./model";
-import type { SurfaceComponent } from "../../types";
+import { Icon } from "../../icons";
+import { useSurfaceHost } from "./host";
+import { useCardState } from "../model";
 
-type Props = { component: SurfaceComponent; scope: Scope };
+/** The resolved props of a card and its id. */
+type Props = { component: Record<string, unknown> & { id: string } };
 
 interface Option {
   value: string;
@@ -44,8 +45,8 @@ function nameOf(action: unknown): string {
 }
 
 /** ASF-FR-YCTE / ASF-FR-MLKG: what this card sent, where it is the one that sent. */
-function useSent(component: SurfaceComponent) {
-  const { submission } = useRender();
+function useSent(component: { id: string }) {
+  const { submission } = useSurfaceHost();
   return submission && submission.sourceComponentId === component.id ? submission : undefined;
 }
 
@@ -80,8 +81,8 @@ function SendButton({
 }
 
 /** ASF-FR-EKZW: a question with options, and an own answer where allowed. */
-function ChoiceCardView({ component, scope }: Props) {
-  const { surfaceId, readOnly, press } = useRender();
+function ChoiceCardView({ component }: Props) {
+  const { surfaceId, readOnly, sendCard } = useSurfaceHost();
   const sent = useSent(component);
   const name = useId();
   const options = optionsOf(component.options);
@@ -103,7 +104,7 @@ function ChoiceCardView({ component, scope }: Props) {
   const send = () => {
     const context: Record<string, unknown> = { selected: [...selected] };
     if (allowOther) context.other = other;
-    press(component.id, scope, { name: nameOf(component.action), context });
+    sendCard(component.id, { name: nameOf(component.action), context });
   };
   return (
     <div className="agent-surface__card-kind agent-surface__choice-card">
@@ -152,8 +153,8 @@ function ChoiceCardView({ component, scope }: Props) {
 }
 
 /** ASF-FR-IBTY: a decision with a confirm button and an optional decline. */
-function ConfirmCardView({ component, scope }: Props) {
-  const { readOnly, press } = useRender();
+function ConfirmCardView({ component }: Props) {
+  const { readOnly, sendCard } = useSurfaceHost();
   const sent = useSent(component);
   const confirm = (component.confirm ?? {}) as { label?: unknown; name?: unknown };
   const decline = component.decline as { label?: unknown; name?: unknown } | undefined;
@@ -168,7 +169,7 @@ function ConfirmCardView({ component, scope }: Props) {
           disabled={readOnly}
           pressed={sent?.name === str(confirm.name)}
           danger={danger}
-          onPress={() => press(component.id, scope, { name: str(confirm.name), context: {} })}
+          onPress={() => sendCard(component.id, { name: str(confirm.name), context: {} })}
         />
         {decline && (
           <SendButton
@@ -176,7 +177,7 @@ function ConfirmCardView({ component, scope }: Props) {
             disabled={readOnly}
             pressed={sent?.name === str(decline.name)}
             primary={false}
-            onPress={() => press(component.id, scope, { name: str(decline.name), context: {} })}
+            onPress={() => sendCard(component.id, { name: str(decline.name), context: {} })}
           />
         )}
       </div>
@@ -185,8 +186,8 @@ function ConfirmCardView({ component, scope }: Props) {
 }
 
 /** ASF-FR-EOLY: options against criteria, and a pick where the card has one. */
-function ComparisonCardView({ component, scope }: Props) {
-  const { surfaceId, readOnly, press } = useRender();
+function ComparisonCardView({ component }: Props) {
+  const { surfaceId, readOnly, sendCard } = useSurfaceHost();
   const sent = useSent(component);
   const name = useId();
   const criteria = (Array.isArray(component.criteria) ? component.criteria : []) as Array<{
@@ -261,7 +262,7 @@ function ComparisonCardView({ component, scope }: Props) {
           label={str(pick.label) || "Pick"}
           disabled={readOnly || picked === ""}
           pressed={sent !== undefined}
-          onPress={() => press(component.id, scope, { name: str(pick.name), context: { picked } })}
+          onPress={() => sendCard(component.id, { name: str(pick.name), context: { picked } })}
         />
       )}
     </div>
@@ -269,8 +270,8 @@ function ComparisonCardView({ component, scope }: Props) {
 }
 
 /** ASF-FR-MXGW: items with checkboxes, sent with none checked as well. */
-function ChecklistCardView({ component, scope }: Props) {
-  const { surfaceId, readOnly, press } = useRender();
+function ChecklistCardView({ component }: Props) {
+  const { surfaceId, readOnly, sendCard } = useSurfaceHost();
   const sent = useSent(component);
   const items = useMemo(
     () =>
@@ -314,7 +315,7 @@ function ChecklistCardView({ component, scope }: Props) {
         disabled={readOnly}
         pressed={sent !== undefined}
         onPress={() =>
-          press(component.id, scope, {
+          sendCard(component.id, {
             name: nameOf(component.action),
             context: { checked: items.map((i) => i.value).filter((v) => checked.includes(v)) },
           })
@@ -324,10 +325,78 @@ function ChecklistCardView({ component, scope }: Props) {
   );
 }
 
-/** ASF-FR-HRQL: the drawing of each card. */
-export const CARD_RENDERERS: Record<string, (props: Props) => ReactNode> = {
-  ChoiceCard: ChoiceCardView,
-  ConfirmCard: ConfirmCardView,
-  ComparisonCard: ComparisonCardView,
-  ChecklistCard: ChecklistCardView,
+const action = z.object({ name: z.string() });
+const option = z.object({ value: z.string(), label: z.string(), description: z.string().optional() });
+
+/** AUI contract surface: the extension cards. */
+export const ChoiceCardApi = {
+  name: "ChoiceCard",
+  schema: z.object({
+    question: z.string(),
+    options: z.array(option),
+    multiple: z.boolean().optional(),
+    allowOther: z.boolean().optional(),
+    sendLabel: z.string().optional(),
+    action,
+    weight: z.number().optional(),
+  }),
 };
+
+export const ConfirmCardApi = {
+  name: "ConfirmCard",
+  schema: z.object({
+    title: z.string(),
+    body: z.string().optional(),
+    confirm: z.object({ label: z.string(), name: z.string() }),
+    decline: z.object({ label: z.string(), name: z.string() }).optional(),
+    tone: z.enum(["default", "danger"]).optional(),
+    weight: z.number().optional(),
+  }),
+};
+
+export const ComparisonCardApi = {
+  name: "ComparisonCard",
+  schema: z.object({
+    title: z.string().optional(),
+    criteria: z.array(z.object({ key: z.string(), title: z.string() })),
+    options: z.array(
+      z.object({
+        value: z.string(),
+        label: z.string(),
+        values: z.record(z.union([z.string(), z.number(), z.boolean()])),
+        recommended: z.boolean().optional(),
+      }),
+    ),
+    pick: z.object({ name: z.string(), label: z.string().optional() }).optional(),
+    weight: z.number().optional(),
+  }),
+};
+
+export const ChecklistCardApi = {
+  name: "ChecklistCard",
+  schema: z.object({
+    title: z.string().optional(),
+    items: z.array(option.extend({ checked: z.boolean().optional() })),
+    sendLabel: z.string().optional(),
+    action,
+    weight: z.number().optional(),
+  }),
+};
+
+/** A card implementation over one of the views above. */
+function card<Api extends { name: string; schema: z.ZodTypeAny }>(
+  api: Api,
+  View: (props: Props) => React.ReactNode,
+) {
+  return createComponentImplementation(api, ({ props, context }) => (
+    <View component={{ ...(props as Record<string, unknown>), id: context.componentModel.id }} />
+  ));
+}
+
+/** ASF-FR-HRQL: the four cards. */
+export const CARD_PARTS = [
+  card(ChoiceCardApi, ChoiceCardView),
+  card(ConfirmCardApi, ConfirmCardView),
+  card(ComparisonCardApi, ComparisonCardView),
+  card(ChecklistCardApi, ChecklistCardView),
+];

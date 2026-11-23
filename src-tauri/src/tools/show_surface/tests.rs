@@ -142,16 +142,16 @@ fn it_is_a_portable_tool_with_the_description_and_the_catalog() {
 fn the_compact_catalog_has_a_line_for_each_component_and_function() {
     let compact = compact_catalog();
     let lines: Vec<&str> = compact.lines().collect();
-    assert_eq!(lines.len(), 19 + 11, "{compact}");
+    assert_eq!(lines.len(), 23 + 14 + 1, "{compact}");
     let text = lines.iter().find(|l| l.starts_with("Text: ")).expect("Text");
-    for part in ["id!", "component!", "text!", "variant", "weight", "@accessibility"] {
+    for part in ["id!", "text!", "variant", "weight", "accessibility"] {
         assert!(
             text.split(", ").any(|p| p.trim_start_matches("Text: ") == part),
             "{text} has {part}"
         );
     }
     let button = lines.iter().find(|l| l.starts_with("Button: ")).expect("Button");
-    assert!(button.contains("child!") && button.contains("action!") && button.contains("@checks"));
+    assert!(button.contains("child!") && button.contains("action!") && button.contains("checks"));
     assert!(lines.contains(&"formatString(value!)"));
     assert!(lines.contains(&"length(value!, min, max)"));
     assert!(lines.contains(&"@index(offset)"));
@@ -169,7 +169,7 @@ fn the_parameter_schema_is_small() {
     assert_eq!(components["items"]["required"], json!(["id", "component"]));
     assert_eq!(
         components["items"]["properties"]["component"]["enum"].as_array().unwrap().len(),
-        19
+        23
     );
     assert!(components["items"].get("additionalProperties").is_none());
     assert_eq!(schema["properties"]["data_model"]["type"], "object");
@@ -199,7 +199,7 @@ fn a_call_records_one_surface_and_one_comment_and_ends_the_turn() {
     let stored = crate::agent_surfaces::store::get_impl(&f.root(), surface_id).expect("record");
     assert_eq!(stored.state, SurfaceState::Open);
     assert_eq!(stored.discussion_id, f.thread_id);
-    assert_eq!(serde_json::to_value(&stored.components).unwrap(), panel());
+    assert_eq!(serde_json::to_value(&stored.current().components).unwrap(), panel());
     assert_eq!(f.records_left(), 1);
 }
 
@@ -216,7 +216,7 @@ fn an_absent_data_model_is_an_empty_object() {
             panic!("a surface");
         };
         let stored = crate::agent_surfaces::store::get_impl(&f.root(), surface_id).unwrap();
-        assert_eq!(stored.data_model, json!({}));
+        assert_eq!(stored.current().data_model, json!({}));
     }
 }
 
@@ -247,7 +247,7 @@ fn a_message_must_have_text_and_a_spoken_part() {
 fn an_invalid_surface_names_where_it_is() {
     let f = Fixture::new();
     let mut components = panel();
-    components[1]["component"] = json!("Modal");
+    components[1]["component"] = json!("Html");
     let refused = f.call(json!({ "message": MESSAGE, "components": components })).unwrap_err();
     assert_eq!(refused.kind(), ToolErrorKind::InvalidArgs);
     assert!(refused.retryable());
@@ -336,7 +336,7 @@ fn the_log_carries_counts_and_rules_only() {
     block_on(f.tool().with_buffer(&BUFFER).call(serde_json::from_value(args()).unwrap()))
         .expect("shown");
     let mut bad = panel();
-    bad[1]["component"] = json!("Video");
+    bad[1]["component"] = json!("Html");
     block_on(
         f.tool().with_buffer(&BUFFER).call(
             serde_json::from_value(json!({ "message": MESSAGE, "components": bad })).unwrap(),

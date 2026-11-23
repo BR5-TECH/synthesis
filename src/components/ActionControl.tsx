@@ -313,6 +313,9 @@ export function ActionControl({
       // phase, so a bubble-phase check here runs after it and sees an empty DOM,
       // closing the composer along with it. Capture on `window` runs first.
       if (document.querySelector('[data-testid="mention-picker"]')) return;
+      // ASF-FR-NEPE / SNV-FR-56: a dialog that a panel of the discussion
+      // opened lies over this surface, so its Escape closes the dialog alone.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
       // Consumed here rather than left to bubble or to whatever else Escape
       // might mean at the window level (the native shell's own fullscreen
       // exit among them): this keystroke closed a surface, and nothing past

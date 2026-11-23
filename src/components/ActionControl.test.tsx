@@ -336,6 +336,26 @@ describe("the control is the tab's own chrome (ACT-FR-01, ACT-FR-03)", () => {
   });
 });
 
+describe("a dialog over the control (ASF-FR-NEPE, SNV-FR-56)", () => {
+  it("ASF-FR-NEPE: an Escape that a modal dialog of a panel takes leaves the control open", async () => {
+    const b = backend();
+    await renderEditor(b);
+    await openActions();
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    document.body.appendChild(dialog);
+    try {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      });
+      expect(screen.getByRole("menu")).toBeInTheDocument();
+    } finally {
+      dialog.remove();
+    }
+  });
+});
+
 describe("Discuss opens a conversation about the item (ACT-FR-13 … ACT-FR-17)", () => {
   it("ACT-FR-15, ACT-FR-16, AGC-FR-05, AGT-FR-36, AGT-FR-39, CVP-FR-64: posting targets the artifact and dispatches the artifact origin", async () => {
     const b = backend();

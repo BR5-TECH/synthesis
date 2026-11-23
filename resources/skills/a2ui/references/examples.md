@@ -32,7 +32,7 @@ Each example is a complete `show_surface` panel: `components` and `data_model`. 
           "context": { "name": { "@path": "/name" }, "kind": { "@path": "/kind" }, "notify": { "@path": "/notify" } }
         }
       },
-      "@checks": [
+      "checks": [
         { "condition": { "@call": "required", "args": { "value": { "@path": "/name" } } }, "message": "Give a name." },
         { "condition": { "@call": "required", "args": { "value": { "@path": "/kind" } } }, "message": "Pick a kind." }
       ]

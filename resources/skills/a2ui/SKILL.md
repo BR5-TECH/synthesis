@@ -28,7 +28,7 @@ This skill tells you how to show the author a panel with the `show_surface` tool
 | A yes or no decision | `ConfirmCard` | `references/cards.md` |
 | Options against criteria | `ComparisonCard` | `references/cards.md` |
 | Items the author keeps or drops | `ChecklistCard` | `references/cards.md` |
-| A form, a table, tabs, or any other layout | the components | `references/components.md` |
+| A form, a table, tabs, media, a dialog, or any other layout | the components | `references/components.md` |
 | Complete panels to start from | examples | `references/examples.md` |
 
 ## Rules
@@ -39,5 +39,6 @@ This skill tells you how to show the author a panel with the `show_surface` tool
 - A panel holds at most 100 components and is at most 8 components deep.
 - An input needs a `Button` or a card on the same panel. A `Button` has `action.event.name` (lowercase letters, digits, `_`) and a `context` with the values it sends.
 - Bind a value with `{"@path": "/pointer"}`. Join text with `formatString`, not with `+`.
-- Text is plain text. Markdown, HTML, images, and links do not render.
+- Text is simple Markdown: emphasis, lists, inline code, and links. HTML does not render. Use `Image`, `Video`, and `AudioPlayer` for media.
+- A media `url` is `https://…`, `project:<path>`, or `attachment:<digest>`. Any other address is refused.
 - The values the author sends are not secret. Do not ask for a password, a token, or a key in a panel.

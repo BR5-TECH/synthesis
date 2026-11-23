@@ -40,6 +40,9 @@ ignore = "0.4"
 # SCC-FR-05: the `regex` query mode compiles the query as a regular expression.
 # A pattern that does not compile is the typed `"invalid query"` of SCC-FR-06.
 regex = "1"
+# AUI-FR-EGAB: JSON Schema 2020-12 validation against the official A2UI v1.0
+# schemas. No default features: no network or file resolver, no TLS.
+jsonschema = { version = "0.63", default-features = false }
 # EAC-FR-KVBT: the host of a Custom Gateway URL. Already in the tree.
 url = "2"
 notify-debouncer-mini = "0.4"

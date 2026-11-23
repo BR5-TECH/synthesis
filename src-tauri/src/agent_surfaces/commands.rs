@@ -51,3 +51,32 @@ where
     let by = comments::acting_participant(&settings, &project)?;
     store::submit_impl(&app, &BUFFER, store, &surface_id, action, &by)
 }
+
+/// AUI contract surface: `"read surface media (id, source)"` (AUI-FR-JUDL).
+#[project_scope_macros::project_scoped]
+#[tauri::command]
+pub fn read_surface_media<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    surface_id: String,
+    source: String,
+    project: crate::project_scope::Scoped<'_, ProjectState>,
+) -> Result<media::SurfaceMedia, String>
+where
+    tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
+{
+    let store = project.require_store().ok();
+    let store = open_store(store.as_ref())?;
+    let root = project.require_root().map_err(|_| ERR_NO_PROJECT_OPEN.to_string())?;
+    let outcome = media::read_media_impl(store, &root, &surface_id, &source);
+    if let Err(error) = &outcome {
+        // AUI-FR-DNZK: the ids and the typed code, never the source.
+        crate::logging::log_warn(
+            &app,
+            &BUFFER,
+            &[crate::logging::Domain::Backend],
+            "agent surface media refused",
+            crate::log_fields! { "surfaceId" => &surface_id, "error" => error },
+        );
+    }
+    outcome
+}

@@ -732,6 +732,7 @@ pub fn run() {
             document_export::requests::resolve_export_request,
             agent_surfaces::commands::get_agent_surface,
             agent_surfaces::commands::submit_surface_action,
+            agent_surfaces::commands::read_surface_media,
             // Embeddings index (EMB-embeddings-index.md).
             embeddings::load_embeddings_settings,
             embeddings::save_embeddings_settings,

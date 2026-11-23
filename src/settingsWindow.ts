@@ -24,6 +24,7 @@ export type SettingsScope = "global" | "project";
 export const GLOBAL_SECTION_KEYS = [
   "appearance",
   "navigation",
+  "documents",
   "notifications",
   "recents",
   "plugins",

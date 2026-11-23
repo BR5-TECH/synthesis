@@ -17,7 +17,7 @@ use docx_rs::{
     TableBorderPosition, TableCell, TableCellMargins, TableRow, WidthType,
 };
 
-use super::docx_page::{self as page, Orientation, PageBox};
+use super::docx_page::{self as page, Orientation, PageBox, PageSetup};
 use super::model::{plain_text, Align, Block, Document, Inline, ListItem};
 use super::typography as ty;
 use super::{Assets, Picture};
@@ -75,22 +75,32 @@ fn body_paragraph() -> Paragraph {
     Paragraph::new().line_spacing(spacing(0.0, ty::PARAGRAPH_AFTER_PT, ty::BODY_LINE_HEIGHT))
 }
 
-/// The text width of the portrait page, in twentieths of a point.
-fn text_width_twips() -> usize {
-    page::text_width_twips(Orientation::Portrait) as usize
+/// What the writer of one document needs: its local images and the setup
+/// of its pages.
+struct Cx<'a> {
+    assets: &'a Assets,
+    setup: &'a PageSetup,
+}
+
+impl Cx<'_> {
+    /// DXP-FR-PGMR: the text width of the portrait page, in twentieths of a
+    /// point.
+    fn text_width_twips(&self) -> usize {
+        self.setup.text_width_twips(Orientation::Portrait) as usize
+    }
 }
 
 /// The widths of the columns of a table at the text width, in twentieths of a
 /// point, in proportion to `shares`.
-fn grid(shares: &[usize]) -> Vec<usize> {
+fn grid(shares: &[usize], width: usize) -> Vec<usize> {
     let total: usize = shares.iter().sum::<usize>().max(1);
-    shares.iter().map(|share| text_width_twips() * share / total).collect()
+    shares.iter().map(|share| width * share / total).collect()
 }
 
 /// DXP-FR-IJOH: a table at the text width, with light borders and padded
 /// cells, as the editor shows it. `columns` is its grid (`grid`); each reader
 /// of the file sizes the columns from it.
-fn boxed(table: Table, columns: Vec<usize>) -> Table {
+fn boxed(table: Table, columns: Vec<usize>, width: usize) -> Table {
     let positions = [
         TableBorderPosition::Top,
         TableBorderPosition::Left,
@@ -103,7 +113,7 @@ fn boxed(table: Table, columns: Vec<usize>) -> Table {
         t.set_border(TableBorder::new(position).color(LINE_COLOR).size(4))
     });
     table
-        .width(text_width_twips(), WidthType::Dxa)
+        .width(width, WidthType::Dxa)
         .set_grid(columns)
         .margins(TableCellMargins::new().margin(60, 120, 60, 120))
 }
@@ -172,11 +182,13 @@ fn heading_style(level: u8) -> Style {
         .outline_lvl(outline_level(level))
 }
 
-/// DXP-FR-CPPT: the bytes of the `.docx` file of `doc`.
-pub fn write(doc: &Document, assets: &Assets) -> Result<Vec<u8>, String> {
+/// DXP-FR-CPPT: the bytes of the `.docx` file of `doc`, with the pages of
+/// `setup` (DXP-FR-PGMR, DXP-FR-LQWZ).
+pub fn write(doc: &Document, images: &Assets, setup: &PageSetup) -> Result<Vec<u8>, String> {
+    let cx = &Cx { assets: images, setup };
     let mut parts = Vec::new();
     for top in &doc.blocks {
-        for part in block_parts(&top.block, top.align, 0, assets) {
+        for part in block_parts(&top.block, top.align, 0, cx) {
             match part {
                 // DXP-FR-RBAQ: a table has no space after it of its own, so
                 // an empty paragraph of that height follows it.
@@ -188,15 +200,14 @@ pub fn write(doc: &Document, assets: &Assets) -> Result<Vec<u8>, String> {
             }
         }
     }
-    let (body, last) = sections(parts);
+    let (body, last) = sections(parts, setup);
     let mut docx = body.into_iter().fold(new_document(), |docx, part| match part {
         Part::Table(t) => docx.add_table(*t),
         Part::Paragraph(p) | Part::Landscape(p) | Part::PageBreak(p) => docx.add_paragraph(*p),
     });
-    // DXP-FR-LQWZ: the body section is the last section of the document.
-    if last == Orientation::Landscape {
-        docx.document.section_property = page::section(Orientation::Landscape);
-    }
+    // DXP-FR-PGMR, DXP-FR-LQWZ: the body section is the last section of the
+    // document.
+    docx.document.section_property = setup.section(last);
     let mut out = std::io::Cursor::new(Vec::new());
     docx.build().pack(&mut out).map_err(|e| e.to_string())?;
     Ok(out.into_inner())
@@ -218,21 +229,21 @@ enum Part {
 ///
 /// A section break starts a new page, so a page break next to one is dropped:
 /// it would add a page with nothing on it (DXP-FR-RWWA).
-fn sections(parts: Vec<Part>) -> (Vec<Part>, Orientation) {
+fn sections(parts: Vec<Part>, setup: &PageSetup) -> (Vec<Part>, Orientation) {
     let mut out: Vec<Part> = Vec::new();
     let mut current = Orientation::Portrait;
     for part in parts {
         match part {
             Part::Landscape(p) => {
                 if current == Orientation::Portrait {
-                    end_section(&mut out, Orientation::Portrait);
+                    end_section(&mut out, setup, Orientation::Portrait);
                     current = Orientation::Landscape;
                 }
                 out.push(Part::Paragraph(p));
             }
             Part::PageBreak(p) => {
                 if current == Orientation::Landscape {
-                    end_section(&mut out, Orientation::Landscape);
+                    end_section(&mut out, setup, Orientation::Landscape);
                     current = Orientation::Portrait;
                 } else {
                     out.push(Part::PageBreak(p));
@@ -240,7 +251,7 @@ fn sections(parts: Vec<Part>) -> (Vec<Part>, Orientation) {
             }
             other => {
                 if current == Orientation::Landscape {
-                    end_section(&mut out, Orientation::Landscape);
+                    end_section(&mut out, setup, Orientation::Landscape);
                     current = Orientation::Portrait;
                 }
                 out.push(other);
@@ -256,8 +267,8 @@ fn sections(parts: Vec<Part>) -> (Vec<Part>, Orientation) {
 /// section already leaves no content to end, so two landscape sections can
 /// follow each other. A page break before the section end becomes the section
 /// end itself.
-fn end_section(out: &mut Vec<Part>, orientation: Orientation) {
-    let section = page::section(orientation);
+fn end_section(out: &mut Vec<Part>, setup: &PageSetup, orientation: Orientation) {
+    let section = setup.section(orientation);
     match out.last_mut() {
         None => {}
         Some(Part::Paragraph(p)) if p.property.section_property.is_some() => {}
@@ -291,7 +302,7 @@ fn aligned(p: Paragraph, align: Align) -> Paragraph {
     }
 }
 
-fn block_parts(block: &Block, align: Align, depth: i32, assets: &Assets) -> Vec<Part> {
+fn block_parts(block: &Block, align: Align, depth: i32, cx: &Cx<'_>) -> Vec<Part> {
     let indent = |p: Paragraph| {
         if depth > 0 {
             p.indent(Some(depth * INDENT_TWIPS), None, None, None)
@@ -311,14 +322,14 @@ fn block_parts(block: &Block, align: Align, depth: i32, assets: &Assets) -> Vec<
                 .outline_lvl(outline_level(*level))
                 .keep_next(true)
                 .line_spacing(spacing(look.before_pt, look.after_pt, ty::HEADING_LINE_HEIGHT));
-            let p = add_inlines(p, inlines, style, assets);
+            let p = add_inlines(p, inlines, style, cx);
             vec![para(indent(aligned(p, align)))]
         }
         Block::Paragraph(inlines) => {
-            let p = add_inlines(body_paragraph(), inlines, RunStyle::default(), assets);
+            let p = add_inlines(body_paragraph(), inlines, RunStyle::default(), cx);
             vec![para(indent(aligned(p, align)))]
         }
-        Block::Code { text, .. } => vec![code_box(text, align)],
+        Block::Code { text, .. } => vec![code_box(text, align, cx)],
         Block::Diagram { source, image, .. } => match image {
             Some(picture) if super::diagrams::png_size(&picture.png).is_some() => {
                 // DXP-FR-HKFT, DXP-FR-LQWZ: the diagram fits the page it
@@ -326,8 +337,8 @@ fn block_parts(block: &Block, align: Align, depth: i32, assets: &Assets) -> Vec<
                 // has a single line, so the line of the picture is as tall as
                 // the picture.
                 let indent_twips = (depth.max(0) * INDENT_TWIPS) as u32;
-                let orientation = page::diagram_orientation(picture, indent_twips);
-                let frame = page::page_box(orientation).indented(indent_twips);
+                let orientation = cx.setup.diagram_orientation(picture, indent_twips);
+                let frame = cx.setup.page_box(orientation).indented(indent_twips);
                 let run = Run::new().add_image(pic(picture, frame));
                 let p = Paragraph::new().line_spacing(spacing(0.0, ty::PARAGRAPH_AFTER_PT, 1.0));
                 let p = Box::new(indent(aligned(p.add_run(run), align)));
@@ -336,14 +347,14 @@ fn block_parts(block: &Block, align: Align, depth: i32, assets: &Assets) -> Vec<
                     Orientation::Landscape => vec![Part::Landscape(p)],
                 }
             }
-            _ => vec![code_box(source, align)],
+            _ => vec![code_box(source, align, cx)],
         },
         Block::List { start, items } => {
-            list_parts(*start, items, align, depth, list_end_space(depth), assets)
+            list_parts(*start, items, align, depth, list_end_space(depth), cx)
         }
         Block::Quote(inner) => inner
             .iter()
-            .flat_map(|b| block_parts(b, align, depth + 1, assets))
+            .flat_map(|b| block_parts(b, align, depth + 1, cx))
             .map(|part| match part {
                 Part::Paragraph(p) => para(quoted(*p)),
                 Part::Landscape(p) => Part::Landscape(Box::new(quoted(*p))),
@@ -351,7 +362,7 @@ fn block_parts(block: &Block, align: Align, depth: i32, assets: &Assets) -> Vec<
             })
             .collect(),
         Block::Table { aligns, header, rows } => {
-            vec![Part::Table(Box::new(table(aligns, header, rows, align, assets)))]
+            vec![Part::Table(Box::new(table(aligns, header, rows, align, cx)))]
         }
         Block::Rule => {
             // A thematic break is a light line across the text width, as in
@@ -388,7 +399,7 @@ fn block_parts(block: &Block, align: Align, depth: i32, assets: &Assets) -> Vec<
                 para(indent(aligned(p, align)))
             })
             .collect(),
-        Block::Metadata(rows) => vec![Part::Table(Box::new(metadata_table(rows)))],
+        Block::Metadata(rows) => vec![Part::Table(Box::new(metadata_table(rows, cx)))],
     }
 }
 
@@ -412,7 +423,7 @@ fn list_parts(
     align: Align,
     depth: i32,
     end_after: f32,
-    assets: &Assets,
+    cx: &Cx<'_>,
 ) -> Vec<Part> {
     let mut parts = Vec::new();
     let item_spacing = |after: f32| spacing(0.0, after, ty::BODY_LINE_HEIGHT);
@@ -431,16 +442,16 @@ fn list_parts(
             match block {
                 Block::Paragraph(inlines) if b == 0 => {
                     let p = Paragraph::new().add_run(body_run(&marker));
-                    let p = add_inlines(p, inlines, RunStyle::default(), assets)
+                    let p = add_inlines(p, inlines, RunStyle::default(), cx)
                         .indent(indent, None, None, None)
                         .line_spacing(item_spacing(after));
                     parts.push(para(aligned(p, align)));
                 }
                 Block::List { start, items } => {
                     let end = if last_block { end_after } else { ty::LIST_ITEM_GAP_PT };
-                    parts.extend(list_parts(*start, items, align, depth + 1, end, assets));
+                    parts.extend(list_parts(*start, items, align, depth + 1, end, cx));
                 }
-                other => parts.extend(block_parts(other, align, depth + 1, assets)),
+                other => parts.extend(block_parts(other, align, depth + 1, cx)),
             }
         }
         if item.blocks.is_empty() {
@@ -457,16 +468,17 @@ fn list_parts(
 
 /// DXP-FR-ERZY: a code block is a box, so an alignment moves the box and the
 /// code text stays left-aligned.
-fn code_box(text: &str, align: Align) -> Part {
+fn code_box(text: &str, align: Align, cx: &Cx<'_>) -> Part {
     let mut cell = TableCell::new()
         .shading(Shading::new().fill(SUNKEN_FILL))
-        .width(text_width_twips(), WidthType::Dxa);
+        .width(cx.text_width_twips(), WidthType::Dxa);
     for line in text.split('\n') {
         let run = mono(Run::new().add_text(line)).size(ty::half_points(ty::CODE_PT));
         let p = Paragraph::new().add_run(run).line_spacing(cell_spacing(ty::CODE_LINE_HEIGHT));
         cell = cell.add_paragraph(p);
     }
-    let table = boxed(Table::new(vec![TableRow::new(vec![cell])]), grid(&[1]));
+    let width = cx.text_width_twips();
+    let table = boxed(Table::new(vec![TableRow::new(vec![cell])]), grid(&[1], width), width);
     Part::Table(Box::new(table_align(table, align)))
 }
 
@@ -483,14 +495,14 @@ fn table(
     header: &[Vec<Inline>],
     rows: &[Vec<Vec<Inline>>],
     align: Align,
-    assets: &Assets,
+    cx: &Cx<'_>,
 ) -> Table {
     let count = header.len().max(rows.iter().map(Vec::len).max().unwrap_or(0)).max(1);
-    let columns = grid(&vec![1; count]);
+    let columns = grid(&vec![1; count], cx.text_width_twips());
     let cell = |inlines: &[Inline], col: usize, bold: bool| {
         let style = RunStyle { bold, ..RunStyle::default() };
         let p = Paragraph::new().line_spacing(cell_spacing(ty::BODY_LINE_HEIGHT));
-        let p = add_inlines(p, inlines, style, assets);
+        let p = add_inlines(p, inlines, style, cx);
         let p = aligned(p, aligns.get(col).copied().unwrap_or(Align::Left));
         let width = columns.get(col).copied().unwrap_or(columns[0]);
         let cell = TableCell::new().add_paragraph(p).width(width, WidthType::Dxa);
@@ -506,12 +518,12 @@ fn table(
         table_rows
             .push(TableRow::new(row.iter().enumerate().map(|(i, c)| cell(c, i, false)).collect()));
     }
-    table_align(boxed(Table::new(table_rows), columns.clone()), align)
+    table_align(boxed(Table::new(table_rows), columns.clone(), cx.text_width_twips()), align)
 }
 
 /// DXP-FR-RPPW: the key in bold and the value in normal weight.
-fn metadata_table(rows: &[(String, String)]) -> Table {
-    let columns = grid(&[3, 7]);
+fn metadata_table(rows: &[(String, String)], cx: &Cx<'_>) -> Table {
+    let columns = grid(&[3, 7], cx.text_width_twips());
     let rows = rows
         .iter()
         .map(|(key, value)| {
@@ -528,7 +540,7 @@ fn metadata_table(rows: &[(String, String)]) -> Table {
             TableRow::new(vec![key_cell, value_cell])
         })
         .collect();
-    boxed(Table::new(rows), columns)
+    boxed(Table::new(rows), columns, cx.text_width_twips())
 }
 
 #[derive(Clone, Copy, Default)]
@@ -570,26 +582,21 @@ fn mono(run: Run) -> Run {
     run.fonts(fonts(MONO))
 }
 
-fn add_inlines(
-    mut p: Paragraph,
-    inlines: &[Inline],
-    style: RunStyle,
-    assets: &Assets,
-) -> Paragraph {
+fn add_inlines(mut p: Paragraph, inlines: &[Inline], style: RunStyle, cx: &Cx<'_>) -> Paragraph {
     for inline in inlines {
         p = match inline {
             Inline::Text(t) => p.add_run(styled(t, style)),
             Inline::Code(t) => p.add_run(styled(t, RunStyle { code: true, ..style })),
-            Inline::Emphasis(c) => add_inlines(p, c, RunStyle { italic: true, ..style }, assets),
-            Inline::Strong(c) => add_inlines(p, c, RunStyle { bold: true, ..style }, assets),
-            Inline::Strike(c) => add_inlines(p, c, RunStyle { strike: true, ..style }, assets),
+            Inline::Emphasis(c) => add_inlines(p, c, RunStyle { italic: true, ..style }, cx),
+            Inline::Strong(c) => add_inlines(p, c, RunStyle { bold: true, ..style }, cx),
+            Inline::Strike(c) => add_inlines(p, c, RunStyle { strike: true, ..style }, cx),
             Inline::Link { url, children } => {
                 let run = styled(&plain_text(children), style).color("0563C1").underline("single");
                 p.add_hyperlink(Hyperlink::new(url.as_str(), HyperlinkType::External).add_run(run))
             }
-            Inline::Image { url, alt } => match assets.images.get(url) {
+            Inline::Image { url, alt } => match cx.assets.images.get(url) {
                 Some(picture) => p.add_run(
-                    Run::new().add_image(pic(picture, page::page_box(Orientation::Portrait))),
+                    Run::new().add_image(pic(picture, cx.setup.page_box(Orientation::Portrait))),
                 ),
                 None => p.add_run(styled(&format!("[{alt}]"), RunStyle { italic: true, ..style })),
             },

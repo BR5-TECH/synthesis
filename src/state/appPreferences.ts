@@ -133,6 +133,30 @@ export async function loadAppPreferences(): Promise<AppPreferences> {
  * The cache is advanced only once the write lands, so a failed write leaves the
  * next patch building on the last value that really reached disk.
  */
+/**
+ * GSS-FR-20: as `patchAppPreferences`, with the patch computed from the record
+ * as it is when this write runs, after every write queued before it. A caller
+ * that edits one part of a field (one side of the DOCX margins) uses it, so a
+ * refused write before it never reaches disk through it.
+ */
+export async function updateAppPreferences(
+  update: (current: AppPreferences) => Partial<AppPreferences>,
+): Promise<AppPreferences> {
+  return enqueue(async () => {
+    if (!cached) await loadAppPreferences();
+    if (!cached) {
+      throw new Error(
+        "app preferences are unreadable; refusing to overwrite them with defaults",
+      );
+    }
+    const next: AppPreferences = { ...cached, ...update({ ...cached }) };
+    await api.saveAppPreferences(next);
+    cached = next;
+    void emitAppPreferencesChanged();
+    return { ...next };
+  });
+}
+
 export async function patchAppPreferences(
   patch: Partial<AppPreferences>,
 ): Promise<AppPreferences> {

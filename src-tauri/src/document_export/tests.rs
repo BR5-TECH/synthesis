@@ -41,6 +41,7 @@ impl Project {
             include_frontmatter: false,
             destination,
             export_id: "e-1".into(),
+            docx_pages: convert::docx_page::PageSetup::default(),
         }
     }
 
@@ -339,4 +340,32 @@ fn the_calm_sources_need_a_doc_artifact_and_a_project() {
         .collect();
     assert_eq!(warnings.len(), 6);
     assert!(warnings.iter().all(|r| r.level == LogLevel::Warn && r.fields.len() == 1));
+}
+
+// DXP-FR-PGMR, DXP-FR-LQWZ, GSS-FR-JTZE, GSS-FR-TLHZ, GSS-FR-MGNV: an export
+// reads its page setup from the stored app preferences when it starts. With no
+// store, it takes the defaults: portrait pages and margins of 35, 30, 30, 30.
+#[test]
+fn an_export_reads_its_page_setup_from_the_stored_preferences() {
+    use tauri::Manager as _;
+
+    use super::commands::docx_page_setup;
+    use super::convert::docx_page::{Margins, PageSetup};
+    use crate::global_settings::{DocxMarginsMm, GlobalSettingsStore};
+
+    let app = tauri::test::mock_app();
+    assert_eq!(docx_page_setup(app.handle()), PageSetup::default());
+
+    let store = GlobalSettingsStore::in_memory();
+    let mut prefs = store.load_app_preferences().unwrap();
+    prefs.docx_landscape_diagrams = true;
+    prefs.docx_landscape_threshold_percent = 40;
+    prefs.docx_margins_mm = DocxMarginsMm { top: 10, bottom: 12, left: 15, right: 20 };
+    store.save_app_preferences(prefs).unwrap();
+    app.manage(store);
+
+    let setup = docx_page_setup(app.handle());
+    assert!(setup.landscape);
+    assert!((setup.landscape_below - 0.4).abs() < 1e-9);
+    assert_eq!(setup.margins, Margins::from_mm(10, 12, 15, 20));
 }

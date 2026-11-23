@@ -313,6 +313,29 @@ export interface AppPreferences {
    * `ask`.
    */
   openProjectBehaviour?: OpenProjectBehaviour;
+  /**
+   * GSS-FR-JTZE / GLS-FR-KWVN: whether a DOCX export puts a wide diagram on a
+   * landscape page. A reader treats `undefined` as `false`.
+   */
+  docxLandscapeDiagrams?: boolean;
+  /**
+   * GSS-FR-TLHZ / GLS-FR-PBXM: the landscape threshold of a DOCX export, a
+   * whole percent from 10 to 100. A reader treats `undefined` as 75.
+   */
+  docxLandscapeThresholdPercent?: number;
+  /**
+   * GSS-FR-MGNV / GLS-FR-MRGQ: the margins of a DOCX page in whole
+   * millimetres. A reader treats `undefined` as 35, 30, 30, and 30.
+   */
+  docxMarginsMm?: DocxMarginsMm;
+}
+
+/** GSS-FR-MGNV: the margins of a DOCX page, in whole millimetres. */
+export interface DocxMarginsMm {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
 }
 
 /** GSS-FR-OPBH: the stored answer of the open project dialog. */

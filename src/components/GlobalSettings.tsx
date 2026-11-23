@@ -16,6 +16,7 @@ import {
   type RehearsalTarget,
 } from "./NotificationSettings";
 import { NavigationSettings } from "./NavigationSettings";
+import { DocumentSettings } from "./DocumentSettings";
 import { DevcontainerCliSettings } from "./DevcontainerCliSettings";
 import { DockerSettings } from "./DockerSettings";
 import { IsolationSettings } from "./IsolationSettings";
@@ -56,6 +57,9 @@ export const GLOBAL_SECTIONS: [GlobalSectionKey, string][] = [
   // what it is configured to reach. Like Appearance, everything in it applies
   // immediately and it holds no dirty state.
   ["navigation", "Navigation"],
+  // GLS-FR-03 / GLS-FR-KWVN: the Documents section, the pages of a DOCX
+  // export. Like Navigation, everything in it applies at once.
+  ["documents", "Documents"],
   // GLS-FR-03 / GLS-FR-25: the Notifications section, placed directly after
   // Appearance because the two are the same kind of question — how the
   // application presents itself to this author on this machine — where every
@@ -567,6 +571,8 @@ export function GlobalSettings({
       )}
 
       {section === "navigation" && <NavigationSettings />}
+
+      {section === "documents" && <DocumentSettings />}
 
       {section === "notifications" && (
         <NotificationSettings rehearsalTarget={rehearsalTarget ?? null} />

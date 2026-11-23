@@ -21,6 +21,8 @@ use crate::comments::{DiscussionTarget, Participant};
 pub mod actions;
 pub mod catalog;
 pub mod commands;
+pub mod log;
+pub mod media;
 pub mod store;
 pub mod validate;
 
@@ -68,9 +70,10 @@ pub struct SurfaceSubmission {
     pub comment_id: String,
 }
 
-/// AUI-FR-IAAP: one agent surface, as stored and as served.
+/// AUI-FR-IAAP: one agent surface, as stored and as served. A stored record
+/// of the first shape reads through [`log::StoredSurface`] (AUI-FR-JYKT).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", from = "log::StoredSurface")]
 pub struct AgentSurface {
     pub id: String,
     pub discussion_id: String,
@@ -78,8 +81,8 @@ pub struct AgentSurface {
     /// The agent comment that carries the surface.
     pub comment_id: String,
     pub catalog_id: String,
-    pub components: Vec<Value>,
-    pub data_model: Value,
+    /// AUI-FR-IAAP / AUI-FR-TYBX: the A2UI v1.0 messages, in order.
+    pub messages: Vec<Value>,
     pub authored_by: Participant,
     pub created_at: String,
     pub state: SurfaceState,

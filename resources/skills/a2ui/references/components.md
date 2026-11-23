@@ -12,6 +12,7 @@ Use the components where no card fits. Every property in `!` is required. A text
 | `Card` | `child!` | A bordered block around one child. |
 | `Tabs` | `tabs!`: `[{ title, child }]` | One child for each tab. |
 | `Divider` | `axis` | A line between parts. |
+| `Modal` | `trigger!`, `content!` | A dialog: pressing the `trigger` component opens the `content` component. |
 
 A template repeats one component for each item of a list: `"children": { "componentId": "row", "path": "/items" }`. Inside the template, a pointer with no leading `/` reads from the item, for example `{"@path": "name"}`, and `{"@call": "@index", "args": {}}` gives the index of the item.
 
@@ -19,9 +20,20 @@ A template repeats one component for each item of a list: `"children": { "compon
 
 | Component | Properties | Use |
 | --- | --- | --- |
-| `Text` | `text!`, `variant` (`body`, `caption`) | Plain text. |
+| `Text` | `text!`, `variant` (`body`, `caption`) | Text with simple Markdown: emphasis, lists, inline code, and links. No HTML. |
 | `Icon` | `name!` | A small icon, for example `info`, `warning`, `check`. |
 | `Table` | `columns!`: `[{ key, title }]`, `rows!`, `caption` | A table. `rows` is a list of objects, literal or bound. A cell shows `row[key]`. |
+| `Image` | `url!`, `fit`, `variant` | An image. |
+| `Video` | `url!` | A video. It plays when the author presses play. |
+| `AudioPlayer` | `url!`, `description` | An audio clip. It plays when the author presses play. |
+
+A media `url` is one of these:
+
+- `https://…`: an address on the web.
+- `project:<path>`: a file of the project, with a project-relative path, for example `project:docs/screens/login.png`.
+- `attachment:<digest>`: a file that a comment of this conversation carries.
+
+Any other address is refused.
 
 ## Inputs and the button
 
@@ -44,12 +56,20 @@ A Button sends `action.event.name` and `action.event.context`. Give each value y
 
 A context key is letters, digits, and `_`, and starts with a letter.
 
-## Checks
-
-An input or a Button can have `@checks`: a list of `{ condition, message }`. A Button whose condition is false is disabled, and the message shows under it. The usual check is `required`:
+A Button can also open a link instead of sending an action. The link opens when the author presses the button, and nothing comes back to you:
 
 ```
-"@checks": [{ "condition": { "@call": "required", "args": { "value": { "@path": "/choice" } } }, "message": "Pick one." }]
+"action": { "functionCall": { "@call": "openUrl", "args": { "url": "https://a2ui.org" } } }
+```
+
+The address is `https`, `http`, or `mailto`.
+
+## Checks
+
+An input or a Button can have `checks`: a list of `{ condition, message }`. A Button whose condition is false is disabled, and the message shows under it. The usual check is `required`:
+
+```
+"checks": [{ "condition": { "@call": "required", "args": { "value": { "@path": "/choice" } } }, "message": "Pick one." }]
 ```
 
 ## Functions
@@ -58,11 +78,14 @@ An input or a Button can have `@checks`: a list of `{ condition, message }`. A B
 | --- | --- | --- |
 | `formatString` | `value!` | the text, with each `${/pointer}` replaced by its value |
 | `formatNumber` | `value!`, `decimals`, `grouping` | a number as text |
+| `formatCurrency` | `value!`, `currency!`, `decimals`, `grouping` | an amount as text, for example `USD` |
 | `formatDate` | `value!`, `format!` | a date as text, for example `yyyy-MM-dd` |
 | `pluralize` | `value!`, `other!`, `zero`, `one` | the text for the count |
 | `required` | `value!` | true when the value is not empty |
 | `length` | `value!`, `min`, `max` | true when the text length is in the bounds; give `min`, `max`, or both |
 | `numeric` | `value!`, `min`, `max` | true when the number is in the bounds; give `min`, `max`, or both |
+| `regex` | `value!`, `pattern!` | true when the text matches the pattern |
+| `email` | `value!` | true when the text is an email address |
 | `and`, `or` | `values!` (two or more) | the logic of the values |
 | `not` | `value!` | the opposite |
 | `@index` | `offset` | the index of the template item |

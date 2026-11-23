@@ -152,19 +152,21 @@ where
     }
     let now = now_rfc3339();
     let comment_id = new_note_id();
-    let surface = AgentSurface {
+    let mut surface = AgentSurface {
         id: new_note_id(),
         discussion_id: origin.discussion_id().to_string(),
         target: origin.target.clone(),
         comment_id: comment_id.clone(),
         catalog_id: CATALOG_ID.to_string(),
-        components: input.components.to_vec(),
-        data_model: input.data_model.clone(),
+        messages: Vec::new(),
         authored_by: input.agent.clone(),
         created_at: now.clone(),
         state: SurfaceState::Open,
         submission: None,
     };
+    // AUI-FR-TYBX: the log starts with one createSurface.
+    surface.messages =
+        vec![super::log::create_surface(&surface.id, input.components, input.data_model)];
     write_record(store, &surface).map_err(|_| RecordError::WriteFailed)?;
     let appended = append(
         store,
@@ -212,7 +214,7 @@ where
         log_fields! {
             "surfaceId" => &surface.id,
             "discussionId" => &surface.discussion_id,
-            "components" => surface.components.len(),
+            "components" => input.components.len(),
         },
     );
     Ok(surface)

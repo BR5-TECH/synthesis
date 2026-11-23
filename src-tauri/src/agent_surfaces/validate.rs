@@ -92,6 +92,7 @@ pub fn validate_surface(components: &[Value], data_model: &Value) -> Result<(), 
     check_table_rows(&objects)?;
     for (id, object) in &objects {
         check_context_keys(id, object)?;
+        check_media_url(id, object)?;
         check_unique_values(id, object)?;
         check_comparison_values(id, object)?;
     }
@@ -146,8 +147,8 @@ fn check_components(components: &[Value]) -> Result<Objects<'_>, SurfaceViolatio
                 .on("id"));
         }
         let names = catalog.component_names();
-        let schema = match kind_of(object).and_then(|kind| catalog.component(kind)) {
-            Some(schema) => schema,
+        let kind = match kind_of(object).filter(|kind| catalog.component(kind).is_some()) {
+            Some(kind) => kind,
             None => {
                 return Err(SurfaceViolation::new(
                     "unknown_component",
@@ -157,7 +158,12 @@ fn check_components(components: &[Value]) -> Result<Objects<'_>, SurfaceViolatio
                 .on("component"));
             }
         };
-        if let Err(error) = catalog.check(schema, component) {
+        if let Err(error) = catalog.check_component(kind, component) {
+            // A precise reason of this module, such as an unknown function,
+            // says more than the schema's own; where none applies, the schema
+            // error stands. Template rules are checked later with the tree.
+            check_values(id, object, true)?;
+            check_context_keys(id, object)?;
             let rule = match error.failure {
                 SchemaFailure::Missing => "missing_property",
                 SchemaFailure::Unknown => "unknown_property",
@@ -197,6 +203,12 @@ fn children_of(object: &Map<String, Value>) -> Vec<(String, &'static str, bool)>
     }
     if let Some(id) = object.get("child").and_then(Value::as_str) {
         out.push((id.to_string(), "child", false));
+    }
+    // The trigger and the content of a Modal.
+    for key in ["trigger", "content"] {
+        if let Some(id) = object.get(key).and_then(Value::as_str) {
+            out.push((id.to_string(), key, false));
+        }
     }
     if let Some(tabs) = object.get("tabs").and_then(Value::as_array) {
         out.extend(
@@ -375,6 +387,52 @@ fn check_table_rows(objects: &[(String, &Map<String, Value>)]) -> Result<(), Sur
     Ok(())
 }
 
+/// AUI-FR-PMXJ: the components that load media from their `url`.
+pub const MEDIA_COMPONENTS: [&str; 3] = ["Image", "Video", "AudioPlayer"];
+
+/// AUI-FR-GUUJ: a media source: an `https` address, `project:<path>` with a
+/// project-relative path, or `attachment:<digest>`.
+pub fn is_media_url(url: &str) -> bool {
+    if let Some(rest) = url.strip_prefix("https://") {
+        return !rest.is_empty() && !rest.starts_with('/');
+    }
+    if let Some(path) = url.strip_prefix("project:") {
+        return !path.is_empty()
+            && !path.starts_with('/')
+            && !path.contains('\\')
+            && path
+                .split('/')
+                .all(|segment| !segment.is_empty() && segment != "." && segment != "..");
+    }
+    if let Some(digest) = url.strip_prefix("attachment:") {
+        return digest.len() == 64 && digest.chars().all(|c| c.is_ascii_hexdigit());
+    }
+    false
+}
+
+/// AUI-FR-GUUJ: an address that `openUrl` opens.
+pub fn is_link_url(url: &str) -> bool {
+    ["https://", "http://", "mailto:"]
+        .iter()
+        .any(|scheme| url.strip_prefix(scheme).is_some_and(|rest| !rest.is_empty()))
+}
+
+/// AUI-FR-GUUJ: the literal `url` of a media component.
+fn check_media_url(id: &str, object: &Map<String, Value>) -> Result<(), SurfaceViolation> {
+    if !kind_of(object).is_some_and(|k| MEDIA_COMPONENTS.contains(&k)) {
+        return Ok(());
+    }
+    match object.get("url").and_then(Value::as_str) {
+        Some(url) if !is_media_url(url) => Err(SurfaceViolation::new(
+            "bad_url",
+            "an `https` address, `project:<project-relative path>`, or `attachment:<digest>`",
+        )
+        .at(id)
+        .on("url")),
+        _ => Ok(()),
+    }
+}
+
 /// AUI-FR-JLHW: a context key is an identifier.
 pub fn is_context_key(key: &str) -> bool {
     let mut chars = key.chars();
@@ -383,13 +441,28 @@ pub fn is_context_key(key: &str) -> bool {
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-/// AUI-FR-JLHW: the context keys of a button's event.
+/// AUI-FR-JLHW: an event name is lowercase letters, digits, and `_`.
+pub fn is_event_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    name.len() <= 64
+        && chars.next().is_some_and(|c| c.is_ascii_lowercase())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+}
+
+/// AUI-FR-JLHW: the name and the context keys of a button's event.
 fn check_context_keys(id: &str, object: &Map<String, Value>) -> Result<(), SurfaceViolation> {
-    let context = object
-        .get("action")
-        .and_then(|a| a.get("event"))
-        .and_then(|e| e.get("context"))
-        .and_then(Value::as_object);
+    let event = object.get("action").and_then(|a| a.get("event"));
+    if let Some(name) = event.and_then(|e| e.get("name")) {
+        if !name.as_str().is_some_and(is_event_name) {
+            return Err(SurfaceViolation::new(
+                "bad_event_name",
+                "an event name of lowercase letters, digits, and `_` that starts with a letter, at most 64 characters",
+            )
+            .at(id)
+            .on("action.event.name"));
+        }
+    }
+    let context = event.and_then(|e| e.get("context")).and_then(Value::as_object);
     if let Some(key) = context.into_iter().flat_map(|c| c.keys()).find(|k| !is_context_key(k)) {
         return Err(SurfaceViolation::new(
             "bad_context_key",
@@ -501,6 +574,29 @@ fn walk_value(
                 return check_pointer(id, &path.join("."), pointer, in_template);
             }
             if let Some(name) = object.get("@call") {
+                let is_open_url = name.as_str() == Some("openUrl");
+                // AUI-FR-ZJRQ: a Button's action is an event, or a
+                // functionCall of `openUrl` alone.
+                if path.len() == 2 && path[0] == "action" && path[1] == "functionCall" {
+                    if !is_open_url {
+                        return Err(SurfaceViolation::new(
+                            "bad_action",
+                            "an action that is an `event`, or a `functionCall` of `openUrl`",
+                        )
+                        .at(id)
+                        .on(path.join(".")));
+                    }
+                    return check_call(id, object, name, path, in_template);
+                }
+                // AUI-FR-ZJRQ: `openUrl` runs on a press of the author alone.
+                if is_open_url {
+                    return Err(SurfaceViolation::new(
+                        "open_url_outside_action",
+                        "`openUrl` only as the `functionCall` action of a Button",
+                    )
+                    .at(id)
+                    .on(path.join(".")));
+                }
                 // AUI-FR-JLHW: an action's context holds literals and bindings.
                 if path.first().map(String::as_str) == Some("action") {
                     return Err(SurfaceViolation::new(
@@ -541,15 +637,24 @@ fn check_call(
     in_template: bool,
 ) -> Result<(), SurfaceViolation> {
     let catalog = catalog();
-    let Some(schema) = name.as_str().and_then(|n| catalog.function(n)) else {
+    let name_text = name.as_str().unwrap_or("");
+    let is_index = name_text == "@index";
+    if !is_index && catalog.function(name_text).is_none() {
+        let mut names: Vec<&str> = catalog
+            .document()
+            .get("functions")
+            .and_then(Value::as_object)
+            .map(|f| f.keys().map(String::as_str).collect())
+            .unwrap_or_default();
+        names.push("@index");
         return Err(SurfaceViolation::new(
             "unknown_function",
-            "a function of the catalog: formatString, formatNumber, formatDate, pluralize, required, length, numeric, and, or, not, @index",
+            format!("a function of the catalog: {}", names.join(", ")),
         )
         .at(id)
         .on(path.join(".")));
-    };
-    if name.as_str() == Some("@index") && !in_template {
+    }
+    if is_index && !in_template {
         return Err(SurfaceViolation::new(
             "index_outside_template",
             "`@index` only inside a template",
@@ -557,11 +662,32 @@ fn check_call(
         .at(id)
         .on(path.join(".")));
     }
-    let as_value = Value::Object(object.clone());
-    if let Err(error) = catalog.check(schema, &as_value) {
-        let mut at = path.clone();
-        at.extend(error.path);
-        return Err(SurfaceViolation::new("bad_call", error.expected).at(id).on(at.join(".")));
+    // The arguments first, so a call nested in a call is named itself.
+    if let Some(args) = object.get("args") {
+        path.push("args".to_string());
+        walk_value(id, args, path, in_template)?;
+        path.pop();
+    }
+    if !is_index {
+        let as_value = Value::Object(object.clone());
+        if let Err(error) = catalog.check_function(name_text, &as_value) {
+            let mut at = path.clone();
+            at.extend(error.path);
+            return Err(SurfaceViolation::new("bad_call", error.expected).at(id).on(at.join(".")));
+        }
+    }
+    // AUI-FR-GUUJ: a literal address of `openUrl`.
+    if name_text == "openUrl" {
+        if let Some(url) = object.get("args").and_then(|a| a.get("url")).and_then(Value::as_str) {
+            if !is_link_url(url) {
+                return Err(SurfaceViolation::new(
+                    "bad_url",
+                    "an `https`, `http`, or `mailto` address",
+                )
+                .at(id)
+                .on(format!("{}.args.url", path.join("."))));
+            }
+        }
     }
     // AUI contract surface: `length` and `numeric` take `min`, `max`, or both.
     let bounded = matches!(name.as_str(), Some("length") | Some("numeric"));
@@ -572,11 +698,6 @@ fn check_call(
         return Err(SurfaceViolation::new("bad_call", "a call with `min`, `max`, or both")
             .at(id)
             .on(at.join(".")));
-    }
-    if let Some(args) = args {
-        path.push("args".to_string());
-        walk_value(id, args, path, in_template)?;
-        path.pop();
     }
     Ok(())
 }

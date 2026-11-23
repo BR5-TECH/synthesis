@@ -382,3 +382,130 @@
 .agent-surface__comparison-card {
   align-self: stretch;
 }
+
+/* ASF-FR-HFPF: the official renderer's style variables, mapped to the
+   application's tokens inside a panel. The tokens follow the light and the
+   dark theme of the window, so the panel follows them too. The official
+   sheet sets its variables on `:where(:root)` with zero specificity, so these
+   win inside the panel and nothing outside the panel changes. */
+.agent-surface {
+  --a2ui-color-background: var(--bg-sunken);
+  --a2ui-color-on-background: var(--fg-1);
+  --a2ui-color-surface: var(--bg-canvas);
+  --a2ui-color-on-surface: var(--fg-1);
+  --a2ui-color-primary: var(--accent);
+  --a2ui-color-primary-light: var(--accent);
+  --a2ui-color-primary-dark: var(--accent);
+  --a2ui-color-primary-hover: var(--accent);
+  --a2ui-color-on-primary: var(--accent-fg);
+  --a2ui-color-secondary: var(--bg-sunken);
+  --a2ui-color-secondary-light: var(--bg-sunken);
+  --a2ui-color-secondary-dark: var(--border-1);
+  --a2ui-color-secondary-hover: var(--border-1);
+  --a2ui-color-on-secondary: var(--fg-1);
+  --a2ui-tabs-header-color: var(--fg-3);
+  --a2ui-tabs-border: 1px solid var(--border-1);
+  --a2ui-button-margin: 0;
+  --a2ui-color-border: var(--border-1);
+  --a2ui-color-input: var(--bg-canvas);
+  --a2ui-color-on-input: var(--fg-1);
+  --a2ui-border-radius: var(--r-sm);
+  --a2ui-border-width: 1px;
+  --a2ui-border: 1px solid var(--border-1);
+  --a2ui-spacing-xs: var(--sp-0-5);
+  --a2ui-spacing-s: var(--sp-1);
+  --a2ui-spacing-m: var(--sp-2);
+  --a2ui-spacing-l: var(--sp-3);
+  --a2ui-spacing-xl: var(--sp-4);
+  --a2ui-font-family: var(--font-ui-family);
+  --a2ui-font-family-title: var(--font-ui-family);
+  --a2ui-font-family-monospace: var(--font-mono);
+  --a2ui-font-size: var(--fs-ui-sm);
+  --a2ui-font-size-xs: var(--fs-ui-xs);
+  --a2ui-font-size-s: var(--fs-ui-sm);
+  --a2ui-font-size-m: var(--fs-ui-sm);
+  --a2ui-font-size-l: var(--fs-ui-md);
+  --a2ui-font-size-xl: var(--fs-ui-md);
+  --a2ui-font-size-2xl: var(--fs-ui-md);
+  --a2ui-line-height-body: var(--lh-normal);
+  --a2ui-line-height-headings: var(--lh-snug);
+  /* ASF-FR-JVOK: the bundled Material Symbols font. */
+  --a2ui-icon-font-family: "Material Symbols Outlined";
+  color-scheme: inherit;
+}
+
+.agent-surface__fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.agent-surface__image {
+  display: block;
+  max-width: 100%;
+  border-radius: var(--r-sm);
+}
+
+.agent-surface__video,
+.agent-surface__audio {
+  display: block;
+  max-width: 100%;
+}
+
+.agent-surface__media-loading {
+  display: block;
+  height: var(--sp-4);
+}
+
+.agent-surface__modal-content {
+  margin-top: 0;
+}
+
+.agent-surface__markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.agent-surface__markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.agent-surface__modal-trigger,
+.agent-surface__markdown {
+  display: contents;
+}
+
+/* The official controls take the panel's type, colour, and focus ring. */
+.agent-surface button,
+.agent-surface input,
+.agent-surface textarea,
+.agent-surface select {
+  font: inherit;
+}
+
+.agent-surface input[type="radio"],
+.agent-surface input[type="checkbox"],
+.agent-surface input[type="range"] {
+  accent-color: var(--accent);
+}
+
+.agent-surface .a2ui-tab-button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.agent-surface input:disabled,
+.agent-surface textarea:disabled {
+  background: var(--bg-sunken);
+  color: var(--fg-3);
+}
+
+.agent-surface label {
+  font-weight: var(--fw-semi);
+}
+
+.agent-surface__modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--sp-3);
+}

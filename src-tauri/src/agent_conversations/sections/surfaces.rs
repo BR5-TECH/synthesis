@@ -49,11 +49,12 @@ pub(in crate::agent_conversations) fn surface_line(
         SurfaceState::Submitted => "submitted",
     };
     let mut out = format!("[agent surface {surface_id}: {state}]");
-    for component in &surface.components {
+    let current = surface.current();
+    for component in &current.components {
         out.push('\n');
         out.push_str(&component_line(component));
     }
-    out.push_str(&format!("\ndata model: {}", compact(&surface.data_model)));
+    out.push_str(&format!("\ndata model: {}", compact(&current.data_model)));
     if let Some(submission) = &surface.submission {
         out.push_str(&format!(
             "\npressed: {} on {}\ncontext: {}\nsubmitted data model: {}",

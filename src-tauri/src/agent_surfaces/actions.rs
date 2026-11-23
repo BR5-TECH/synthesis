@@ -63,8 +63,8 @@ fn card_actions(card: &Value) -> Vec<(&str, String)> {
 }
 
 /// AUI-FR-KBVY: the Button or the card that `action` names.
-fn sender_of<'a>(surface: &'a AgentSurface, action: &SurfaceAction) -> Option<Sender<'a>> {
-    let component = surface.components.iter().find(|c| {
+fn sender_of<'a>(components: &'a [Value], action: &SurfaceAction) -> Option<Sender<'a>> {
+    let component = components.iter().find(|c| {
         c.get("id").and_then(Value::as_str) == Some(action.source_component_id.as_str())
     })?;
     if kind(component) == "Button" {
@@ -212,10 +212,9 @@ pub fn action_body(label: &str, lines: &[(String, String)]) -> String {
 
 /// AUI-FR-XMUS: the literal text of the button's `Text` child, or else the
 /// event name.
-fn button_label(surface: &AgentSurface, button: &Value, name: &str) -> String {
+fn button_label(components: &[Value], button: &Value, name: &str) -> String {
     let child = button.get("child").and_then(Value::as_str);
-    surface
-        .components
+    components
         .iter()
         .find(|c| child.is_some() && c.get("id").and_then(Value::as_str) == child)
         .filter(|c| kind(c) == "Text")
@@ -285,7 +284,10 @@ fn card_body(card: &Value, action: &SurfaceAction) -> String {
 /// AUI-FR-KBVY to AUI-FR-WCRS: the comment body of an accepted action, or the
 /// typed error that refuses it.
 pub fn accept(surface: &AgentSurface, action: &SurfaceAction) -> Result<String, String> {
-    let sender = sender_of(surface, action).ok_or_else(|| ERR_UNKNOWN_ACTION.to_string())?;
+    // AUI-FR-TYBX: an action names a component of the current state.
+    let current = surface.current();
+    let sender =
+        sender_of(&current.components, action).ok_or_else(|| ERR_UNKNOWN_ACTION.to_string())?;
     if !within_bounds(action) {
         return Err(ERR_INVALID_CONTEXT.to_string());
     }
@@ -303,7 +305,7 @@ pub fn accept(surface: &AgentSurface, action: &SurfaceAction) -> Result<String, 
                 .into_iter()
                 .filter_map(|key| action.context.get(&key).map(|v| (key, value_text(v))))
                 .collect();
-            Ok(action_body(&button_label(surface, button, &action.name), &lines))
+            Ok(action_body(&button_label(&current.components, button, &action.name), &lines))
         }
         Sender::Card(card) => {
             if !card_context_is_valid(card, action) {

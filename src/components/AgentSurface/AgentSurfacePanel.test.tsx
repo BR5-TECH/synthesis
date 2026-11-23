@@ -1,11 +1,13 @@
 /**
- * The surface panel (`ASF-agent-surfaces.md`, `CMT-comments.md` CMT-FR-DBQC).
+ * The surface panel with the official A2UI renderer (`ASF-agent-surfaces.md`,
+ * `CMT-comments.md` CMT-FR-DBQC).
  *
  * The backend is a strict `invoke` mock routed by command name, and the
- * events are delivered by hand.
+ * events are delivered by hand. The official controls are custom elements, so
+ * each check waits for the state it reads.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -25,6 +27,11 @@ vi.mock("@tauri-apps/api/event", () => ({
   }),
 }));
 
+const openUrlMock = vi.fn(async () => {});
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openUrl: (...args: unknown[]) => openUrlMock(...(args as [])),
+}));
+
 const dispatchMock = vi.fn(async () => {});
 vi.mock("../DraftDiscussion/decisionDispatch", () => ({
   dispatchDecision: (...args: unknown[]) => dispatchMock(...(args as [])),
@@ -33,44 +40,57 @@ vi.mock("../DraftDiscussion/decisionDispatch", () => ({
 import { AgentSurfacePanel } from ".";
 import { CommentAttachmentList } from "../CommentAttachments";
 import { resetSurfaceModelsForTest } from "./model";
+import { resetSurfaceRenderersForTest } from "./a2ui/SurfaceRenderer";
 import { clearConversationThreads, publishThread } from "../../state/conversationThreads";
 import { flushLogs, resetLogBufferForTest } from "../../logging";
+import {
+  THREAD,
+  loadedPanel,
+  officialButton,
+  routeInvoke,
+  surfaceOf,
+  textFieldInput,
+  findTextField,
+  type Handler,
+} from "../../test/agentSurfaceSupport";
 import type { AgentSurface, Discussion, SurfaceComponent } from "../../types";
-
-type Handler = (args: Record<string, unknown>) => unknown;
 
 type LoggedRecord = { message: string; fields?: Record<string, unknown> };
 
-/** Every log record the module has flushed through the mock. */
-function logRecordsForTest(): LoggedRecord[] {
+function logRecords(): LoggedRecord[] {
   flushLogs();
   return invokeMock.mock.calls
     .filter(([cmd]) => cmd === "append_log_records")
     .flatMap(([, args]) => (args as { records: LoggedRecord[] }).records);
 }
+
 let handlers: Record<string, Handler> = {};
+
+// ASF-FR-RTRX: the renderer is a chunk of its own; load it once before the
+// tests, so no test waits on its first transform.
+beforeAll(async () => {
+  await import("./a2ui/SurfaceRenderer");
+  // The catalog and the custom elements are built once, outside every wait.
+  const { discussionCatalog } = await import("./a2ui/catalog");
+  discussionCatalog();
+});
 
 beforeEach(() => {
   resetLogBufferForTest();
   resetSurfaceModelsForTest();
+  resetSurfaceRenderersForTest();
   clearConversationThreads();
   listeners.clear();
   dispatchMock.mockReset();
+  openUrlMock.mockClear();
   invokeMock.mockReset();
   handlers = {};
-  invokeMock.mockImplementation(async (cmd: string, args: Record<string, unknown>) => {
-    if (cmd === "append_log_records") return undefined;
-    const handler = handlers[cmd];
-    if (!handler) throw new Error(`unexpected command ${cmd}`);
-    return handler(args ?? {});
-  });
+  routeInvoke(invokeMock, handlers);
 });
 
 afterEach(() => {
   cleanup();
 });
-
-const THREAD = "thread-1";
 
 function publish(resolved = false) {
   publishThread({
@@ -83,63 +103,32 @@ function publish(resolved = false) {
 
 function form(): SurfaceComponent[] {
   return [
-    { id: "root", component: "Column", children: ["q", "echo", "pick", "note", "send"] },
+    { id: "root", component: "Column", children: ["q", "echo", "note", "send"] },
     { id: "q", component: "Text", text: "Which storage do you want?" },
     { id: "echo", component: "Text", text: { "@call": "formatString", args: { value: "Note: ${/note}" } } },
-    {
-      id: "pick",
-      component: "ChoicePicker",
-      label: "Storage",
-      options: [
-        { label: "SQLite", value: "sqlite" },
-        { label: "Files", value: "files" },
-      ],
-      value: { "@path": "/choice" },
-    },
     { id: "note", component: "TextField", label: "Note", value: { "@path": "/note" } },
     {
       id: "send",
       component: "Button",
       variant: "primary",
       child: "send_label",
-      action: {
-        event: {
-          name: "choose_storage",
-          context: { choice: { "@path": "/choice" }, note: { "@path": "/note" }, kind: "storage" },
-        },
-      },
-      "@checks": [
-        { condition: { "@call": "required", args: { value: { "@path": "/choice" } } }, message: "Pick one." },
+      action: { event: { name: "save_note", context: { note: { "@path": "/note" }, kind: "storage" } } },
+      checks: [
+        { condition: { "@call": "required", args: { value: { "@path": "/note" } } }, message: "Write a note." },
       ],
     },
     { id: "send_label", component: "Text", text: "Send" },
-  ];
-}
-
-function surface(over: Partial<AgentSurface> = {}): AgentSurface {
-  return {
-    id: "s-1",
-    discussionId: THREAD,
-    target: { kind: "draft", draftId: "draft-1" },
-    commentId: "c-1",
-    catalogId: "synthesis:discussion/v1",
-    components: form(),
-    dataModel: { choice: [], note: "" },
-    authoredBy: { kind: "agent", agentId: "a-1", handle: "arch" },
-    createdAt: "2026-01-01T00:00:00Z",
-    state: "open",
-    ...over,
-  } as AgentSurface;
+  ] as SurfaceComponent[];
 }
 
 function submitted(): AgentSurface {
-  return surface({
+  return surfaceOf(form(), { note: "" }, {
     state: "submitted",
     submission: {
-      name: "choose_storage",
+      name: "save_note",
       sourceComponentId: "send",
-      context: { choice: ["files"], note: "fast", kind: "storage" },
-      dataModel: { choice: ["files"], note: "fast" },
+      context: { note: "fast", kind: "storage" },
+      dataModel: { note: "fast" },
       by: { kind: "human", login: "ada" },
       at: "2026-01-02T10:00:00Z",
       commentId: "c-2",
@@ -147,106 +136,107 @@ function submitted(): AgentSurface {
   });
 }
 
-function mount(record: AgentSurface = surface()) {
+function mount(record: AgentSurface = surfaceOf(form(), { note: "" })) {
   handlers.get_agent_surface = () => record;
   return render(
     <AgentSurfacePanel attachment={{ kind: "agentSurface", surfaceId: record.id }} threadId={THREAD} />,
   );
 }
 
-async function loaded() {
-  await waitFor(() =>
-    expect(screen.getByTestId("agent-surface").dataset.state).not.toBe("loading"),
-  );
-  return screen.getByTestId("agent-surface");
-}
+const loaded = () => loadedPanel(screen.getByTestId);
 
-describe("AgentSurfacePanel", () => {
-  it("ASF-FR-RRXP / ASF-FR-MGVD: a placeholder while loading, and Retry after a failed read", async () => {
-    let release: (s: AgentSurface) => void = () => {};
-    handlers.get_agent_surface = () => new Promise<AgentSurface>((res) => (release = res));
+describe("AgentSurfacePanel with the official renderer", () => {
+  it("ASF-FR-RRXP / ASF-FR-MGVD: a failed read offers Retry, and the log names the id alone", async () => {
     publish();
-    render(<AgentSurfacePanel attachment={{ kind: "agentSurface", surfaceId: "s-1" }} threadId={THREAD} />);
-    expect(await screen.findByText("Loading the panel…")).toBeInTheDocument();
-    await act(async () => release(surface()));
-    expect(await screen.findByText("Which storage do you want?")).toBeInTheDocument();
-    cleanup();
-
     let reads = 0;
     handlers.get_agent_surface = () => {
       reads += 1;
       if (reads === 1) throw new Error("surface_not_found");
-      return surface();
+      return surfaceOf(form(), { note: "" });
     };
     render(<AgentSurfacePanel attachment={{ kind: "agentSurface", surfaceId: "s-1" }} threadId={THREAD} />);
     expect(await screen.findByText("This panel could not be loaded.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(await screen.findByText("Which storage do you want?")).toBeInTheDocument();
-    const warn = logRecordsForTest().find((r) => r.message === "agent surface could not be read");
+    const panel = await loaded();
+    await waitFor(() => expect(panel.textContent).toContain("Which storage do you want?"));
+    const warn = logRecords().find((r) => r.message === "agent surface could not be read");
     expect(warn?.fields).toEqual({ surfaceId: "s-1" });
   });
 
-  it("ASF-FR-ENRG: an input writes the local model, and every bound component shows it at once", async () => {
+  it("ASF-FR-HRQL / ASF-FR-RTRX: the official renderer draws the log after its chunk loads", async () => {
     publish();
     mount();
-    await loaded();
-    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "fast" } });
-    expect(screen.getByText("Note: fast")).toBeInTheDocument();
-    expect(screen.getByLabelText("Note")).toHaveValue("fast");
+    const panel = await loaded();
+    await waitFor(() => {
+      expect(panel.querySelector("a2ui-basic-column")).not.toBeNull();
+      expect(panel.querySelector("a2ui-basic-text")).not.toBeNull();
+      expect(panel.querySelector("a2ui-basic-textfield")).not.toBeNull();
+    });
+    await waitFor(() => expect(panel.textContent).toContain("Which storage do you want?"));
   });
 
-  it("ASF-FR-JLUJ: the local model stays when the panel mounts again, and each surface has its own", async () => {
+  it("ASF-FR-ENRG / ASF-FR-GKYM: an input writes the data model, a bound text follows, and a check frees the button", async () => {
+    publish();
+    mount();
+    const panel = await loaded();
+    await waitFor(() => expect(officialButton(panel, "Send")).toBeDisabled());
+    fireEvent.input(await findTextField(panel, "Note"), { target: { value: "fast" } });
+    await waitFor(() => expect(panel.textContent).toContain("Note: fast"));
+    await waitFor(() => expect(officialButton(panel, "Send")).toBeEnabled());
+    expect(panel.textContent).not.toContain("Write a note.");
+  });
+
+  it("ASF-FR-GKYM: the message of a false check shows under its button", async () => {
+    publish();
+    mount();
+    const panel = await loaded();
+    await waitFor(() => expect(officialButton(panel, "Send")).toBeDisabled());
+    await waitFor(() => expect(panel.textContent).toContain("Write a note."));
+  });
+
+  it("ASF-FR-JLUJ: the data model stays when the panel mounts again, and each surface has its own", async () => {
     publish();
     const first = mount();
-    await loaded();
-    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "kept" } });
+    let panel = await loaded();
+    fireEvent.input(await findTextField(panel, "Note"), { target: { value: "kept" } });
+    await waitFor(() => expect(panel.textContent).toContain("Note: kept"));
     first.unmount();
     mount();
-    await loaded();
-    expect(screen.getByLabelText("Note")).toHaveValue("kept");
+    panel = await loaded();
+    await waitFor(() => expect(panel.textContent).toContain("Note: kept"));
     cleanup();
-    mount(surface({ id: "s-2" }));
-    await loaded();
-    expect(screen.getByLabelText("Note")).toHaveValue("");
+    mount(surfaceOf(form(), { note: "" }, { id: "s-2" }));
+    panel = await loaded();
+    await waitFor(() => expect(panel.textContent).toContain("Note:"));
+    expect(panel.textContent).not.toContain("Note: kept");
   });
 
-  it("ASF-FR-GKYM: a false check disables the button and shows its message", async () => {
-    publish();
-    mount();
-    await loaded();
-    const send = screen.getByRole("button", { name: "Send" });
-    expect(send).toBeDisabled();
-    expect(screen.getByText("Pick one.")).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText("Files"));
-    expect(send).toBeEnabled();
-    expect(screen.queryByText("Pick one.")).not.toBeInTheDocument();
-  });
-
-  it("ASF-FR-QBTR / ASF-FR-XOSG / ASF-FR-DHGO: a press sends the action once, disables the panel while it runs, and brings the agents back", async () => {
+  it("ASF-FR-QBTR / ASF-FR-XOSG / ASF-FR-DHGO: a press sends the resolved action once, the panel waits, and the agents come back", async () => {
     publish();
     let release: (r: unknown) => void = () => {};
     handlers.submit_surface_action = () => new Promise((res) => (release = res));
     mount();
-    await loaded();
-    fireEvent.click(screen.getByLabelText("Files"));
-    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "fast" } });
-    const send = screen.getByRole("button", { name: "Send" });
-    fireEvent.click(send);
-    fireEvent.click(send);
+    const panel = await loaded();
+    fireEvent.input(await findTextField(panel, "Note"), { target: { value: "fast" } });
+    await waitFor(() => expect(officialButton(panel, "Send")).toBeEnabled());
+    fireEvent.click(officialButton(panel, "Send"));
+    await waitFor(() => expect(invokeMock.mock.calls.some(([c]) => c === "submit_surface_action")).toBe(true));
+    fireEvent.click(officialButton(panel, "Send"));
     const calls = invokeMock.mock.calls.filter(([cmd]) => cmd === "submit_surface_action");
     expect(calls).toHaveLength(1);
     expect(calls[0][1]).toEqual({
       surfaceId: "s-1",
       action: {
-        name: "choose_storage",
+        name: "save_note",
         sourceComponentId: "send",
-        context: { choice: ["files"], note: "fast", kind: "storage" },
-        dataModel: { choice: ["files"], note: "fast" },
+        context: { note: "fast", kind: "storage" },
+        dataModel: { note: "fast" },
       },
     });
     expect(screen.getByTestId("agent-surface").dataset.state).toBe("sending");
-    expect(screen.getByLabelText("Note")).toBeDisabled();
-    expect(send).toBeDisabled();
+    expect(panel.querySelector("fieldset")).toBeDisabled();
+    expect(textFieldInput(panel, "Note")).toBeDisabled();
+    expect(officialButton(panel, "Send")).toBeDisabled();
     await act(async () => release({ surface: submitted(), commentId: "c-2" }));
     await waitFor(() => expect(dispatchMock).toHaveBeenCalledTimes(1));
     expect(dispatchMock.mock.calls[0]).toEqual([
@@ -262,13 +252,30 @@ describe("AgentSurfacePanel", () => {
   it("ASF-FR-YCTE: a submitted panel is read-only, shows the sent values, and names what was sent", async () => {
     publish();
     mount(submitted());
-    await loaded();
-    expect(screen.getByLabelText("Note")).toBeDisabled();
-    expect(screen.getByLabelText("Note")).toHaveValue("fast");
-    expect(screen.getByLabelText("Files")).toBeChecked();
-    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Send" })).toHaveAttribute("data-pressed", "true");
+    const panel = await loaded();
+    expect(panel.querySelector("fieldset")).toBeDisabled();
+    await waitFor(() => expect(panel.textContent).toContain("Note: fast"));
+    expect(textFieldInput(panel, "Note")).toBeDisabled();
+    expect(officialButton(panel, "Send")).toBeDisabled();
     expect(screen.getByText(/Sent “Send” by ada on/)).toBeInTheDocument();
+  });
+
+  it("ASF-FR-CUEI / AUI-FR-TYBX: a record whose log grows draws its new components", async () => {
+    publish();
+    const record = surfaceOf([{ id: "root", component: "Text", text: "First" } as SurfaceComponent]);
+    mount(record);
+    const panel = await loaded();
+    await waitFor(() => expect(panel.textContent).toContain("First"));
+    act(() =>
+      emitEvent("agent-surface-changed", {
+        ...record,
+        messages: [
+          ...record.messages,
+          { version: "1.0", updateComponents: { surfaceId: "s-1", components: [{ id: "root", component: "Text", text: "Second" }] } },
+        ],
+      }),
+    );
+    await waitFor(() => expect(screen.getByTestId("agent-surface").textContent).toContain("Second"));
   });
 
   it("ASF-FR-CUEI: the panel draws the record its own event carries, and no other", async () => {
@@ -278,115 +285,144 @@ describe("AgentSurfacePanel", () => {
     act(() => emitEvent("agent-surface-changed", { ...submitted(), id: "other" }));
     expect(screen.getByTestId("agent-surface").dataset.state).toBe("open");
     act(() => emitEvent("agent-surface-changed", submitted()));
-    expect(screen.getByTestId("agent-surface").dataset.state).toBe("submitted");
+    await waitFor(() => expect(screen.getByTestId("agent-surface").dataset.state).toBe("submitted"));
   });
 
-  it("ASF-FR-NLJW / ASF-FR-MGVD: already submitted reads the record again; another error shows under the panel and frees it", async () => {
+  it("ASF-FR-NLJW / ASF-FR-MGVD: an error shows under the panel and frees it; already submitted reads the record again", async () => {
     publish();
     mount();
-    await loaded();
+    const panel = await loaded();
     handlers.submit_surface_action = () => {
       throw new Error("comment_failed");
     };
-    fireEvent.click(screen.getByLabelText("Files"));
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.input(await findTextField(panel, "Note"), { target: { value: "fast" } });
+    await waitFor(() => expect(officialButton(panel, "Send")).toBeEnabled());
+    fireEvent.click(officialButton(panel, "Send"));
     expect(await screen.findByRole("alert")).toHaveTextContent("The values were not sent. Try again.");
-    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
-    expect(screen.getByLabelText("Files")).toBeChecked();
+    expect(panel.querySelector("fieldset")).not.toBeDisabled();
     expect(dispatchMock).not.toHaveBeenCalled();
-
     handlers.submit_surface_action = () => {
       throw new Error("already_submitted");
     };
-    // Another window sent it, so the record now reads as submitted.
     handlers.get_agent_surface = () => submitted();
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.click(officialButton(panel, "Send"));
     await waitFor(() => expect(screen.getByTestId("agent-surface").dataset.state).toBe("submitted"));
-    const warns = logRecordsForTest().filter((r) => r.message === "agent surface action failed");
+    const warns = logRecords().filter((r) => r.message === "agent surface action failed");
     expect(warns.map((w) => w.fields)).toEqual([
       { surfaceId: "s-1", error: "comment_failed" },
       { surfaceId: "s-1", error: "already_submitted" },
     ]);
-    const text = JSON.stringify(logRecordsForTest());
-    expect(text).not.toContain("Which storage");
-    expect(text).not.toContain("files");
+    expect(JSON.stringify(logRecords())).not.toContain("fast");
   });
 
   it("ASF-FR-JSTI: a panel in a resolved discussion is read-only with no sent line", async () => {
     publish(true);
     mount();
-    await loaded();
+    const panel = await loaded();
     expect(screen.getByTestId("agent-surface").dataset.state).toBe("resolved");
-    expect(screen.getByLabelText("Note")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(panel.querySelector("fieldset")).toBeDisabled();
+    await waitFor(() => expect(textFieldInput(panel, "Note")).toBeDisabled());
     expect(screen.queryByText(/^Sent /)).not.toBeInTheDocument();
   });
 
-  it("ASF-FR-HRQL / ASF-FR-SERF / ASF-FR-JPNA: every component draws, an unknown one draws its line, and the panel has no fixed height", async () => {
+  it("ASF-FR-QXYW: Text renders Markdown with no raw HTML, and a link opens through the opener", async () => {
     publish();
     mount(
-      surface({
-        components: [
-          { id: "root", component: "Column", children: ["row", "card", "list", "unknown", "slider", "date", "check", "chips"] },
-          { id: "row", component: "Row", children: ["icon", "div", "cap"] },
-          { id: "icon", component: "Icon", name: "info" },
-          { id: "div", component: "Divider", axis: "vertical" },
-          { id: "cap", component: "Text", text: "A caption", variant: "caption" },
-          { id: "card", component: "Card", child: "inside" },
-          { id: "inside", component: "Text", text: "In a card" },
-          { id: "list", component: "List", children: { componentId: "item", path: "/items" } },
-          {
-            id: "item",
-            component: "Text",
-            text: { "@call": "formatString", args: { value: "${name}" } },
-          },
-          { id: "unknown", component: "Video", url: "https://example.com/v.mp4" },
-          { id: "slider", component: "Slider", label: "Level", max: 10, value: { "@path": "/level" } },
-          { id: "date", component: "DateTimeInput", label: "When", value: { "@path": "/when" }, enableDate: true },
-          { id: "check", component: "CheckBox", label: "Agree", value: { "@path": "/ok" } },
-          {
-            id: "chips",
-            component: "ChoicePicker",
-            label: "Tags",
-            variant: "multipleSelection",
-            displayStyle: "chips",
-            options: [
-              { label: "Fast", value: "fast" },
-              { label: "Small", value: "small" },
-            ],
-            value: { "@path": "/tags" },
-          },
-        ],
-        dataModel: { items: [{ name: "one" }, { name: "two" }, { name: "three" }], level: 4, when: "", ok: false, tags: [] },
-      }),
+      surfaceOf([
+        {
+          id: "root",
+          component: "Text",
+          text: "**Bold** and [the spec](https://a2ui.org) <img src=x onerror=alert(1)>",
+        } as SurfaceComponent,
+      ]),
     );
-    await loaded();
-    expect(screen.getByText("A caption")).toHaveClass("agent-surface__text--caption");
-    expect(screen.getByText("In a card").closest(".agent-surface__card")).not.toBeNull();
-    const panel = screen.getByTestId("agent-surface");
-    expect(panel.style.height).toBe("");
-    expect(panel.style.maxHeight).toBe("");
-    const items = within(screen.getByRole("list")).getAllByText(/^(one|two|three)$/);
-    expect(items.map((i) => i.textContent)).toEqual(["one", "two", "three"]);
-    expect(screen.getByText("This part cannot be shown.")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Level/)).toHaveValue("4");
-    expect(screen.getByLabelText("When")).toHaveAttribute("type", "date");
-    fireEvent.click(screen.getByLabelText("Agree"));
-    expect(screen.getByLabelText("Agree")).toBeChecked();
-    const fast = screen.getByRole("button", { name: "Fast" });
-    fireEvent.click(fast);
-    expect(fast).toHaveAttribute("aria-pressed", "true");
-    expect(document.querySelector("video, img, iframe")).toBeNull();
+    const panel = await loaded();
+    await waitFor(() => expect(panel.querySelector("strong")?.textContent).toBe("Bold"));
+    expect(panel.querySelector("img")).toBeNull();
+    fireEvent.click(panel.querySelector("a[title]") as HTMLAnchorElement);
+    expect(openUrlMock).toHaveBeenCalledWith("https://a2ui.org");
   });
 
-  it("ASF-FR-GZFO / ASF-FR-TAVD: a table has header cells and a row per object; tabs follow the tabs pattern", async () => {
+  it("ASF-FR-NOBK / ASF-FR-IKTX: media load https as it is, project files through the backend, and refuse other sources", async () => {
+    publish();
+    handlers.read_surface_media = (args) =>
+      args.source === "project:docs/a.png"
+        ? { mediaType: "image/png", data: "iVBORw0K" }
+        : Promise.reject(new Error("media_not_found"));
+    mount(
+      surfaceOf([
+        { id: "root", component: "Column", children: ["web", "local", "gone", "clip"] },
+        { id: "web", component: "Image", url: "https://example.com/a.png" },
+        { id: "local", component: "Image", url: "project:docs/a.png" },
+        { id: "gone", component: "Image", url: "project:docs/missing.png" },
+        { id: "clip", component: "Video", url: "https://example.com/a.mp4" },
+      ] as SurfaceComponent[]),
+    );
+    const panel = await loaded();
+    await waitFor(() => expect(panel.querySelectorAll("img")).toHaveLength(2));
+    const sources = [...panel.querySelectorAll("img")].map((i) => i.getAttribute("src"));
+    expect(sources).toEqual(["https://example.com/a.png", "data:image/png;base64,iVBORw0K"]);
+    expect(await screen.findByText("This media cannot be shown.")).toBeInTheDocument();
+    const video = panel.querySelector("video") as HTMLVideoElement;
+    expect(video).toHaveAttribute("controls");
+    expect(video.autoplay).toBe(false);
+    expect(invokeMock).toHaveBeenCalledWith("read_surface_media", { surfaceId: "s-1", source: "project:docs/a.png" });
+  });
+
+  it("ASF-FR-NEPE: a Modal opens its content in the application's dialog, and Escape closes it", async () => {
     publish();
     mount(
-      surface({
-        components: [
-          { id: "root", component: "Tabs", tabs: [{ title: "Compare", child: "table" }, { title: "Notes", child: "notes" }] },
+      surfaceOf([
+        { id: "root", component: "Modal", trigger: "open", content: "body" },
+        { id: "open", component: "Button", child: "open_label", action: { event: { name: "noop" } } },
+        { id: "open_label", component: "Text", text: "Details" },
+        { id: "body", component: "Text", text: "The detail text." },
+      ] as SurfaceComponent[]),
+    );
+    const panel = await loaded();
+    await waitFor(() => expect(officialButton(panel, "Details")).toBeInTheDocument());
+    fireEvent.click(officialButton(panel, "Details"));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("The detail text.");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(invokeMock.mock.calls.some(([c]) => c === "submit_surface_action")).toBe(false);
+    // The focus is inside the dialog, and goes back to the trigger.
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(document.activeElement).toBe(officialButton(panel, "Details")));
+    fireEvent.click(officialButton(panel, "Details"));
+    fireEvent.click(await screen.findByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("ASF-FR-VZCC: a Button with openUrl opens the address through the opener and sends nothing", async () => {
+    publish();
+    mount(
+      surfaceOf([
+        {
+          id: "root",
+          component: "Button",
+          child: "l",
+          action: { functionCall: { "@call": "openUrl", args: { url: "https://a2ui.org" } } },
+        },
+        { id: "l", component: "Text", text: "Open the spec" },
+      ] as SurfaceComponent[]),
+    );
+    const panel = await loaded();
+    await waitFor(() => expect(officialButton(panel, "Open the spec")).toBeInTheDocument());
+    fireEvent.click(officialButton(panel, "Open the spec"));
+    await waitFor(() => expect(openUrlMock).toHaveBeenCalledWith("https://a2ui.org"));
+    expect(invokeMock.mock.calls.some(([c]) => c === "submit_surface_action")).toBe(false);
+  });
+
+  it("ASF-FR-GZFO / ASF-FR-TAVD: a table has header cells and a row per object", async () => {
+    publish();
+    mount(
+      surfaceOf(
+        [
           {
-            id: "table",
+            id: "root",
             component: "Table",
             caption: "Options",
             columns: [
@@ -394,36 +430,83 @@ describe("AgentSurfacePanel", () => {
               { key: "cost", title: "Cost" },
             ],
             rows: { "@path": "/rows" },
-          },
-          { id: "notes", component: "Text", text: "<img src=x onerror=alert(1)>" },
+          } as SurfaceComponent,
         ],
-        dataModel: { rows: [{ name: "SQLite", cost: 0 }, { name: "Postgres" }] },
-      }),
+        { rows: [{ name: "SQLite", cost: 0 }, { name: "Postgres" }] },
+      ),
     );
     await loaded();
-    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Name", "Cost"]);
-    const rows = screen.getAllByRole("row").slice(1);
-    expect(rows.map((r) => within(r).getAllByRole("cell").map((c) => c.textContent))).toEqual([
-      ["SQLite", "0"],
-      ["Postgres", ""],
-    ]);
-    const tabs = screen.getAllByRole("tab");
-    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
-    fireEvent.keyDown(tabs[0], { key: "ArrowRight" });
-    expect(screen.getAllByRole("tab")[1]).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tabpanel")).toHaveTextContent("<img src=x onerror=alert(1)>");
-    expect(document.querySelector("img")).toBeNull();
+    await waitFor(() =>
+      expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Name", "Cost"]),
+    );
+    expect(screen.getAllByRole("cell").map((c) => c.textContent)).toEqual(["SQLite", "0", "Postgres", ""]);
   });
 
   it("ASF-FR-ASQV / CMT-FR-DBQC: an agent_surface attachment draws the panel under the comment, with no chip", async () => {
     publish();
-    handlers.get_agent_surface = () => surface();
-    render(
-      <CommentAttachmentList threadId={THREAD} attachments={[{ kind: "agentSurface", surfaceId: "s-1" }]} />,
-    );
-    const text = await screen.findByText("Which storage do you want?");
-    expect(text.closest("[data-testid='agent-surface']")).not.toBeNull();
+    handlers.get_agent_surface = () => surfaceOf(form(), { note: "" });
+    render(<CommentAttachmentList threadId={THREAD} attachments={[{ kind: "agentSurface", surfaceId: "s-1" }]} />);
+    const panel = await loaded();
+    await waitFor(() => expect(panel.textContent).toContain("Which storage do you want?"));
     expect(screen.queryByTestId("attachment-chip")).not.toBeInTheDocument();
-    expect(invokeMock).toHaveBeenCalledWith("get_agent_surface", { surfaceId: "s-1" });
+  });
+
+  it("ASF-FR-TURS / ASF-FR-GHUZ: a template draws each item in order, and a call that fails gives an empty value while the panel draws", async () => {
+    publish();
+    mount(
+      surfaceOf(
+        [
+          { id: "root", component: "Column", children: ["list", "broken"] },
+          { id: "list", component: "List", children: { componentId: "item", path: "/items" } },
+          { id: "item", component: "Text", text: { "@path": "name" } },
+          {
+            id: "broken",
+            component: "Text",
+            text: { "@call": "formatDate", args: { value: "never", format: "yyyy" } },
+          },
+        ] as SurfaceComponent[],
+        { items: [{ name: "one" }, { name: "two" }, { name: "three" }] },
+      ),
+    );
+    const panel = await loaded();
+    await waitFor(() => expect(panel.textContent).toMatch(/one[\s\S]*two[\s\S]*three/));
+    expect(panel.querySelectorAll("a2ui-basic-text").length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("ASF-FR-SERF: a component the renderer does not know draws its line, and the panel still shows", async () => {
+    publish();
+    mount(
+      surfaceOf([
+        { id: "root", component: "Column", children: ["known", "strange"] },
+        { id: "known", component: "Text", text: "Still here" },
+        { id: "strange", component: "Html", html: "<b>x</b>" },
+      ] as SurfaceComponent[]),
+    );
+    const panel = await loaded();
+    await waitFor(() => expect(panel.textContent).toContain("This part cannot be shown."));
+    expect(panel.textContent).toContain("Still here");
+    expect(panel.querySelector("b")).toBeNull();
+  });
+
+  it("ASF-FR-QBTR: a bound context value with no value in the data model is sent as null", async () => {
+    publish();
+    handlers.submit_surface_action = () => new Promise(() => {});
+    mount(
+      surfaceOf([
+        {
+          id: "root",
+          component: "Button",
+          child: "l",
+          action: { event: { name: "go", context: { missing: { "@path": "/nothing" }, kind: "x" } } },
+        },
+        { id: "l", component: "Text", text: "Go" },
+      ] as SurfaceComponent[]),
+    );
+    const panel = await loaded();
+    await waitFor(() => expect(officialButton(panel, "Go")).toBeEnabled());
+    fireEvent.click(officialButton(panel, "Go"));
+    await waitFor(() => expect(invokeMock.mock.calls.some(([c]) => c === "submit_surface_action")).toBe(true));
+    const call = invokeMock.mock.calls.find(([c]) => c === "submit_surface_action");
+    expect((call?.[1] as { action: { context: unknown } }).action.context).toEqual({ missing: null, kind: "x" });
   });
 });

@@ -17,8 +17,7 @@ fn surface_of(card: Value) -> AgentSurface {
         target: DiscussionTarget::Draft { draft_id: "d-1".into() },
         comment_id: "c-1".into(),
         catalog_id: CATALOG_ID.into(),
-        components: vec![card],
-        data_model: json!({}),
+        messages: vec![crate::agent_surfaces::log::create_surface("s-1", &[card], &json!({}))],
         authored_by: Participant::Agent {
             agent_id: "a".into(),
             handle: "arch".into(),
@@ -158,4 +157,22 @@ fn a_card_action_is_bounded() {
     let mut not_object = action("choose", json!({"selected": ["a"]}));
     not_object.data_model = json!([]);
     assert_eq!(accept(&surface, &not_object).unwrap_err(), ERR_INVALID_CONTEXT);
+}
+
+// AUI-FR-ZJRQ / AUI-FR-KBVY: a Button whose action opens a link sends no
+// action, so an action that names it is unknown.
+#[test]
+fn an_open_url_button_sends_no_action() {
+    let mut surface = surface_of(json!({"component":"Text","text":"x"}));
+    surface.messages = vec![crate::agent_surfaces::log::create_surface(
+        "s-1",
+        &[
+            json!({"id":"root","component":"Button","child":"l","action":{"functionCall":{"@call":"openUrl","args":{"url":"https://a2ui.org"}}}}),
+            json!({"id":"l","component":"Text","text":"Open"}),
+        ],
+        &json!({}),
+    )];
+    let mut press = action("openUrl", json!({}));
+    press.source_component_id = "root".into();
+    assert_eq!(accept(&surface, &press).unwrap_err(), ERR_UNKNOWN_ACTION);
 }

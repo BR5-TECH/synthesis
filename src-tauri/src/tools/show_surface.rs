@@ -30,7 +30,7 @@ pub const NAME: &str = "show_surface";
 
 /// SSF-FR-FKWS: the fixed description of the contract surface. The catalog's
 /// instructions follow it.
-pub const DESCRIPTION: &str = "Show the author a small interactive panel in the conversation: a table that compares options, a checklist, a short form, or a set of choices. Use it when the author must see structured information side by side, or must give you several values at once, and plain text or one question is not enough. Before you compose a panel, load the `a2ui` skill with `load_skill`: it has the rules, the cards, and examples. For a common case use one card: `ChoiceCard`, `ConfirmCard`, `ComparisonCard`, or `ChecklistCard`, as the only component with the id `root`. Build the panel in `components` as a flat list from the components of the catalog below. Each entry has a unique `id` and a `component` type, and a container names its children by id. Exactly one entry has the id `root`. Bind a value to the data model with `{\"@path\": \"/name\"}`, and give the start values in `data_model`. An input needs a Button. A Button has `action.event.name` and a `context` that names the values it sends back, usually with `@path`. When the author presses a button, the panel locks, and the button and its values come back to you in the conversation as the author's comment. Tell the author in `message`, in a sentence or two, what the panel is for. Put one `<spoken>…</spoken>` tag in `message`: one short sentence that a voice can read aloud. A message with no tag is refused. Your turn ends when the panel is posted. To ask one question, use `ask_user_comment`. To propose a change to a draft, a prompt, a change, or a plan, use its proposal tool.";
+pub const DESCRIPTION: &str = "Show the author a small interactive panel in the conversation: a table that compares options, a checklist, a short form, or a set of choices. Use it when the author must see structured information side by side, or must give you several values at once, and plain text or one question is not enough. Before you compose a panel, load the `a2ui` skill with `load_skill`: it has the rules, the cards, and examples. For a common case use one card: `ChoiceCard`, `ConfirmCard`, `ComparisonCard`, or `ChecklistCard`, as the only component with the id `root`. Text is Markdown. An image, a video, or an audio `url` is an `https` address, `project:<path>`, or `attachment:<digest>`. Build the panel in `components` as a flat list from the components of the catalog below. Each entry has a unique `id` and a `component` type, and a container names its children by id. Exactly one entry has the id `root`. Bind a value to the data model with `{\"@path\": \"/name\"}`, and give the start values in `data_model`. An input needs a Button. A Button has `action.event.name` and a `context` that names the values it sends back, usually with `@path`. When the author presses a button, the panel locks, and the button and its values come back to you in the conversation as the author's comment. Tell the author in `message`, in a sentence or two, what the panel is for. Put one `<spoken>…</spoken>` tag in `message`: one short sentence that a voice can read aloud. A message with no tag is refused. Your turn ends when the panel is posted. To ask one question, use `ask_user_comment`. To propose a change to a draft, a prompt, a change, or a plan, use its proposal tool.";
 
 const MESSAGE_DESCRIPTION: &str = "What the panel is for, in a sentence or two. It holds one `<spoken>…</spoken>` tag with one short sentence that a voice can read aloud.";
 const COMPONENTS_DESCRIPTION: &str = "The panel as a flat list of components of the catalog. Each has a unique `id` and a `component` type, and exactly one has the id `root`. A container names its children by id.";
@@ -80,28 +80,59 @@ pub fn compact_catalog() -> String {
     let mut lines = Vec::new();
     for name in catalog.component_names() {
         if let Some(schema) = catalog.component(name) {
-            lines.push(format!("{name}: {}", fields_of(schema)));
+            // Every component also has the common `id` and `accessibility`.
+            let mut fields = vec![("id".to_string(), true), ("accessibility".to_string(), false)];
+            collect_fields(schema, &mut fields);
+            fields.retain(|(field, _)| field != "component");
+            lines.push(format!("{name}: {}", render_fields(&fields)));
         }
     }
     let functions = catalog.document().get("functions").and_then(Value::as_object);
     for (name, schema) in functions.into_iter().flatten() {
         let args = schema.get("properties").and_then(|p| p.get("args")).unwrap_or(&Value::Null);
-        lines.push(format!("{name}({})", fields_of(args)));
+        let mut fields = Vec::new();
+        collect_fields(args, &mut fields);
+        lines.push(format!("{name}({})", render_fields(&fields)));
     }
+    // The system function of a template, which the catalog does not list.
+    lines.push("@index(offset)".to_string());
     lines.join("\n")
 }
 
-/// The property names of `schema`, each required one marked with `!`.
-fn fields_of(schema: &Value) -> String {
+/// The properties of `schema` and of its `allOf` parts, each with whether it
+/// is required. A part that is a reference to `Checkable` adds `checks`.
+fn collect_fields(schema: &Value, fields: &mut Vec<(String, bool)>) {
+    if schema.get("$ref").and_then(Value::as_str) == Some("#/$defs/Checkable") {
+        push_field(fields, "checks", false);
+        return;
+    }
     let required: Vec<&str> = schema
         .get("required")
         .and_then(Value::as_array)
         .map(|r| r.iter().filter_map(Value::as_str).collect())
         .unwrap_or_default();
-    let names =
-        schema.get("properties").and_then(Value::as_object).into_iter().flat_map(|p| p.keys());
-    names
-        .map(|k| if required.contains(&k.as_str()) { format!("{k}!") } else { k.clone() })
+    for name in
+        schema.get("properties").and_then(Value::as_object).into_iter().flat_map(|p| p.keys())
+    {
+        push_field(fields, name, required.contains(&name.as_str()));
+    }
+    for part in schema.get("allOf").and_then(Value::as_array).into_iter().flatten() {
+        collect_fields(part, fields);
+    }
+}
+
+fn push_field(fields: &mut Vec<(String, bool)>, name: &str, required: bool) {
+    match fields.iter_mut().find(|(field, _)| field == name) {
+        Some(slot) => slot.1 |= required,
+        None => fields.push((name.to_string(), required)),
+    }
+}
+
+/// The fields as `name!` for a required one and `name` for the others.
+fn render_fields(fields: &[(String, bool)]) -> String {
+    fields
+        .iter()
+        .map(|(name, required)| if *required { format!("{name}!") } else { name.clone() })
         .collect::<Vec<_>>()
         .join(", ")
 }

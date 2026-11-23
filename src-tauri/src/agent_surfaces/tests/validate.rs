@@ -13,7 +13,7 @@ pub(crate) fn form() -> Vec<Value> {
         {"id":"note","component":"TextField","label":"Note","value":{"@path":"/note"}},
         {"id":"send","component":"Button","variant":"primary","child":"send_label",
          "action":{"event":{"name":"choose_storage","context":{"choice":{"@path":"/choice"},"note":{"@path":"/note"},"kind":"storage"}}},
-         "@checks":[{"condition":{"@call":"required","args":{"value":{"@path":"/choice"}}},"message":"Pick one."}]},
+         "checks":[{"condition":{"@call":"required","args":{"value":{"@path":"/choice"}}},"message":"Pick one."}]},
         {"id":"send_label","component":"Text","text":"Send"}
     ]))
     .unwrap()
@@ -79,7 +79,7 @@ fn every_component_of_the_catalog_can_be_used() {
 // undeclared property are each refused with the component and the property.
 #[test]
 fn a_component_the_catalog_does_not_declare_is_refused() {
-    for kind in ["Modal", "Image", "Video", "AudioPlayer", "Html"] {
+    for kind in ["Html", "Iframe", "Script", "WebView"] {
         let components = with("q", |c| c["component"] = json!(kind));
         let violation = validate_surface(&components, &model()).unwrap_err();
         assert_eq!(violation.rule, "unknown_component", "{kind}");
@@ -200,12 +200,12 @@ fn the_bytes_and_the_data_model_of_a_surface_are_checked() {
 fn a_call_must_name_a_catalog_function_with_its_arguments() {
     let call = |call: Value| with("q", move |c| c["text"] = call.clone());
     assert_eq!(
-        rule_of(&call(json!({"@call":"openUrl","args":{"url":"https://x"}})), &model()),
+        rule_of(&call(json!({"@call":"fetchUrl","args":{"url":"https://x"}})), &model()),
         "unknown_function"
     );
     assert_eq!(
-        rule_of(&call(json!({"@call":"regex","args":{"value":"a","pattern":"a"}})), &model()),
-        "unknown_function"
+        rule_of(&call(json!({"@call":"openUrl","args":{"url":"https://x"}})), &model()),
+        "open_url_outside_action"
     );
     let violation =
         validate_surface(&call(json!({"@call":"formatString","args":{"text":"a"}})), &model())
@@ -214,8 +214,8 @@ fn a_call_must_name_a_catalog_function_with_its_arguments() {
     assert_eq!(violation.component_id.as_deref(), Some("q"));
     validate_surface(&call(json!({"@call":"pluralize","args":{"value":{"@path":"/n"},"other":"items","one":"item"}})), &model()).expect("valid");
     // A call nested in a call is checked as well.
-    let nested = json!({"@call":"not","args":{"value":{"@call":"openUrl","args":{}}}});
-    let components = with("send", move |c| c["@checks"][0]["condition"] = nested.clone());
+    let nested = json!({"@call":"not","args":{"value":{"@call":"fetchUrl","args":{}}}});
+    let components = with("send", move |c| c["checks"][0]["condition"] = nested.clone());
     assert_eq!(rule_of(&components, &model()), "unknown_function");
 }
 
@@ -223,7 +223,7 @@ fn a_call_must_name_a_catalog_function_with_its_arguments() {
 #[test]
 fn a_binding_has_one_path_and_nothing_else() {
     let bind = |value: Value| with("note", move |c| c["value"] = value.clone());
-    assert_eq!(rule_of(&bind(json!({"@path": 3})), &model()), "invalid_value");
+    assert_eq!(rule_of(&bind(json!({"@path": 3})), &model()), "bad_binding");
     let rows = |rows: Value| {
         let mut components = form();
         components[0]["children"] = json!(["q", "pick", "note", "send", "t"]);
@@ -234,7 +234,7 @@ fn a_binding_has_one_path_and_nothing_else() {
     };
     // A binding with another key is refused where it is meant as a binding,
     // and where it stands inside a literal.
-    assert_eq!(rule_of(&rows(json!({"@path":"/rows","extra":1})), &model()), "unknown_property");
+    assert_eq!(rule_of(&rows(json!({"@path":"/rows","extra":1})), &model()), "bad_binding");
     assert_eq!(rule_of(&rows(json!([{"a":{"@path":"/x","b":1}}])), &model()), "bad_binding");
     validate_surface(&rows(json!({"@path":"/rows"})), &model()).expect("a bound table");
 }
@@ -276,15 +276,25 @@ fn an_action_is_checked() {
     }
     validate_surface(&named(&"a".repeat(64)), &model()).expect("64 characters are valid");
     let no_event = with("send", |c| c["action"] = json!({}));
-    assert_eq!(rule_of(&no_event, &model()), "missing_property");
+    assert_eq!(rule_of(&no_event, &model()), "invalid_value");
     let call = with("send", |c| {
         c["action"]["event"]["context"]["x"] = json!({"@call":"not","args":{"value":true}})
     });
     assert_eq!(rule_of(&call, &model()), "call_in_context");
-    let function_call = with("send", |c| {
-        c["action"]["functionCall"] = json!({"@call":"not","args":{"value":true}})
+    // AUI-FR-ZJRQ: a functionCall action calls `openUrl` alone, and an
+    // action is an event or a functionCall, not both.
+    let not_call = with("send", |c| {
+        c["action"] = json!({"functionCall": {"@call":"not","args":{"value":true}}})
     });
-    assert_eq!(rule_of(&function_call, &model()), "unknown_property");
+    assert_eq!(rule_of(&not_call, &model()), "bad_action");
+    let open = with("send", |c| {
+        c["action"] = json!({"functionCall": {"@call":"openUrl","args":{"url":"https://a2ui.org"}}})
+    });
+    validate_surface(&open, &model()).expect("openUrl as the action of a Button");
+    let both = with("send", |c| {
+        c["action"]["functionCall"] = json!({"@call":"openUrl","args":{"url":"https://a2ui.org"}})
+    });
+    assert_eq!(rule_of(&both, &model()), "invalid_value");
 }
 
 // AUI-FR-MTMS: an input on a surface with no Button is not valid.
@@ -327,12 +337,12 @@ fn the_contract_rules_beyond_the_schema_are_checked() {
         json!({"@call":"length","args":{"value":"x"}}),
         json!({"@call":"numeric","args":{"value":1}}),
     ] {
-        let components = with("send", move |c| c["@checks"][0]["condition"] = call.clone());
+        let components = with("send", move |c| c["checks"][0]["condition"] = call.clone());
         assert_eq!(rule_of(&components, &model()), "bad_call");
     }
     let bounded = json!({"@call":"length","args":{"value":{"@path":"/note"},"max":10}});
     validate_surface(
-        &with("send", move |c| c["@checks"][0]["condition"] = bounded.clone()),
+        &with("send", move |c| c["checks"][0]["condition"] = bounded.clone()),
         &model(),
     )
     .expect("a bound call is valid");
@@ -436,10 +446,7 @@ fn wrong_items_and_types_are_refused() {
     assert_eq!(rule_of(&tabs, &json!({})), "invalid_value");
     let unknown_in_event = with("send", |c| c["action"]["event"]["foo"] = json!(1));
     let violation = validate_surface(&unknown_in_event, &model()).unwrap_err();
-    assert_eq!(
-        (violation.rule, violation.property.as_deref()),
-        ("unknown_property", Some("action.event.foo"))
-    );
+    assert_eq!((violation.rule, violation.property.as_deref()), ("invalid_value", Some("action")));
 }
 
 // AUI-FR-MTMS: each input kind needs a Button, and a Button needs no input.
@@ -581,4 +588,34 @@ fn an_obscured_text_field_is_refused() {
     let components = with("note", |c| c["variant"] = json!("obscured"));
     let violation = validate_surface(&components, &model()).unwrap_err();
     assert_eq!((violation.rule, violation.property.as_deref()), ("invalid_value", Some("variant")));
+}
+
+// AUI-FR-JLHW: a context key of more than 64 characters is refused.
+#[test]
+fn a_context_key_is_at_most_64_characters() {
+    let long = "k".repeat(65);
+    let components =
+        with("send", move |c| c["action"]["event"]["context"][long.as_str()] = json!(1));
+    assert_eq!(rule_of(&components, &model()), "bad_context_key");
+    let fits = "k".repeat(64);
+    let components =
+        with("send", move |c| c["action"]["event"]["context"][fits.as_str()] = json!(1));
+    validate_surface(&components, &model()).expect("64 characters are valid");
+}
+
+// AUI-FR-AQBE: the trigger and the content of a Modal are child references.
+#[test]
+fn the_children_of_a_modal_are_checked() {
+    let modal = |content: &str| -> Vec<Value> {
+        serde_json::from_value(json!([
+            {"id":"root","component":"Modal","trigger":"open","content":content},
+            {"id":"open","component":"Button","child":"l","action":{"event":{"name":"noop"}}},
+            {"id":"l","component":"Text","text":"Open"},
+            {"id":"body","component":"Text","text":"Detail"}
+        ]))
+        .unwrap()
+    };
+    validate_surface(&modal("body"), &json!({})).expect("a modal");
+    let violation = validate_surface(&modal("ghost"), &json!({})).unwrap_err();
+    assert_eq!((violation.rule, violation.property.as_deref()), ("missing_child", Some("content")));
 }

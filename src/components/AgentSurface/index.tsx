@@ -2,27 +2,47 @@
  * The surface panel (`ASF-agent-surfaces.md`; `CMT-comments.md` CMT-FR-DBQC).
  *
  * An agent showed the author a small panel (`SSF-show-surface-tool.md`). The
- * panel reads its record, draws it from the discussion catalog, keeps what the
- * author enters in a local data model, and sends one action when the author
- * presses a button. A submitted panel stays read-only and says what was sent.
+ * panel reads its record, and the official A2UI renderer draws its message log
+ * (ASF-FR-HRQL), loaded with the first panel (ASF-FR-RTRX). The panel sends one
+ * action when the author presses a button. A submitted panel stays read-only
+ * and says what was sent.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getAgentSurface, submitSurfaceAction } from "../../api";
 import { onAgentSurfaceChanged } from "../../events";
 import { logWarn } from "../../logging";
 import { useConversationThread } from "../../state/conversationThreads";
 import { dispatchDecision } from "../DraftDiscussion/decisionDispatch";
-import { resolveValue, type Scope } from "./functions";
-import { useSurfaceModel } from "./model";
-import { Node, SurfaceRenderProvider } from "./render";
-import type { CardSend } from "./context";
+import type { CardSend } from "./a2ui/host";
+import type { RendererAction } from "./a2ui/SurfaceRenderer";
 import type {
   AgentSurface,
   AgentSurfaceReference,
   Participant,
   SurfaceComponent,
 } from "../../types";
+
+/** ASF-FR-RTRX: the renderer is a chunk of its own, loaded with the first panel. */
+const SurfaceRenderer = lazy(() => import("./a2ui/SurfaceRenderer"));
+
+/** AUI-FR-TYBX: the current components of a log: createSurface, then updateComponents by id. */
+export function currentComponents(messages: readonly unknown[]): SurfaceComponent[] {
+  let components: SurfaceComponent[] = [];
+  for (const message of messages) {
+    const m = message as {
+      createSurface?: { components?: SurfaceComponent[] };
+      updateComponents?: { components?: SurfaceComponent[] };
+    };
+    if (m.createSurface) components = [...(m.createSurface.components ?? [])];
+    for (const update of m.updateComponents?.components ?? []) {
+      const at = components.findIndex((c) => c.id === update.id);
+      if (at >= 0) components[at] = update;
+      else components.push(update);
+    }
+  }
+  return components;
+}
 
 /** The typed codes a submission can fail with (AUI contract surface). */
 const KNOWN_CODES = new Set([
@@ -92,15 +112,6 @@ function buttonLabel(byId: ReadonlyMap<string, SurfaceComponent>, sourceId: stri
     default:
       return name;
   }
-}
-
-/** The event of a button: its name and its declared context. */
-function eventOf(button: SurfaceComponent | undefined): { name: string; context: Record<string, unknown> } | null {
-  const event = (button?.action as { event?: { name?: unknown; context?: unknown } } | undefined)?.event;
-  if (!event || typeof event.name !== "string") return null;
-  const context =
-    event.context && typeof event.context === "object" ? (event.context as Record<string, unknown>) : {};
-  return { name: event.name, context };
 }
 
 export function AgentSurfacePanel({
@@ -192,85 +203,81 @@ function LoadedPanel({
   onSurface: (surface: AgentSurface) => void;
 }) {
   const thread = useConversationThread(threadId);
-  const [model, write] = useSurfaceModel(surface.id, surface.dataModel);
   const [pending, setPending] = useState(false);
-  const sending = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const byId = useMemo(() => new Map(surface.components.map((c) => [c.id, c])), [surface.components]);
+  const sending = useRef(false);
+  const byId = useMemo(
+    () => new Map(currentComponents(surface.messages).map((c) => [c.id, c])),
+    [surface.messages],
+  );
   const submission = surface.submission;
   const resolved = thread?.resolved === true;
-  // ASF-FR-YCTE: a submitted panel shows what was sent.
-  const shownModel = submission ? submission.dataModel : model;
   const readOnly = pending || submission !== undefined || resolved;
 
-  const press = (sourceId: string, scope: Scope, card?: CardSend) => {
-    if (readOnly || sending.current) return;
-    let name: string;
-    let context: Record<string, unknown>;
-    if (card) {
-      // ASF-FR-MLKG: a card sends the context of its kind.
-      name = card.name;
-      context = card.context;
-    } else {
-      const event = eventOf(byId.get(sourceId));
-      if (!event) return;
-      name = event.name;
-      // ASF-FR-QBTR: a binding reads the local model, and a literal stays as it is.
-      context = {};
-      for (const [key, value] of Object.entries(event.context)) {
-        context[key] =
-          value && typeof value === "object" && "@path" in value
-            ? (resolveValue(value, { ...scope, model }) ?? null)
-            : value;
-      }
-    }
-    // ASF-FR-XOSG: one submission at a time, also for two presses in one task.
-    sending.current = true;
-    setPending(true);
-    setError(null);
-    submitSurfaceAction(surface.id, {
-      name,
-      sourceComponentId: sourceId,
-      context,
-      dataModel: model,
-    }).then(
-      (result) => {
-        sending.current = false;
-        setPending(false);
-        onSurface(result.surface);
-        // ASF-FR-DHGO: the agents come back as they do after a decision.
-        void dispatchDecision(
-          { id: surface.id, threadId: surface.discussionId, target: surface.target },
-          { commentId: result.commentId },
-          thread,
-          [],
-          "",
-        );
-      },
-      (failure: unknown) => {
-        sending.current = false;
-        setPending(false);
-        const code = codeOf(failure);
-        // ASF-FR-MGVD: the id and the typed code alone.
-        logWarn(["frontend"], "agent surface action failed", { surfaceId: surface.id, error: code });
-        if (code === "already_submitted") {
-          // ASF-FR-NLJW: another window sent it; draw it as it now stands.
-          getAgentSurface(surface.id).then(onSurface, () => setError(failureText(code)));
-          return;
-        }
-        setError(failureText(code));
-      },
-    );
-  };
+  const submit = useCallback(
+    (sent: RendererAction) => {
+      if (submission || resolved || sending.current) return;
+      // AUI-FR-AFKN: every key the button declares is sent; a binding whose
+      // pointer holds no value sends null.
+      const declared = (
+        byId.get(sent.sourceComponentId)?.action as { event?: { context?: Record<string, unknown> } } | undefined
+      )?.event?.context;
+      const context = { ...sent.context };
+      for (const key of Object.keys(declared ?? {})) if (context[key] === undefined) context[key] = null;
+      const action = { ...sent, context };
+      // ASF-FR-XOSG: one submission at a time, also for two presses in one task.
+      sending.current = true;
+      setPending(true);
+      setError(null);
+      submitSurfaceAction(surface.id, action).then(
+        (result) => {
+          sending.current = false;
+          setPending(false);
+          onSurface(result.surface);
+          // ASF-FR-DHGO: the agents come back as they do after a decision.
+          void dispatchDecision(
+            { id: surface.id, threadId: surface.discussionId, target: surface.target },
+            { commentId: result.commentId },
+            thread,
+            [],
+            "",
+          );
+        },
+        (failure: unknown) => {
+          sending.current = false;
+          setPending(false);
+          const code = codeOf(failure);
+          // ASF-FR-MGVD: the id and the typed code alone.
+          logWarn(["frontend"], "agent surface action failed", { surfaceId: surface.id, error: code });
+          if (code === "already_submitted") {
+            // ASF-FR-NLJW: another window sent it; draw it as it now stands.
+            getAgentSurface(surface.id).then(onSurface, () => setError(failureText(code)));
+            return;
+          }
+          setError(failureText(code));
+        },
+      );
+    },
+    [submission, resolved, byId, surface.id, surface.discussionId, surface.target, thread, onSurface],
+  );
+  // ASF-FR-MLKG: a card sends the context of its kind.
+  const sendCard = useCallback(
+    (sourceId: string, send: CardSend) =>
+      submit({
+        name: send.name,
+        sourceComponentId: sourceId,
+        context: send.context,
+        dataModel: send.dataModel ?? {},
+      }),
+    [submit],
+  );
 
   const state = submission ? "submitted" : resolved ? "resolved" : pending ? "sending" : "open";
   return (
     <div className="agent-surface" data-testid="agent-surface" data-state={state}>
-      <SurfaceRenderProvider
-        value={{ surfaceId: surface.id, byId, model: shownModel, write, readOnly, press, submission }}
-      >
-        <Node id="root" scope={{ model: shownModel, base: "" }} />
-      </SurfaceRenderProvider>
+      <Suspense fallback={<span className="agent-surface__loading">Loading the panel…</span>}>
+        <SurfaceRenderer record={surface} readOnly={readOnly} onAction={submit} sendCard={sendCard} />
+      </Suspense>
       {error && (
         <p className="agent-surface__error" role="alert">
           {error}
@@ -285,4 +292,3 @@ function LoadedPanel({
     </div>
   );
 }
-

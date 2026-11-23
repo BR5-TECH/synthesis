@@ -159,8 +159,13 @@ fn a_recorded_surface_is_open_and_carried_by_one_agent_comment() {
     let surface = f.record(&BUFFER);
     assert_eq!(surface.state, SurfaceState::Open);
     assert_eq!(surface.catalog_id, CATALOG_ID);
-    assert_eq!(surface.components, form());
-    assert_eq!(surface.data_model, model());
+    // AUI-FR-TYBX: the log is one createSurface, and its fold is the surface.
+    assert_eq!(surface.messages.len(), 1);
+    assert_eq!(surface.messages[0]["version"], "1.0");
+    assert_eq!(surface.messages[0]["createSurface"]["surfaceId"], surface.id.as_str());
+    assert_eq!(surface.messages[0]["createSurface"]["catalogId"], CATALOG_ID);
+    assert_eq!(surface.current().components, form());
+    assert_eq!(surface.current().data_model, model());
     assert_eq!(surface.authored_by, agent());
     assert!(f.path.join(SURFACES_DIR).join(format!("{}.json", surface.id)).is_file());
     assert_eq!(store::get_impl(&f.root(), &surface.id).unwrap(), surface);
@@ -179,7 +184,7 @@ fn a_recorded_surface_is_open_and_carried_by_one_agent_comment() {
     let wire = serde_json::to_value(&surface).unwrap();
     assert_eq!(wire["state"], "open");
     assert_eq!(wire["discussionId"], f.thread_id.as_str());
-    assert_eq!(wire["catalogId"], "synthesis:discussion/v1");
+    assert_eq!(wire["catalogId"], "synthesis:a2ui/v1");
     assert!(wire.get("submission").is_none());
     let attachment = serde_json::to_value(&comment.attachments[0]).unwrap();
     assert_eq!(attachment, json!({"kind": "agentSurface", "surfaceId": surface.id}));
@@ -196,7 +201,7 @@ fn an_invalid_surface_writes_nothing() {
     let f = Fixture::new();
     let before = f.thread().comments.len();
     let origin = f.origin();
-    let components = vec![json!({"id":"root","component":"Modal"})];
+    let components = vec![json!({"id":"root","component":"Html"})];
     let refused = record_with(
         &f.open.handle(),
         &BUFFER,

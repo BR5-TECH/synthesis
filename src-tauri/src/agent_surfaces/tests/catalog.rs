@@ -1,140 +1,163 @@
-//! The discussion catalog (AUI-FR-CSOS to AUI-FR-PYVB).
+//! The discussion catalog (AUI-FR-CSOS to AUI-FR-PYVB, AUI-FR-MAMC).
 
 use serde_json::{json, Value};
 
-use crate::agent_surfaces::catalog::{catalog, ANNOTATION_KEYWORDS, APPLIED_KEYWORDS, CATALOG_ID};
+use crate::agent_surfaces::catalog::{catalog, CATALOG_ID};
 
-/// Every key of a schema object that is a keyword and not a property name.
-fn keywords_of(schema: &Value, out: &mut Vec<String>) {
-    match schema {
+/// AUI-FR-PMXJ: the components of the official A2UI v1.0 basic catalog.
+const BASIC_COMPONENTS: [&str; 18] = [
+    "Text",
+    "Image",
+    "Icon",
+    "Video",
+    "AudioPlayer",
+    "Row",
+    "Column",
+    "List",
+    "Card",
+    "Tabs",
+    "Modal",
+    "Divider",
+    "Button",
+    "TextField",
+    "CheckBox",
+    "ChoicePicker",
+    "Slider",
+    "DateTimeInput",
+];
+
+/// AUI-FR-PMXJ: the extension components of the application.
+const EXTENSIONS: [&str; 5] =
+    ["Table", "ChoiceCard", "ConfirmCard", "ComparisonCard", "ChecklistCard"];
+
+/// AUI-FR-PXGX: the functions of the official A2UI v1.0 basic catalog.
+const BASIC_FUNCTIONS: [&str; 14] = [
+    "required",
+    "regex",
+    "length",
+    "numeric",
+    "email",
+    "formatString",
+    "formatNumber",
+    "formatCurrency",
+    "formatDate",
+    "pluralize",
+    "openUrl",
+    "and",
+    "or",
+    "not",
+];
+
+/// Every `$ref` under `value`.
+fn refs_of(value: &Value, out: &mut Vec<String>) {
+    match value {
         Value::Object(map) => {
-            for (key, value) in map {
-                out.push(key.clone());
-                match key.as_str() {
-                    "properties" | "$defs" => {
-                        if let Some(children) = value.as_object() {
-                            children.values().for_each(|child| keywords_of(child, out));
-                        }
-                    }
-                    "const" | "enum" | "required" | "description" | "returnType" | "title"
-                    | "pattern" | "type" => {}
-                    _ => keywords_of(value, out),
-                }
+            if let Some(Value::String(r)) = map.get("$ref") {
+                out.push(r.clone());
             }
+            map.values().for_each(|v| refs_of(v, out));
         }
-        Value::Array(items) => items.iter().for_each(|item| keywords_of(item, out)),
+        Value::Array(items) => items.iter().for_each(|v| refs_of(v, out)),
         _ => {}
     }
 }
 
-// AUI-FR-CSOS: the catalog document parses, and it carries its id.
+// AUI-FR-CSOS: the catalog document parses, carries its id, names the official
+// catalog it is based on, and compiles a validator for every entry.
 #[test]
-fn the_catalog_parses_and_carries_its_id() {
+fn the_catalog_parses_and_compiles() {
     let document = catalog().document();
     assert_eq!(document["catalogId"], CATALOG_ID);
     assert_eq!(document["$id"], CATALOG_ID);
-    assert_eq!(CATALOG_ID, "synthesis:discussion/v1");
+    assert_eq!(CATALOG_ID, "synthesis:a2ui/v1");
+    assert_eq!(
+        document["basedOn"],
+        "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
+    );
+    assert!(catalog().compiled(), "every component and function has a validator");
 }
 
-// AUI-FR-PMXJ: the catalog declares exactly the components of the spec.
+// AUI-FR-CSOS: every reference points into the one document, so validation
+// reaches no address.
+#[test]
+fn every_reference_is_local_and_resolves() {
+    let document = catalog().document();
+    let mut refs = Vec::new();
+    refs_of(document, &mut refs);
+    assert!(!refs.is_empty());
+    for r in refs {
+        let pointer = r.strip_prefix('#').unwrap_or_else(|| panic!("{r} is not local"));
+        assert!(document.pointer(pointer).is_some(), "{r} resolves");
+    }
+}
+
+// AUI-FR-PMXJ: the official basic components and the extensions, and no other.
 #[test]
 fn the_catalog_declares_exactly_the_components_of_the_spec() {
     let mut names = catalog().component_names();
     names.sort_unstable();
-    let mut expected = [
-        "Row",
-        "Column",
-        "List",
-        "Card",
-        "Tabs",
-        "Divider",
-        "Text",
-        "Icon",
-        "Button",
-        "TextField",
-        "CheckBox",
-        "ChoicePicker",
-        "Slider",
-        "DateTimeInput",
-        "Table",
-        "ChoiceCard",
-        "ConfirmCard",
-        "ComparisonCard",
-        "ChecklistCard",
-    ];
+    let mut expected: Vec<&str> =
+        BASIC_COMPONENTS.iter().chain(EXTENSIONS.iter()).copied().collect();
     expected.sort_unstable();
     assert_eq!(names, expected);
-    for excluded in ["Modal", "Image", "Video", "AudioPlayer"] {
-        assert!(catalog().component(excluded).is_none(), "{excluded} is not in the catalog");
-    }
 }
 
-// AUI-FR-PXGX: the catalog declares exactly the functions of the spec.
+// AUI-FR-PXGX: the official basic functions, and no other.
 #[test]
 fn the_catalog_declares_exactly_the_functions_of_the_spec() {
     let functions = catalog().document()["functions"].as_object().expect("functions");
     let mut names: Vec<&str> = functions.keys().map(String::as_str).collect();
     names.sort_unstable();
-    let mut expected = [
-        "formatString",
-        "formatNumber",
-        "formatDate",
-        "pluralize",
-        "required",
-        "length",
-        "numeric",
-        "and",
-        "or",
-        "not",
-        "@index",
-    ];
+    let mut expected = BASIC_FUNCTIONS;
     expected.sort_unstable();
     assert_eq!(names, expected);
-    for excluded in ["openUrl", "regex", "email", "formatCurrency"] {
-        assert!(catalog().function(excluded).is_none(), "{excluded} is not in the catalog");
+}
+
+// AUI-FR-MAMC: the TextField has no `obscured` variant, and keeps the others.
+#[test]
+fn the_text_field_has_no_obscured_variant() {
+    let text = catalog().component("TextField").expect("TextField").to_string();
+    assert!(!text.contains("obscured"));
+    for variant in ["shortText", "longText", "number"] {
+        assert!(text.contains(variant), "{variant}");
     }
 }
 
-// AUI-FR-PYVB: the catalog holds instructions for a model.
+// AUI-FR-PYVB: short instructions that name the skill with the rest.
 #[test]
 fn the_catalog_holds_instructions() {
     let instructions = catalog().instructions();
     assert!(instructions.contains("root"));
     assert!(instructions.contains("@path"));
-    // AUI-FR-PYVB: short, and naming the skill that holds the rest.
     assert!(instructions.contains("`a2ui` skill"));
-    assert!(instructions.len() < 1_500, "{} characters", instructions.len());
+    assert!(instructions.contains("project:"));
+    assert!(instructions.len() < 1_800, "{} characters", instructions.len());
 }
 
-// AUI-FR-EGAB: the schema reader applies every keyword the catalog uses, so
-// no rule of the catalog is ignored.
+// AUI-FR-EGAB: the official component shape is checked: the common `id` and
+// `accessibility`, the official property names, and nothing else.
 #[test]
-fn the_catalog_uses_only_keywords_the_reader_applies() {
-    let mut keywords = Vec::new();
-    let document = catalog().document();
-    for section in ["components", "functions", "$defs"] {
-        for schema in document[section].as_object().expect("section").values() {
-            keywords_of(schema, &mut keywords);
-        }
-    }
-    for keyword in keywords {
-        assert!(
-            APPLIED_KEYWORDS.contains(&keyword.as_str())
-                || ANNOTATION_KEYWORDS.contains(&keyword.as_str()),
-            "the reader does not apply `{keyword}`"
-        );
-    }
-}
-
-// AUI-FR-EGAB: every component carries the common properties and refuses an
-// undeclared one.
-#[test]
-fn every_component_is_closed_and_names_its_type() {
-    for name in catalog().component_names() {
-        let schema = catalog().component(name).expect("schema");
-        assert_eq!(schema["additionalProperties"], json!(false), "{name}");
-        assert_eq!(schema["properties"]["component"]["const"], json!(name));
-        let required = schema["required"].as_array().expect("required");
-        assert!(required.contains(&json!("id")) && required.contains(&json!("component")));
-    }
+fn a_component_is_checked_against_its_official_schema() {
+    let c = catalog();
+    c.check_component(
+        "Text",
+        &json!({"id":"t","component":"Text","text":"Hi","accessibility":{"label":"Hello"}}),
+    )
+    .expect("valid");
+    let missing = c.check_component("Text", &json!({"id":"t","component":"Text"})).unwrap_err();
+    assert_eq!(missing.path, ["text"]);
+    let unknown = c
+        .check_component("Text", &json!({"id":"t","component":"Text","text":"x","html":"<b>"}))
+        .unwrap_err();
+    assert_eq!(unknown.path, ["html"]);
+    c.check_component(
+        "Image",
+        &json!({"id":"i","component":"Image","url":"https://example.com/a.png"}),
+    )
+    .expect("an image");
+    c.check_component(
+        "Modal",
+        &json!({"id":"m","component":"Modal","trigger":"open","content":"body"}),
+    )
+    .expect("a modal");
 }

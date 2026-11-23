@@ -25,8 +25,8 @@ export interface AgentSurface {
   target: DiscussionTarget;
   commentId: string;
   catalogId: string;
-  components: SurfaceComponent[];
-  dataModel: Record<string, unknown>;
+  /** AUI-FR-IAAP / AUI-FR-TYBX: the A2UI v1.0 messages, in order. */
+  messages: unknown[];
   authoredBy: Participant;
   createdAt: string;
   state: "open" | "submitted";
@@ -39,6 +39,13 @@ export interface SurfaceAction {
   sourceComponentId: string;
   context: Record<string, unknown>;
   dataModel: Record<string, unknown>;
+}
+
+/** AUI-FR-JUDL: one media source, read for the panel. */
+export interface SurfaceMedia {
+  mediaType: string;
+  /** Base64 of the bytes. */
+  data: string;
 }
 
 /** AUI-FR-MAXD: what an accepted action returns. */

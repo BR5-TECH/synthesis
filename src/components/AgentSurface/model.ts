@@ -8,9 +8,7 @@
  */
 import { useCallback, useSyncExternalStore } from "react";
 
-import { setAt } from "./pointer";
 
-const models = new Map<string, Record<string, unknown>>();
 /** ASF-FR-MLKG: the selections of the cards, per surface and card id. */
 const cards = new Map<string, unknown>();
 const listeners = new Set<() => void>();
@@ -26,32 +24,9 @@ function subscribe(listener: () => void): () => void {
 
 /** For tests: forget every local model. */
 export function resetSurfaceModelsForTest(): void {
-  models.clear();
   cards.clear();
   notify();
 }
-
-/** The local model of `surfaceId`, started from `initial` on first use. */
-export function useSurfaceModel(
-  surfaceId: string,
-  initial: Record<string, unknown>,
-): [Record<string, unknown>, (pointer: string, value: unknown) => void] {
-  const model = useSyncExternalStore(
-    subscribe,
-    () => models.get(surfaceId) ?? initial,
-    () => models.get(surfaceId) ?? initial,
-  );
-  const write = useCallback(
-    (pointer: string, value: unknown) => {
-      const current = models.get(surfaceId) ?? initial;
-      models.set(surfaceId, setAt(current, pointer, value));
-      notify();
-    },
-    [surfaceId, initial],
-  );
-  return [model, write];
-}
-
 
 /** ASF-FR-MLKG: a card's selection, kept as long as the local model is. */
 export function useCardState<T>(

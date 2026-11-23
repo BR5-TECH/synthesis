@@ -2,5 +2,7 @@
 
 mod cards;
 mod catalog;
+mod log;
+mod media;
 mod store;
 mod validate;

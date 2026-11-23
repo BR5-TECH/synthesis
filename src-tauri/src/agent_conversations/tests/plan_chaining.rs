@@ -227,16 +227,28 @@ fn a_planning_turn_has_twelve_rounds() {
     assert!(!carries_last_line(&exchanges[7]), "the eighth call is not the last");
 }
 
-// CVL-FR-WJKS: after the card, a question set and an export request are
-// refused too, and nothing is recorded.
+// CVL-FR-WJKS: after the card, a question set, an export request, and a
+// surface are refused too, and nothing is recorded.
 #[test]
 fn every_ending_tool_after_the_card_is_refused() {
-    for tool in
-        [crate::tools::ask_discussion_questions::NAME, crate::tools::request_document_export::NAME]
-    {
+    for tool in [
+        crate::tools::ask_discussion_questions::NAME,
+        crate::tools::request_document_export::NAME,
+        crate::tools::show_surface::NAME,
+    ] {
+        // A call that would succeed without the card, so the refusal is the
+        // card's and not the arguments'.
+        let args = if tool == crate::tools::show_surface::NAME {
+            serde_json::json!({
+                "message": said("Pick one."),
+                "components": [{"id":"root","component":"Text","text":"Hello"}],
+            })
+        } else {
+            serde_json::json!({})
+        };
         let (h, thread) = plan_harness(vec![
             Ok(ScriptedReply::calls(PLAN_TOOL, rows_call(&["a"]))),
-            Ok(ScriptedReply::calls(tool, serde_json::json!({}))),
+            Ok(ScriptedReply::calls(tool, args)),
             Ok(ScriptedReply::answer("")),
         ]);
         let turn = run_turn(&h, &thread);
@@ -249,6 +261,8 @@ fn every_ending_tool_after_the_card_is_refused() {
             "{tool}: {results:?}"
         );
         assert_eq!(comments_of(&h, &thread).len(), 2, "{tool}: nothing else is posted");
+        let surfaces = h.root.path().join(crate::agent_surfaces::SURFACES_DIR);
+        assert_eq!(std::fs::read_dir(surfaces).map(|d| d.count()).unwrap_or(0), 0, "{tool}");
     }
 }
 

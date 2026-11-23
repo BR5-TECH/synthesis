@@ -141,6 +141,14 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         // RDX-FR-DVQL: the export tool's refusals join the group.
         ToolRefusal::NotFoundWith(crate::tools::request_document_export::DOCUMENT_NOT_FOUND),
         ToolRefusal::NotRecordedWith(crate::tools::request_document_export::NOT_RECORDED),
+        // SSF-FR-CVBB / SSF-FR-WJHF: the surface tool's refusals join the group.
+        ToolRefusal::InvalidSurface {
+            rule: "unknown_component",
+            component_id: Some("q".to_string()),
+            property: Some("component".to_string()),
+            expected: "one of the catalog components: Text".to_string(),
+        },
+        ToolRefusal::NotRecordedWith(crate::tools::show_surface::NOT_RECORDED),
         // LOS-FR-SBNB, LOS-FR-IEDQ, ROS-FR-FQHM, ROS-FR-RZRC, ROS-FR-GNFU,
         // ROS-FR-MOFU, LOC-FR-YEQH: the OpenSpec read tools' refusals join the
         // group and are held to exactly the same rules.
@@ -177,6 +185,7 @@ fn every_refusal_message_is_plain_and_carries_no_implementation_detail() {
         | ToolRefusal::InvalidUpdateAt { .. }
         | ToolRefusal::InvalidDiagramAt { .. }
         | ToolRefusal::NotValidMermaid { .. }
+        | ToolRefusal::InvalidSurface { .. }
         | ToolRefusal::NotADocumentConversation
         | ToolRefusal::SkillNotFound
         | ToolRefusal::SkillUnreadable

@@ -554,6 +554,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // DXP-FR-NXGQ / DXP-FR-LHAG: the export requests of an agent.
     "get_export_request",
     "resolve_export_request",
+    "get_agent_surface",
+    "submit_surface_action",
     // Embeddings index (EMB-embeddings-index.md).
     "load_embeddings_settings",
     "save_embeddings_settings",

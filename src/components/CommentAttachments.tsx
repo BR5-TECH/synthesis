@@ -25,6 +25,7 @@ import {
 } from "./commentDocuments";
 import { AdvisorsListView } from "./discussion/GroupMarks";
 import { ExportRequestCard } from "./ExportDialog/ExportRequestCard";
+import { AgentSurfacePanel } from "./AgentSurface";
 import { MapNodeChip, MapPlanEntry } from "./MapPlanProposal";
 import { useEffect, useRef, useState } from "react";
 import { readCommentAttachment } from "../api";
@@ -794,6 +795,7 @@ function AttachmentView({
         | "newChangeProposal"
         | "newChangeSubject"
         | "exportRequest"
+        | "agentSurface"
         | "changeActionRequest"
         | "synthesis"
         | "advisors"
@@ -942,54 +944,68 @@ export function CommentAttachmentList({
   attachments: readonly Attachment[];
 }) {
   if (attachments.length === 0) return null;
+  // ASF-FR-JPNA: a surface panel stands below the attachment list, outside its
+  // height cap, so it fills the comment's width and is never cut off.
+  const surfaces = attachments.filter((a) => a.kind === "agentSurface");
+  const rest = attachments.filter((a) => a.kind !== "agentSurface");
   return (
-    <div className="comment__attachments" data-testid="comment-attachments">
-      {attachments.map((a, i) =>
-        a.kind === "proposal" ? (
-          <ProposalAttachmentView key={i} attachment={a} />
-        ) : a.kind === "promptProposal" ? (
-          <PromptProposalAttachmentView key={i} attachment={a} />
-        ) : a.kind === "changeProposal" ? (
-          // CMT-FR-48 / OCW-FR-COLR: the edits proposed to an OpenSpec change.
-          <ChangeProposalAttachmentView key={i} attachment={a} />
-        ) : a.kind === "proposalHunk" ? (
-          <ProposalHunkControl key={i} attachment={a} />
-        ) : a.kind === "newDraftProposal" ? (
-          // CMT-FR-MPKL: a reference control that shows the card.
-          <NewDraftReferenceControl key={i} attachment={a} />
-        ) : a.kind === "newChangeProposal" ? (
-          // OCW-FR-BGDN: a reference control that opens the original change.
-          <NewChangeReferenceControl key={i} attachment={a} />
-        ) : a.kind === "newDraftSubject" || a.kind === "newChangeSubject" ? null : a.kind === "synthesis" ? null : a.kind === "advisors" ? (
-          // CVP-FR-HRGH: the collapsed Advisors list of a Meta reply.
-          <AdvisorsListView key={i} attachment={a} />
-        ) : a.kind === "exportRequest" ? (
-          // CMT-FR-HFXL / EXD-FR-UQUD: the export request card.
-          <ExportRequestCard key={i} attachment={a} />
-        ) : a.kind === "changeActionRequest" ? (
-          // OCW-FR-QCPB: a reference control that opens the change.
-          <ChangeActionReferenceControl key={i} attachment={a} />
-        ) : a.kind === "mapPlanProposal" ? (
-          // SMP-FR-PPJB / MPV-FR-IBSF: the summary row of a plan proposal.
-          <MapPlanEntry
-            key={i}
-            discussionId={threadId}
-            proposalId={a.proposalId}
-            proposer={author?.kind === "agent" ? author.handle : undefined}
-            update={a.update}
-          />
-        ) : a.kind === "mapNode" ? (
-          // MPR-FR-PMLX: the focus a message was sent with.
-          <MapNodeChip key={i} node={a.node} />
-        ) : (
-          <AttachmentView
-            key={i}
-            threadId={threadId}
-            draftId={draftId}
-            attachment={a}
-          />
-        ),
+    <>
+      {rest.length > 0 && (
+        <div className="comment__attachments" data-testid="comment-attachments">
+          {rest.map((a, i) =>
+            a.kind === "proposal" ? (
+              <ProposalAttachmentView key={i} attachment={a} />
+            ) : a.kind === "promptProposal" ? (
+              <PromptProposalAttachmentView key={i} attachment={a} />
+            ) : a.kind === "changeProposal" ? (
+              // CMT-FR-48 / OCW-FR-COLR: the edits proposed to an OpenSpec change.
+              <ChangeProposalAttachmentView key={i} attachment={a} />
+            ) : a.kind === "proposalHunk" ? (
+              <ProposalHunkControl key={i} attachment={a} />
+            ) : a.kind === "newDraftProposal" ? (
+              // CMT-FR-MPKL: a reference control that shows the card.
+              <NewDraftReferenceControl key={i} attachment={a} />
+            ) : a.kind === "newChangeProposal" ? (
+              // OCW-FR-BGDN: a reference control that opens the original change.
+              <NewChangeReferenceControl key={i} attachment={a} />
+            ) : a.kind === "newDraftSubject" || a.kind === "newChangeSubject" ? null : a.kind === "synthesis" ? null : a.kind === "advisors" ? (
+              // CVP-FR-HRGH: the collapsed Advisors list of a Meta reply.
+              <AdvisorsListView key={i} attachment={a} />
+            ) : a.kind === "exportRequest" ? (
+              // CMT-FR-HFXL / EXD-FR-UQUD: the export request card.
+              <ExportRequestCard key={i} attachment={a} />
+            ) : a.kind === "changeActionRequest" ? (
+              // OCW-FR-QCPB: a reference control that opens the change.
+              <ChangeActionReferenceControl key={i} attachment={a} />
+            ) : a.kind === "mapPlanProposal" ? (
+              // SMP-FR-PPJB / MPV-FR-IBSF: the summary row of a plan proposal.
+              <MapPlanEntry
+                key={i}
+                discussionId={threadId}
+                proposalId={a.proposalId}
+                proposer={author?.kind === "agent" ? author.handle : undefined}
+                update={a.update}
+              />
+            ) : a.kind === "mapNode" ? (
+              // MPR-FR-PMLX: the focus a message was sent with.
+              <MapNodeChip key={i} node={a.node} />
+            ) : (
+              <AttachmentView
+                key={i}
+                threadId={threadId}
+                draftId={draftId}
+                attachment={a}
+              />
+            ),
+          )}
+        </div>
       )}
-    </div>
+      {surfaces.map((a) =>
+        a.kind === "agentSurface" ? (
+          // CMT-FR-DBQC / ASF-FR-ASQV: the panel an agent showed.
+          <AgentSurfacePanel key={a.surfaceId} attachment={a} threadId={threadId} />
+        ) : null,
+      )}
+    </>
   );
 }

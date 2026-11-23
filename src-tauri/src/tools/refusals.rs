@@ -552,6 +552,16 @@ pub enum ToolRefusal {
     /// LOS, ROS, LOC: a refusal whose kind, message, code, and retry flag
     /// are fixed text of the tool's own spec.
     Fixed { kind: FixedKind, message: &'static str, code: &'static str, retryable: bool },
+    /// SSF-FR-CVBB: a surface that the discussion catalog does not accept. The
+    /// rule and the expected form are text of this application. The component
+    /// id and the property are the model's own names, bounded, so that it can
+    /// find the component it composed.
+    InvalidSurface {
+        rule: &'static str,
+        component_id: Option<String>,
+        property: Option<String>,
+        expected: String,
+    },
 }
 
 /// The kinds a [`ToolRefusal::Fixed`] refusal may name (TLC-FR-10).
@@ -606,6 +616,7 @@ impl ToolRefusal {
             | ToolRefusal::InvalidArgumentsAt { .. }
             | ToolRefusal::InvalidDiagramAt { .. }
             | ToolRefusal::NotValidMermaid { .. }
+            | ToolRefusal::InvalidSurface { .. }
             | ToolRefusal::InvalidUpdateAt { .. }
             | ToolRefusal::InvalidQuestion(..)
             | ToolRefusal::SkillAmbiguous(_)
@@ -737,6 +748,7 @@ impl ToolRefusal {
             | ToolRefusal::InvalidArgumentsAt { .. }
             | ToolRefusal::InvalidDiagramAt { .. }
             | ToolRefusal::NotValidMermaid { .. }
+            | ToolRefusal::InvalidSurface { .. }
             | ToolRefusal::InvalidUpdateAt { .. }
             | ToolRefusal::InvalidQuestion(..)
             | ToolRefusal::SkillNotFound
@@ -798,6 +810,7 @@ impl ToolRefusal {
             | ToolRefusal::InvalidArgumentsAt { .. }
             | ToolRefusal::InvalidDiagramAt { .. }
             | ToolRefusal::NotValidMermaid { .. }
+            | ToolRefusal::InvalidSurface { .. }
             | ToolRefusal::InvalidUpdateAt { .. } => "invalid_arguments",
             ToolRefusal::InvalidQuestion(..) => "invalid_arguments",
             ToolRefusal::SkillNotFound => "skill_not_found",
@@ -848,6 +861,12 @@ impl ToolRefusal {
             {
                 "export_request_not_recorded"
             }
+            // SSF-FR-BVSL: a panel is not a proposal.
+            ToolRefusal::NotRecordedWith(message)
+                if *message == super::show_surface::NOT_RECORDED =>
+            {
+                "surface_not_recorded"
+            }
             ToolRefusal::NotRecordedWith(_) => "proposal_not_recorded",
             ToolRefusal::NotFoundWith(_) => "not_found",
         }
@@ -872,6 +891,17 @@ impl std::fmt::Display for ToolRefusal {
             }
             ToolRefusal::InvalidDiagramAt { message, at, of } => {
                 write!(f, "Diagram change {at} of {of}: {message}")
+            }
+            ToolRefusal::InvalidSurface { rule, component_id, property, expected } => {
+                let bound = |text: &str| text.chars().take(100).collect::<String>();
+                write!(f, "The panel is not valid: {rule}")?;
+                if let Some(id) = component_id {
+                    write!(f, " at component `{}`", bound(id))?;
+                }
+                if let Some(property) = property.as_deref().filter(|p| !p.is_empty()) {
+                    write!(f, ", property `{}`", bound(property))?;
+                }
+                write!(f, ". Expected {expected}. Fix it and call again.")
             }
             ToolRefusal::NotValidMermaid { error, at, of, update } => {
                 let place = if *update { "Update" } else { "Diagram change" };

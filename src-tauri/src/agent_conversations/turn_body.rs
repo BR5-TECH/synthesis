@@ -79,6 +79,7 @@ pub(super) fn ends_turn(name: &str) -> bool {
         crate::tools::propose_change_edits::NAME,
         crate::tools::propose_new_change::NAME,
         crate::tools::request_document_export::NAME,
+        crate::tools::show_surface::NAME,
         crate::tools::request_change_action::NAME,
     ]
     .contains(&name)
@@ -589,6 +590,9 @@ pub(super) fn run_turn_body<R: tauri::Runtime>(
                 Some(crate::tools::propose_prompt_changes::ONE_AT_A_TIME)
             } else if call.function.name == crate::tools::request_document_export::NAME {
                 Some(crate::tools::request_document_export::ONE_AT_A_TIME)
+            } else if call.function.name == crate::tools::show_surface::NAME {
+                // SSF-FR-YIXE: one turn records at most one surface.
+                Some(crate::tools::show_surface::ONE_AT_A_TIME)
             } else if call.function.name == crate::tools::request_change_action::NAME {
                 // RCA-FR-ABXT: one turn records at most one request.
                 Some(crate::tools::request_change_action::ONE_AT_A_TIME)

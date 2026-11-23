@@ -594,6 +594,16 @@ fn conversation_tools<R: tauri::Runtime>(
             author.clone(),
             Arc::clone(asked),
         )),
+        // CVL-FR-08 / SSF-FR-DNZK: every turn can show the author a panel. A
+        // posted panel waits on the author, so it ends the turn on the flag a
+        // posted question sets (CVL-FR-15).
+        erase_tool(crate::tools::show_surface::ShowSurfaceTool::new(
+            app.clone(),
+            roots.owned(),
+            origin.clone(),
+            author.clone(),
+            Arc::clone(asked),
+        )),
     ];
     // CVL-FR-DPWP: the three OpenSpec read tools, while OpenSpec mode is active
     // and its CLI is available at the start of the turn. A project that does

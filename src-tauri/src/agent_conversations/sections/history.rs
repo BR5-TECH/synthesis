@@ -138,8 +138,15 @@ pub(in crate::agent_conversations) fn current_comment_section(
     let trigger = thread.comments.iter().find(|c| c.id == trigger_comment_id);
     // AGC-FR-DKHT: a `proposal_hunk` names its change here as well. Read only
     // where the comment carries one, so an ordinary trigger costs no read.
+    // AGC-FR-JYBM: an `agent_surface` on the trigger reads its record too.
     let names_hunk = trigger.is_some_and(|comment| {
-        comment.attachments.iter().any(|a| matches!(a, comments::Attachment::ProposalHunk { .. }))
+        comment.attachments.iter().any(|a| {
+            matches!(
+                a,
+                comments::Attachment::ProposalHunk { .. }
+                    | comments::Attachment::AgentSurface { .. }
+            )
+        })
     });
     let reads = if names_hunk {
         attachment_reads(roots, thread, false)

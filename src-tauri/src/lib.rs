@@ -12,6 +12,7 @@ use tauri::Manager;
 pub mod agent_activity;
 pub mod agent_conversations;
 pub mod agent_groups;
+pub mod agent_surfaces;
 pub mod agentic;
 pub mod agents;
 pub mod ai_api;
@@ -729,6 +730,8 @@ pub fn run() {
             // DXP-FR-NXGQ / DXP-FR-LHAG: the export requests of an agent.
             document_export::requests::get_export_request,
             document_export::requests::resolve_export_request,
+            agent_surfaces::commands::get_agent_surface,
+            agent_surfaces::commands::submit_surface_action,
             // Embeddings index (EMB-embeddings-index.md).
             embeddings::load_embeddings_settings,
             embeddings::save_embeddings_settings,

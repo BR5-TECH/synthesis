@@ -12,6 +12,7 @@ use std::path::Path;
 pub mod calm_raster;
 pub mod diagrams;
 pub mod docx;
+pub mod docx_page;
 pub mod frontmatter;
 pub mod model;
 pub mod pdf;
@@ -24,6 +25,8 @@ pub(super) mod tests;
 mod tests_calm;
 #[cfg(test)]
 mod tests_comments;
+#[cfg(test)]
+mod tests_docx_page;
 #[cfg(test)]
 mod tests_formats;
 #[cfg(test)]
@@ -77,7 +80,8 @@ impl Stage {
     }
 }
 
-/// A picture as PNG bytes and its size in pixels.
+/// A picture as PNG bytes and its natural size in CSS pixels. The PNG of a
+/// diagram has more pixels than its natural size (DXP-FR-RKJC).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Picture {
     pub png: Vec<u8>,
@@ -99,7 +103,7 @@ pub struct Input<'a> {
     /// DXP-FR-JYHX: the bytes of a local image by its URL, or `None` for one
     /// that is remote, outside the project, or missing.
     pub load_image: &'a dyn Fn(&str) -> Option<Vec<u8>>,
-    /// DXP-FR-RKJC: the PNG of one diagram, or why it fails.
+    /// DXP-FR-RKJC: the picture of one diagram, or why it fails.
     pub render_diagram: diagrams::DiagramRenderer<'a>,
     /// The folder the PDF pictures are written to, and the writer of one file.
     pub pictures_dir: &'a Path,

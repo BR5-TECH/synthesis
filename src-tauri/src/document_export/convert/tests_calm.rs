@@ -4,10 +4,12 @@
 use base64::Engine;
 
 use super::calm_raster::{rasterise_svg, MAX_SVG_BYTES};
-use super::diagrams::{calm_sources, png_size, DiagramFailure, FailedDiagram};
+use super::diagrams::{
+    calm_sources, png_size, DiagramFailure, FailedDiagram, MAX_RASTER_PIXELS, MAX_RASTER_SIDE,
+};
 use super::model::{parse, Block, DiagramKind};
-use super::tests::{document_xml, png_files_in, run, write_test_file};
-use super::{Format, Stage};
+use super::tests::{document_xml, picture, png_files_in, run, write_test_file};
+use super::{Format, Picture, Stage};
 use crate::document_export::commands::{diagram_renderer, CalmPicture};
 
 /// A plain SVG of `width` by `height` with one filled box and one text.
@@ -31,7 +33,7 @@ fn all_white(png: &[u8]) -> bool {
     image.pixels().all(|p| p.0 == [255, 255, 255, 255])
 }
 
-fn mermaid_never(_: &str) -> Result<Vec<u8>, DiagramFailure> {
+fn mermaid_never(_: &str) -> Result<Picture, DiagramFailure> {
     Err(DiagramFailure::Invalid)
 }
 
@@ -72,13 +74,14 @@ fn calm_sources_are_distinct_and_in_document_order() {
     assert!(calm_sources(&parse("# No fences\n")).is_empty());
 }
 
-// DXP-FR-WGLT, DXP-FR-DMUH: the raster is a PNG at twice the size of the SVG,
-// and it draws the shapes and the text.
+// DXP-FR-WGLT, DXP-FR-DMUH: the raster is a PNG at three times the size of
+// the SVG, and the natural size of the picture is the size of the SVG.
 #[test]
-fn an_svg_rasterises_at_twice_its_size() {
-    let png = rasterise_svg(&box_svg()).expect("rasterises");
-    assert_eq!(png_size(&png), Some((200, 100)));
-    assert!(!all_white(&png), "the box and the text draw");
+fn an_svg_rasterises_at_three_times_its_size() {
+    let picture = rasterise_svg(&box_svg()).expect("rasterises");
+    assert_eq!(png_size(&picture.png), Some((300, 150)));
+    assert_eq!((picture.width, picture.height), (100, 50));
+    assert!(!all_white(&picture.png), "the box and the text draw");
 }
 
 /// One line of text in `family`.
@@ -94,7 +97,7 @@ fn text_svg(family: &str) -> String {
 #[test]
 fn text_draws_in_the_bundled_faces_alone() {
     let bundled = rasterise_svg(&text_svg("Liberation Sans")).expect("rasterises");
-    assert!(!all_white(&bundled), "the text draws");
+    assert!(!all_white(&bundled.png), "the text draws");
     for family in ["Inter, system-ui", "Helvetica", "Arial", "sans-serif", "Times New Roman"] {
         assert_eq!(rasterise_svg(&text_svg(family)).unwrap(), bundled, "{family}");
     }
@@ -128,13 +131,13 @@ fn an_image_element_draws_nothing() {
         let body = format!(
             r#"<image href="{href}" x="0" y="0" width="40" height="40"/><image xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="{href}" x="40" y="0" width="40" height="40"/>"#
         );
-        let png = rasterise_svg(&svg(80, 40, &body)).expect("rasterises");
+        let png = rasterise_svg(&svg(80, 40, &body)).expect("rasterises").png;
         assert!(all_white(&png), "the image of {href} draws nothing");
         // An `feImage` filter and a `use` of another file draw nothing either.
         let filtered = format!(
             r#"<filter id="f" x="0" y="0" width="1" height="1"><feImage href="{href}"/></filter><rect width="80" height="40" fill="none" filter="url(#f)"/><use href="{href}#shape"/>"#
         );
-        let png = rasterise_svg(&svg(80, 40, &filtered)).expect("rasterises");
+        let png = rasterise_svg(&svg(80, 40, &filtered)).expect("rasterises").png;
         assert!(all_white(&png), "the filter or the use of {href} draws nothing");
     }
     // A style sheet that imports another one, or loads a font, has no effect.
@@ -170,16 +173,27 @@ fn an_svg_out_of_its_limits_does_not_rasterise() {
     assert!(rasterise_svg(&svg(8000, 1, "")).is_ok(), "the limit itself rasterises");
 }
 
-// DXP-FR-DMUH, DXP-FR-WGLT: a raster is at most 4000 px on its longest side,
-// so the largest SVG makes a raster of 4000 by 4000 and not 16000 by 16000.
+// DXP-FR-DMUH, DXP-FR-WGLT: a raster is at most 3000 px on its longest side
+// and at most 6 million pixels, and a raster that the limits scale down keeps
+// the natural size of its SVG.
 #[test]
-fn a_large_svg_rasterises_at_most_4000_px_on_its_longest_side() {
+fn a_large_svg_rasterises_in_the_raster_limits() {
     let full = r##"<rect width="100%" height="100%" fill="#336699"/>"##;
-    let size = |w: u32, h: u32| png_size(&rasterise_svg(&svg(w, h, full)).unwrap());
-    assert_eq!(size(8000, 8000), Some((4000, 4000)));
-    assert_eq!(size(3000, 100), Some((4000, 133)));
-    assert_eq!(size(100, 2000), Some((200, 4000)));
-    assert_eq!(size(1999, 100), Some((3998, 200)));
+    let raster = |w: u32, h: u32| rasterise_svg(&svg(w, h, full)).unwrap();
+    let size = |w: u32, h: u32| png_size(&raster(w, h).png);
+    assert_eq!(size(3000, 100), Some((3000, 100)));
+    assert_eq!(size(100, 2000), Some((150, 3000)));
+    assert_eq!(size(1999, 100), Some((3000, 150)));
+    assert_eq!(size(999, 100), Some((2997, 300)), "under the limits the scale is 3");
+    // The area limit: 1000 by 1000 at three times is 9 million pixels.
+    assert_eq!(size(1000, 1000), Some((2449, 2449)));
+    for (w, h) in [(8000, 8000), (1000, 1000), (2500, 2400), (1001, 999), (1999, 1001)] {
+        let picture = raster(w, h);
+        let (pw, ph) = png_size(&picture.png).unwrap();
+        assert!(pw.max(ph) <= MAX_RASTER_SIDE, "{w}x{h} keeps the side limit");
+        assert!(u64::from(pw) * u64::from(ph) <= MAX_RASTER_PIXELS, "{w}x{h} keeps the area");
+        assert_eq!((picture.width, picture.height), (w, h), "{w}x{h} keeps its natural size");
+    }
 }
 
 // DXP-FR-VMPP: the frontend sends each picture as `{ source, svg }`.
@@ -200,13 +214,14 @@ fn a_calm_fence_finds_its_picture_by_its_exact_source() {
         CalmPicture { source: "{\"a\": 1}".into(), svg: "<not svg".into() },
         CalmPicture { source: "{\"b\": 2}".into(), svg: "<not svg".into() },
     ];
-    let mermaid = |_: &str| Ok(vec![7]);
+    let mermaid = |_: &str| Ok(picture(3, 3, 1, 1));
     let render = diagram_renderer(&pictures, &mermaid);
-    assert_eq!(png_size(&render(DiagramKind::Calm, "{\"a\": 1}").unwrap()), Some((200, 100)));
+    let drawn = render(DiagramKind::Calm, "{\"a\": 1}").unwrap();
+    assert_eq!(png_size(&drawn.png), Some((300, 150)));
     assert_eq!(render(DiagramKind::Calm, "{\"a\":1}"), Err(DiagramFailure::Invalid));
     assert_eq!(render(DiagramKind::Calm, "{\"b\": 2}"), Err(DiagramFailure::Invalid));
     assert_eq!(render(DiagramKind::Calm, "{\"c\": 3}"), Err(DiagramFailure::Invalid));
-    assert_eq!(render(DiagramKind::Mermaid, "{\"a\": 1}"), Ok(vec![7]));
+    assert_eq!(render(DiagramKind::Mermaid, "{\"a\": 1}"), Ok(picture(3, 3, 1, 1)));
 }
 
 // DXP-FR-WGLT, DXP-FR-IOFM, DXP-FR-INPH: in a DOCX, a CALM fence with a
@@ -288,18 +303,27 @@ fn declared_size(svg: &str) -> (u32, u32) {
 }
 
 // DXP-FR-WGLT, DXP-FR-DMUH, CAD-FR-QHEJ: the backend rasterises the print
-// drawing of each CALM template at twice its size. With
+// drawing of each CALM template at three times its size, or less to keep in
+// the raster limits, and keeps its natural size. With
 // `CALM_RASTER_OUT=<dir>`, the test also writes each PNG there to look at.
 #[test]
 fn the_print_drawings_of_the_templates_rasterise() {
     let out = std::env::var_os("CALM_RASTER_OUT").map(std::path::PathBuf::from);
     for (name, svg) in FIXTURES {
-        let png = rasterise_svg(svg).unwrap_or_else(|_| panic!("{name} rasterises"));
+        let picture = rasterise_svg(svg).unwrap_or_else(|_| panic!("{name} rasterises"));
+        let png = picture.png.clone();
         let (width, height) = declared_size(svg);
-        assert_eq!(png_size(&png), Some((width * 2, height * 2)), "{name}");
+        assert_eq!((picture.width, picture.height), (width, height), "{name}");
+        let expected = match name {
+            "minimal" => (1758, 318),
+            "deployed" => (3000, 445),
+            "flow" => (3000, 554),
+            _ => (3000, 251),
+        };
+        assert_eq!(png_size(&png), Some(expected), "{name}");
         assert!(!all_white(&png), "{name} draws");
         // The text of the drawing draws too: with no text, the raster differs.
-        assert_ne!(rasterise_svg(&without_text(svg)).unwrap(), png, "{name} draws its text");
+        assert_ne!(rasterise_svg(&without_text(svg)).unwrap().png, png, "{name} draws its text");
         if let Some(dir) = &out {
             write_test_file(&dir.join(format!("calm-{name}.png")), &png);
         }

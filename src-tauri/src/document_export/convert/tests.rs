@@ -8,18 +8,24 @@ use super::diagrams::{DiagramFailure, FailedDiagram};
 use super::model::{classify_marker_line, parse, Align, Block, DiagramKind, Inline, Marker};
 use super::*;
 
-pub(crate) fn render_ok(_: DiagramKind, _: &str) -> Result<Vec<u8>, DiagramFailure> {
-    let image = image::RgbaImage::new(40, 20);
+/// A picture of a PNG of `png_width` × `png_height` pixels, with the natural
+/// size `width` × `height`.
+pub(crate) fn picture(png_width: u32, png_height: u32, width: u32, height: u32) -> Picture {
+    let image = image::RgbaImage::new(png_width, png_height);
     let mut out = std::io::Cursor::new(Vec::new());
-    image.write_to(&mut out, image::ImageFormat::Png).map_err(|_| DiagramFailure::Invalid)?;
-    Ok(out.into_inner())
+    image.write_to(&mut out, image::ImageFormat::Png).expect("the PNG encodes");
+    Picture { png: out.into_inner(), width, height }
 }
 
-fn render_fail(_: DiagramKind, _: &str) -> Result<Vec<u8>, DiagramFailure> {
+pub(crate) fn render_ok(_: DiagramKind, _: &str) -> Result<Picture, DiagramFailure> {
+    Ok(picture(120, 60, 40, 20))
+}
+
+fn render_fail(_: DiagramKind, _: &str) -> Result<Picture, DiagramFailure> {
     Err(DiagramFailure::Invalid)
 }
 
-fn render_past_deadline(_: DiagramKind, _: &str) -> Result<Vec<u8>, DiagramFailure> {
+fn render_past_deadline(_: DiagramKind, _: &str) -> Result<Picture, DiagramFailure> {
     Err(DiagramFailure::Deadline)
 }
 
@@ -191,6 +197,18 @@ fn diagrams_render_and_progress_follows_them() {
     assert!(!xml.contains("A--&gt;B"), "its source is gone");
 }
 
+// DXP-FR-RKJC: in a PDF, a diagram is placed from its natural size, not from
+// the pixels of its raster: a natural width of 40 CSS px is 125 px at 300 dpi.
+#[test]
+fn a_pdf_places_a_diagram_at_its_natural_size() {
+    let dir = tempfile::tempdir().unwrap();
+    let (converted, _) =
+        run("```mermaid\ngraph TD; A-->B\n```\n", Format::Pdf, false, &render_ok, dir.path());
+    assert!(converted.bytes.starts_with(b"%PDF-"));
+    let placed = read_file(&dir.path().join("picture-1.png"));
+    assert_eq!(diagrams::png_size(&placed).map(|(w, _)| w), Some(125));
+}
+
 // DXP-FR-IOFM: a failed diagram stays as code and is reported by its index.
 #[test]
 fn a_failed_diagram_stays_as_code_with_a_warning() {
@@ -235,8 +253,8 @@ fn merman_stops_at_the_deadline() {
 // DXP-FR-RKJC: merman renders a real flowchart to a PNG, in the backend.
 #[test]
 fn merman_renders_a_flowchart_to_png() {
-    let png = diagrams::render_png("flowchart TD\n  A[Start] --> B[Done]").expect("renders");
-    assert!(diagrams::png_size(&png).is_some());
+    let picture = diagrams::render_png("flowchart TD\n  A[Start] --> B[Done]").expect("renders");
+    assert!(diagrams::png_size(&picture.png).is_some());
     assert_eq!(diagrams::render_png("   "), Err(DiagramFailure::Invalid));
 }
 

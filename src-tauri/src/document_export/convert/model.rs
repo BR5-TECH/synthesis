@@ -79,7 +79,8 @@ pub enum Block {
         index: usize,
         kind: DiagramKind,
         source: String,
-        png: Option<Vec<u8>>,
+        /// DXP-FR-RKJC: the rendered picture, at its natural size.
+        image: Option<super::Picture>,
     },
     List {
         start: Option<u64>,
@@ -399,7 +400,7 @@ impl<'a> Reader<'a> {
         let text = text.strip_suffix('\n').unwrap_or(&text).to_string();
         if let Some(kind) = language.as_deref().and_then(DiagramKind::of_language) {
             self.diagrams += 1;
-            return Block::Diagram { index: self.diagrams, kind, source: text, png: None };
+            return Block::Diagram { index: self.diagrams, kind, source: text, image: None };
         }
         Block::Code { language, text }
     }

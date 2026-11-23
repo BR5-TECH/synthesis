@@ -87,6 +87,57 @@ fn close_ends_and_removes_the_session() {
     assert_eq!(f.announces.load(Ordering::SeqCst), 1);
 }
 
+// TRS-FR-BTMT, TRS-FR-EHXS: a rename trims the label, changes nothing else,
+// and announces once; a bad label or an unknown id changes nothing.
+#[test]
+fn a_rename_sets_the_trimmed_label() {
+    let f = fixture();
+    let handle = f.app.handle().clone();
+    context::run_in("p", || {
+        add(&handle, "a", worktree("/r"), true);
+        let before = registry(&handle).get("a").unwrap().summary();
+        let summary = set_label(&handle, "a", "  my shell ").unwrap();
+        assert_eq!(summary.label, "my shell");
+        assert_eq!(TerminalSummary { label: before.label.clone(), ..summary.clone() }, before);
+        assert_eq!(set_label(&handle, "a", "   ").unwrap_err().code, "invalid_label");
+        assert_eq!(set_label(&handle, "a", &"x".repeat(65)).unwrap_err().code, "invalid_label");
+        assert_eq!(set_label(&handle, "zz", "name").unwrap_err().code, "unknown_terminal");
+        assert_eq!(registry(&handle).get("a").unwrap().summary().label, "my shell");
+    });
+    assert_eq!(f.announces.load(Ordering::SeqCst), 1);
+}
+
+// TRS-FR-BTMT: two sessions can hold the same label.
+#[test]
+fn two_sessions_can_share_a_label() {
+    let f = fixture();
+    let handle = f.app.handle().clone();
+    context::run_in("p", || {
+        add(&handle, "a", worktree("/r"), false);
+        add(&handle, "b", worktree("/r"), false);
+        set_label(&handle, "a", "same").unwrap();
+        assert_eq!(set_label(&handle, "b", "same").unwrap().label, "same");
+    });
+}
+
+// TRS-FR-DOMD, TRS-FR-EHXS: a theme change sets or clears the override, and
+// announces once for each change; another value changes nothing.
+#[test]
+fn a_theme_change_sets_and_clears_the_override() {
+    let f = fixture();
+    let handle = f.app.handle().clone();
+    context::run_in("p", || {
+        add(&handle, "a", worktree("/r"), false);
+        assert_eq!(registry(&handle).get("a").unwrap().summary().theme, None);
+        assert_eq!(set_theme(&handle, "a", Some("sand")).unwrap().theme, Some(TerminalTheme::Sand));
+        assert_eq!(set_theme(&handle, "a", Some("dark")).unwrap_err().code, "invalid_theme");
+        assert_eq!(registry(&handle).get("a").unwrap().summary().theme, Some(TerminalTheme::Sand));
+        assert_eq!(set_theme(&handle, "a", None).unwrap().theme, None);
+        assert_eq!(set_theme(&handle, "zz", None).unwrap_err().code, "unknown_terminal");
+    });
+    assert_eq!(f.announces.load(Ordering::SeqCst), 2);
+}
+
 // TRS-FR-RKAW, TRS-FR-NPDK: every session of a gone target, live or ended,
 // goes to target_gone with its history; another target stays as it is; a
 // second call changes nothing.

@@ -25,5 +25,6 @@ mod project_slot;
 mod recents;
 mod registries;
 mod switches;
+mod terminal_theme;
 mod viewer_modes;
 mod wire_shape;

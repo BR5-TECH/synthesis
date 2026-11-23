@@ -1,3 +1,4 @@
+import type { TerminalThemePreference } from "./terminals";
 import type { VoiceHotkeyBehaviour, VoiceVadSensitivity } from "./voice";
 // Session logging (LGC-logging.md / LOG-logs.md)
 //
@@ -273,6 +274,8 @@ export interface AppPreferences {
    * a backend that predates the field still types.
    */
   editorZoomPercent?: number;
+  /** GSS-FR-FRBK: the Terminal theme of Settings, `app` when unset. */
+  terminalTheme?: TerminalThemePreference;
   /**
    * GSS-FR-29 / GLS-FR-17: the three typographic roles' font settings. The
    * Appearance section reads them on mount and writes them whenever the user

@@ -10,6 +10,7 @@ import type {
   TerminalKind,
   TerminalSummary,
   TerminalTarget,
+  TerminalThemeId,
 } from "../types";
 
 /** TRS-FR-AVNH: the most bytes one input call carries. */
@@ -47,5 +48,13 @@ export const acknowledgeTerminalOutput = (terminalId: string, bytes: number) =>
 
 export const setTerminalPinned = (terminalId: string, pinned: boolean) =>
   invoke<TerminalSummary>("set_terminal_pinned", { terminalId, pinned });
+
+/** TRS-FR-BTMT. */
+export const setTerminalLabel = (terminalId: string, label: string) =>
+  invoke<TerminalSummary>("set_terminal_label", { terminalId, label });
+
+/** TRS-FR-DOMD: null clears the override. */
+export const setTerminalTheme = (terminalId: string, theme: TerminalThemeId | null) =>
+  invoke<TerminalSummary>("set_terminal_theme", { terminalId, theme });
 
 export const closeTerminal = (terminalId: string) => invoke<void>("close_terminal", { terminalId });

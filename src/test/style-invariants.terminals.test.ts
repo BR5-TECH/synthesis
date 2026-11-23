@@ -40,3 +40,10 @@ describe("the terminal row menu styles", () => {
     expect(shared).not.toMatch(/button\.menu-item/);
   });
 });
+
+describe("the terminal caret", () => {
+  it("TRM-FR-DUAC: the page shows no text caret in the terminal host or in anything inside it", () => {
+    expect(block(".terminal-view__host,\n.terminal-view__host *")).toMatch(/caret-color: transparent;/);
+    expect(block(".terminal-view__host:focus")).toMatch(/outline: none;/);
+  });
+});

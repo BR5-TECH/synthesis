@@ -3,7 +3,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tauri::{Listener, Manager};
 
 use crate::project_scope::{context, ProjectScopes};
-use crate::terminals::service::{close, end_for_project, end_for_target, resize, set_pinned};
+use crate::terminals::service::{
+    close, end_for_project, end_for_target, resize, set_label, set_pinned, set_theme,
+};
 use crate::terminals::tmux::fake::{fake, Fake};
 use crate::terminals::tmux::meta::{encode, project_prefix, session_name};
 
@@ -50,6 +52,7 @@ fn record(_id: &str, label: &str, created_at: &str, pinned: bool) -> Meta {
         vendor: None,
         runs_in: RunsIn::Host,
         pinned,
+        theme: None,
         created_at: created_at.into(),
     }
 }
@@ -69,6 +72,7 @@ fn line(key: &str, id: &str, meta: &Meta, pane: &str) -> String {
         String::new(),
         "host".into(),
         if meta.pinned { "1".into() } else { "0".into() },
+        meta.theme.map(|t| t.id().to_string()).unwrap_or_default(),
         encode(&meta.created_at),
         pane.to_string(),
     ]
@@ -584,6 +588,70 @@ fn a_pin_change_sets_the_option() {
             ]
         );
     });
+}
+
+// TRS-FR-BTMT, TRS-FR-DOMD, TRS-FR-QMZM: a label change and a theme change of
+// a persistent session set their tmux options; no override is an empty value.
+#[test]
+fn a_label_and_a_theme_change_set_their_options() {
+    let fx = fixture();
+    let handle = fx.app.handle().clone();
+    context::run_in("p", || {
+        started(&fx, "t1");
+        set_label(&handle, "t1", "  build; 100%  ").unwrap();
+        wait_until("the label option", || options(&fx, "@synthesis_label").len() == 1);
+        set_theme(&handle, "t1", Some("night")).unwrap();
+        wait_until("the theme option", || options(&fx, "@synthesis_theme").len() == 1);
+        set_theme(&handle, "t1", None).unwrap();
+        wait_until("the cleared theme", || options(&fx, "@synthesis_theme").len() == 2);
+        let name = session_name(KEY, "t1");
+        assert_eq!(
+            options(&fx, "@synthesis_label"),
+            vec![commands::set_option(&name, "@synthesis_label", "build%3B 100%25")]
+        );
+        assert_eq!(
+            options(&fx, "@synthesis_theme"),
+            vec![
+                commands::set_option(&name, "@synthesis_theme", "night"),
+                commands::set_option(&name, "@synthesis_theme", ""),
+            ]
+        );
+    });
+}
+
+// TRS-FR-BTMT, TRS-FR-DOMD, TRS-FR-IEKU: a restored session comes back with its
+// renamed label and its theme override; an unknown theme is no override.
+#[test]
+fn a_restore_keeps_the_label_and_the_theme() {
+    let fx = fixture();
+    let mut renamed = record("t1", "build box", "2026-11-22T10:00:01Z", false);
+    renamed.theme = Some(TerminalTheme::Ember);
+    let plain = record("t2", "Host shell 2", "2026-11-22T10:00:02Z", false);
+    let unknown =
+        line(KEY, "t3", &record("t3", "Host shell 3", "2026-11-22T10:00:03Z", false), "0\t")
+            .replace("\t\t2026-11-22T10:00:03Z", "\tneon\t2026-11-22T10:00:03Z");
+    let listing =
+        [line(KEY, "t1", &renamed, "0\t"), line(KEY, "t2", &plain, "0\t"), unknown].join("\n");
+    fx.f.runner.reply("list-sessions", Ok(listing));
+    let handle = fx.app.handle().clone();
+    context::run_in("p", || {
+        assert_eq!(restore(&fx, Some(&[fact("/repo")])), 3);
+        let summaries = registry(&handle).summaries();
+        assert_eq!(summaries[0].label, "build box");
+        assert_eq!(summaries[0].theme, Some(TerminalTheme::Ember));
+        assert_eq!(summaries[1].theme, None);
+        assert_eq!(summaries[2].label, "Host shell 3");
+        assert_eq!(summaries[2].theme, None);
+    });
+}
+
+/// The options of `key` that the fake received.
+fn options(fx: &Fixture, key: &str) -> Vec<Vec<String>> {
+    fx.f.runner
+        .calls_of("set-option")
+        .into_iter()
+        .filter(|c| c.contains(&key.to_string()))
+        .collect()
 }
 
 /// The pin options that the fake received.

@@ -662,6 +662,15 @@ export const Icon = {
       <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
     </I>
   ),
+  /** `TRM-terminals.md` TRM-FR-QXIY: the **Theme** entry of a terminal's menus. */
+  Palette: (p: IconProps) => (
+    <I {...p}>
+      <path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7H16a5 5 0 0 0 5-5c0-4-4-7.2-9-7.2z" />
+      <circle cx="7.5" cy="11" r="1" />
+      <circle cx="10" cy="7" r="1" />
+      <circle cx="14.5" cy="7" r="1" />
+    </I>
+  ),
   /** A computer display: the theme that follows the operating system. */
   Monitor: (p: IconProps) => (
     <I {...p}>

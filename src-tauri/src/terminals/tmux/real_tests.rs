@@ -53,6 +53,7 @@ fn meta() -> Meta {
         vendor: None,
         runs_in: RunsIn::Host,
         pinned: true,
+        theme: None,
         created_at: "2026-11-22T10:00:00Z".into(),
     }
 }
@@ -154,6 +155,31 @@ async fn a_process_end_reports_its_status() {
     assert_eq!(handle.exit.await.unwrap(), Some(3));
     assert!(persistence.is_gone());
     assert!(listed(&server).is_empty());
+}
+
+// TRS-FR-WINB, TRS-FR-ANJK: with mouse off, the client gets the mouse mode of
+// the program, and a wheel report of the client reaches the program unchanged.
+#[tokio::test]
+async fn a_wheel_report_reaches_a_mouse_aware_program() {
+    let server = server();
+    let script = "stty raw -echo; printf '\\033[?1000h\\033[?1006h'; echo ready; \
+                  v=$(dd bs=1 count=10 2>/dev/null | od -An -tx1 | tr -d ' \\n'); \
+                  echo \"got:$v:end\"; exec sleep 600";
+    let persistence =
+        create(server.tmux.clone(), session_name(KEY, "t7"), &sh(script), &meta(), &|_| {})
+            .unwrap();
+    let mut handle = supervise(persistence.clone(), 80, 24, quiet()).unwrap();
+    let mut screen = read_until(&mut handle, "ready").await;
+    if !screen.contains("\x1b[?1006h") {
+        screen.push_str(&read_until(&mut handle, "\x1b[?1006h").await);
+    }
+    assert!(screen.contains("\x1b[?1000h"), "{screen:?}");
+    handle.control.write(b"\x1b[<64;5;3M").unwrap();
+    // The hex of ESC [ < 6 4 ; 5 ; 3 M.
+    let reply = read_until(&mut handle, ":end").await;
+    assert!(reply.contains("got:1b5b3c36343b353b334d:end"), "{reply:?}");
+    handle.control.terminate();
+    while handle.output.recv().await.is_some() {}
 }
 
 // TRS-FR-KBOS: a client that attaches after the process ended is freed at

@@ -132,6 +132,26 @@ pub fn set_terminal_pinned(
 
 #[project_scope_macros::project_scoped]
 #[tauri::command]
+pub fn set_terminal_label(
+    app: tauri::AppHandle,
+    terminal_id: String,
+    label: String,
+) -> Result<TerminalSummary, TerminalError> {
+    logged(&app, "set_label", service::set_label(&app, &terminal_id, &label))
+}
+
+#[project_scope_macros::project_scoped]
+#[tauri::command]
+pub fn set_terminal_theme(
+    app: tauri::AppHandle,
+    terminal_id: String,
+    theme: Option<String>,
+) -> Result<TerminalSummary, TerminalError> {
+    logged(&app, "set_theme", service::set_theme(&app, &terminal_id, theme.as_deref()))
+}
+
+#[project_scope_macros::project_scoped]
+#[tauri::command]
 pub fn close_terminal(app: tauri::AppHandle, terminal_id: String) -> Result<(), TerminalError> {
     logged(&app, "close", service::close(&app, &terminal_id))
 }

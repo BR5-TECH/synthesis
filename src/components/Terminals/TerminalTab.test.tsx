@@ -257,6 +257,70 @@ describe("terminal keys and input", () => {
     expect(t.scrollPages.mock.calls).toEqual([[-1], [1]]);
   });
 
+  it("TRM-FR-AWXC: Shift+Tab, Shift+Enter and the shifted editing and function keys keep their Shift", () => {
+    const expected: [string, string][] = [
+      ["Tab", "\x1b[Z"],
+      ["Enter", "\x1b\r"],
+      ["NumpadEnter", "\x1b\r"],
+      ["Home", "\x1b[1;2H"],
+      ["End", "\x1b[1;2F"],
+      ["Insert", "\x1b[2;2~"],
+      ["Delete", "\x1b[3;2~"],
+      ["F1", "\x1b[1;2P"],
+      ["F2", "\x1b[1;2Q"],
+      ["F3", "\x1b[1;2R"],
+      ["F4", "\x1b[1;2S"],
+      ["F5", "\x1b[15;2~"],
+      ["F6", "\x1b[17;2~"],
+      ["F7", "\x1b[18;2~"],
+      ["F8", "\x1b[19;2~"],
+      ["F9", "\x1b[20;2~"],
+      ["F10", "\x1b[21;2~"],
+      ["F11", "\x1b[23;2~"],
+      ["F12", "\x1b[24;2~"],
+    ];
+    for (const mac of [true, false]) {
+      for (const [code, data] of expected) {
+        const send = vi.fn();
+        expect(handleTerminalKey(key({ code, shiftKey: true }), term(), send, mac)).toBe(true);
+        expect(send.mock.calls).toEqual([[data]]);
+      }
+    }
+  });
+
+  it("TRM-FR-AWXC, TRM-FR-RFVP: plain keys and Shift with another modifier stay with the library encoder", () => {
+    const cases: KeyboardEventInit[] = [
+      { code: "Tab" },
+      { code: "Enter" },
+      { code: "Tab", shiftKey: true, ctrlKey: true },
+      { code: "Tab", shiftKey: true, altKey: true },
+      { code: "Tab", shiftKey: true, metaKey: true },
+      { code: "Home", shiftKey: true, ctrlKey: true },
+      { code: "KeyA", shiftKey: true },
+      { code: "ArrowUp", shiftKey: true },
+    ];
+    for (const init of cases) {
+      const send = vi.fn();
+      expect(handleTerminalKey(key(init), term(), send, true)).toBe(false);
+      expect(send).not.toHaveBeenCalled();
+    }
+    // A key that is not a keydown is not handled.
+    const send = vi.fn();
+    expect(handleTerminalKey(new KeyboardEvent("keyup", { code: "Tab", shiftKey: true }), term(), send, true)).toBe(false);
+    expect(send).not.toHaveBeenCalled();
+    // Shift+Tab is no command key, so it stays away from the window's handlers.
+    expect(keyStaysInTerminal(key({ code: "Tab", shiftKey: true }), true)).toBe(true);
+    expect(keyStaysInTerminal(key({ code: "Tab", shiftKey: true }), false)).toBe(true);
+  });
+
+  it("TRM-FR-AWXC: a Shift+Tab that the terminal sees reaches the session as back-tab", async () => {
+    await seed([session({ id: "a" })]);
+    await mount();
+    const handled = fakeTerminals[0].keyHandler?.(new KeyboardEvent("keydown", { code: "Tab", shiftKey: true }));
+    expect(handled).toBe(true);
+    await waitFor(() => expect(commands("write_terminal_input").map((c) => c.args.data)).toEqual(["\x1b[Z"]));
+  });
+
   it("TRM-FR-DHEM: a paste larger than 64 KiB goes in parts of at most 64 KiB", () => {
     const big = "é".repeat(40_000);
     const parts = inputParts(big);

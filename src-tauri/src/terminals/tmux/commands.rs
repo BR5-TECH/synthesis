@@ -192,6 +192,7 @@ mod tests {
             vendor: None,
             runs_in: RunsIn::Host,
             pinned: false,
+            theme: None,
             created_at: "2026-11-22T10:00:00Z".into(),
         }
     }

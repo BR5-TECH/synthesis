@@ -33,6 +33,7 @@ struct Attached {
 #[derive(Debug, Clone)]
 pub struct SessionSpec {
     pub id: String,
+    /// TRS-FR-LRYH: the label at creation. [`Session::label`] is the current one.
     pub label: String,
     pub target: TargetRef,
     pub target_name: String,
@@ -51,6 +52,10 @@ struct Inner {
     end_reason: Option<EndReason>,
     end_detail: Option<String>,
     pinned: bool,
+    /// TRS-FR-BTMT: the current label.
+    label: String,
+    /// TRS-FR-DOMD: the theme override.
+    theme: Option<TerminalTheme>,
     busy_run_id: Option<String>,
     environment_name: Option<String>,
     history: History,
@@ -86,6 +91,7 @@ impl Session {
         busy_run_id: Option<String>,
         history: History,
     ) -> Self {
+        let label = spec.label.clone();
         Self {
             spec,
             inner: Mutex::new(Inner {
@@ -94,6 +100,8 @@ impl Session {
                 end_reason: None,
                 end_detail: None,
                 pinned: false,
+                label,
+                theme: None,
                 busy_run_id,
                 environment_name: None,
                 history,
@@ -116,7 +124,7 @@ impl Session {
         let inner = self.lock();
         TerminalSummary {
             id: self.spec.id.clone(),
-            label: self.spec.label.clone(),
+            label: inner.label.clone(),
             target: self.spec.target.clone(),
             target_name: self.spec.target_name.clone(),
             branch: self.spec.branch.clone(),
@@ -129,6 +137,7 @@ impl Session {
             end_reason: inner.end_reason,
             end_detail: inner.end_detail.clone(),
             pinned: inner.pinned,
+            theme: inner.theme,
             busy_run_id: inner.busy_run_id.clone(),
             has_history: !inner.history.is_empty(),
             persistent: inner.persistence.as_ref().is_some_and(|p| !p.is_gone()),
@@ -180,6 +189,26 @@ impl Session {
     /// TRS-FR-KOYL.
     pub fn set_pinned(&self, pinned: bool) {
         self.lock().pinned = pinned;
+    }
+
+    /// TRS-FR-BTMT: the current label.
+    pub fn label(&self) -> String {
+        self.lock().label.clone()
+    }
+
+    /// TRS-FR-BTMT.
+    pub fn set_label(&self, label: String) {
+        self.lock().label = label;
+    }
+
+    /// TRS-FR-DOMD: the theme override.
+    pub fn theme(&self) -> Option<TerminalTheme> {
+        self.lock().theme
+    }
+
+    /// TRS-FR-DOMD.
+    pub fn set_theme(&self, theme: Option<TerminalTheme>) {
+        self.lock().theme = theme;
     }
 
     /// TRS-FR-LUUX: returns whether the value changed.

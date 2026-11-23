@@ -23,6 +23,7 @@ fn meta() -> Meta {
         vendor: None,
         runs_in: RunsIn::Host,
         pinned: false,
+        theme: None,
         created_at: "2026-11-22T10:00:00Z".into(),
     }
 }
@@ -255,6 +256,25 @@ fn a_failed_create_removes_the_session() {
         create(f.tmux.clone(), "syn-abc-t1".into(), &command(), &meta(), &|_| {}).err().unwrap();
     assert_eq!(err, TmuxError::Status);
     assert_eq!(f.runner.calls_of("kill-session"), vec![commands::kill("syn-abc-t1")]);
+}
+
+// TRS-FR-QMZM, TRS-FR-BTMT, TRS-FR-DOMD: a label write sets the encoded
+// label, and a theme write sets the theme id, or an empty value for none.
+#[test]
+fn label_and_theme_writes() {
+    let f = fake();
+    let p = persistence(&f);
+    p.write_label(|| "a\tb;c".into()).unwrap();
+    p.write_theme(|| Some(TerminalTheme::Mist)).unwrap();
+    p.write_theme(|| None).unwrap();
+    assert_eq!(
+        f.runner.calls_of("set-option"),
+        vec![
+            commands::set_option("syn-abc-t1", "@synthesis_label", "a%09b%3Bc"),
+            commands::set_option("syn-abc-t1", "@synthesis_theme", "mist"),
+            commands::set_option("syn-abc-t1", "@synthesis_theme", ""),
+        ]
+    );
 }
 
 // TRS-FR-QMZM, TRS-FR-CXSV: a pin change sets the option, and a kill of a

@@ -103,6 +103,15 @@ export function useTerminalTabs({
     }
   }, [snapshot]);
 
+  // TRM-FR-DPWA: the tab's title follows each change of the session's label.
+  useEffect(() => {
+    const labels = new Map(snapshot.sessions.map((s) => [s.id, s.label]));
+    const stale = (t: Tab) =>
+      t.kind === "terminal" && !!t.terminalId && labels.has(t.terminalId) && labels.get(t.terminalId) !== t.label;
+    if (!tabsRef.current.some(stale)) return;
+    setTabs((current) => current.map((t) => (stale(t) ? { ...t, label: labels.get(t.terminalId!)! } : t)));
+  }, [snapshot, setTabs]);
+
   const openTerminalTab = useCallback(
     (session: TerminalSummary) => {
       const id = terminalTabId(session.id);

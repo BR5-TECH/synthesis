@@ -129,6 +129,20 @@ pub enum VoiceInputMode {
     Vad,
 }
 
+/// GSS-FR-FRBK: the colours of every terminal with no override of its own
+/// (`TRM-terminals.md` TRM-FR-IUMC). `app` follows the app theme.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminalThemePreference {
+    #[default]
+    App,
+    Paper,
+    Sand,
+    Mist,
+    Night,
+    Ember,
+}
+
 /// GSS-FR-WYHC: how an agent reply comes back in voice mode.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -490,6 +504,9 @@ pub struct AppPreferences {
     /// module does not limit the range.
     #[serde(default = "editor_zoom_default", deserialize_with = "lenient_editor_zoom")]
     pub editor_zoom_percent: u32,
+    /// GSS-FR-FRBK: the Terminal theme, `app` when unset or unknown.
+    #[serde(default, deserialize_with = "lenient_or_default")]
+    pub terminal_theme: TerminalThemePreference,
     /// GSS-FR-KOAB: the silence that ends a VAD utterance, in milliseconds.
     #[serde(default = "voice_vad_silence_default", deserialize_with = "lenient_vad_silence")]
     pub voice_vad_silence_ms: u32,
@@ -601,6 +618,7 @@ impl Default for AppPreferences {
             graduation_paths_width_fraction: graduation_paths_width_default(),
             git_files_width_fraction: git_files_width_default(),
             editor_zoom_percent: editor_zoom_default(),
+            terminal_theme: TerminalThemePreference::default(),
             voice_vad_silence_ms: voice_vad_silence_default(),
             voice_vad_sensitivity: VoiceVadSensitivity::default(),
             voice_input_mode: VoiceInputMode::default(),

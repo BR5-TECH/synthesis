@@ -41,6 +41,12 @@ export type TerminalState = "starting" | "running" | "exited" | "target_gone";
 
 export type EndReason = "process_exited" | "start_failed" | "vm_stopped" | "target_gone";
 
+/** TRM-FR-CFXM: the id of one of the five terminal themes. */
+export type TerminalThemeId = "paper" | "sand" | "mist" | "night" | "ember";
+
+/** GSS-FR-FRBK: the Terminal theme of Settings; `app` follows the app theme. */
+export type TerminalThemePreference = "app" | TerminalThemeId;
+
 export interface TerminalSummary {
   id: string;
   label: string;
@@ -56,6 +62,8 @@ export interface TerminalSummary {
   endReason?: EndReason;
   endDetail?: string;
   pinned: boolean;
+  /** TRS-FR-DOMD: the theme override, or null. */
+  theme?: TerminalThemeId | null;
   busyRunId: string | null;
   hasHistory: boolean;
   /** TRS-FR-FKVW: the session runs in the application's tmux server and survives an IDE restart. */

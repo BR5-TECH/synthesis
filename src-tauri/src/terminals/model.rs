@@ -171,6 +171,61 @@ pub enum EndReason {
     TargetGone,
 }
 
+/// TRS-FR-DOMD: the theme override of a session (`TRM-terminals.md` TRM-FR-CFXM).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminalTheme {
+    Paper,
+    Sand,
+    Mist,
+    Night,
+    Ember,
+}
+
+impl TerminalTheme {
+    pub const ALL: [TerminalTheme; 5] = [
+        TerminalTheme::Paper,
+        TerminalTheme::Sand,
+        TerminalTheme::Mist,
+        TerminalTheme::Night,
+        TerminalTheme::Ember,
+    ];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            TerminalTheme::Paper => "paper",
+            TerminalTheme::Sand => "sand",
+            TerminalTheme::Mist => "mist",
+            TerminalTheme::Night => "night",
+            TerminalTheme::Ember => "ember",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|theme| theme.id() == id)
+    }
+}
+
+/// TRS-FR-BTMT: the most characters a label holds after the trim.
+pub const MAX_LABEL_CHARS: usize = 64;
+
+/// TRS-FR-BTMT: the trimmed label, or `invalid_label`.
+pub fn clean_label(label: &str) -> Result<String, TerminalError> {
+    let trimmed = label.trim();
+    if trimmed.is_empty() || trimmed.chars().count() > MAX_LABEL_CHARS {
+        return Err(TerminalError::new("invalid_label"));
+    }
+    Ok(trimmed.to_string())
+}
+
+/// TRS-FR-DOMD: the theme of a theme id, `None` for null, or `invalid_theme`.
+pub fn parse_theme(theme: Option<&str>) -> Result<Option<TerminalTheme>, TerminalError> {
+    match theme {
+        None => Ok(None),
+        Some(id) => TerminalTheme::from_id(id).map(Some).ok_or(TerminalError::new("invalid_theme")),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalSummary {
@@ -194,6 +249,8 @@ pub struct TerminalSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end_detail: Option<String>,
     pub pinned: bool,
+    /// TRS-FR-DOMD: the theme override, or null.
+    pub theme: Option<TerminalTheme>,
     pub busy_run_id: Option<String>,
     pub has_history: bool,
     /// TRS-FR-FKVW: the session runs in the application's tmux server.
@@ -254,6 +311,31 @@ mod tests {
         let stream = TargetRef::WorkStream { stream_id: "s-1".into() };
         assert_eq!(worktree.queue_scope(), "worktree:/repo/wt");
         assert_eq!(stream.queue_scope(), "s-1");
+    }
+
+    // TRS-FR-BTMT: a label is trimmed, and an empty or too long one is refused.
+    #[test]
+    fn a_label_is_trimmed_and_bounded() {
+        assert_eq!(clean_label("  build box  ").unwrap(), "build box");
+        assert_eq!(clean_label(&"é".repeat(64)).unwrap(), "é".repeat(64));
+        assert_eq!(clean_label(&format!(" {} ", "a".repeat(64))).unwrap(), "a".repeat(64));
+        for bad in ["", "   ", "\t\n"] {
+            assert_eq!(clean_label(bad).unwrap_err().code, "invalid_label");
+        }
+        assert_eq!(clean_label(&"a".repeat(65)).unwrap_err().code, "invalid_label");
+    }
+
+    // TRS-FR-DOMD: the five theme ids and null are accepted; any other value is refused.
+    #[test]
+    fn a_theme_is_one_of_five_or_null() {
+        assert_eq!(parse_theme(None).unwrap(), None);
+        for theme in TerminalTheme::ALL {
+            assert_eq!(parse_theme(Some(theme.id())).unwrap(), Some(theme));
+            assert_eq!(serde_json::to_value(theme).unwrap(), theme.id());
+        }
+        for bad in ["", "dark", "Paper", "app"] {
+            assert_eq!(parse_theme(Some(bad)).unwrap_err().code, "invalid_theme");
+        }
     }
 
     // TRS-FR-BGDL: a target is read from the frontend's shape.

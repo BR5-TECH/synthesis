@@ -14,8 +14,11 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::{mpsc, oneshot};
 
-use super::meta::{parse_pane, Meta, PaneState, PINNED_KEY};
+use super::meta::{
+    encode, parse_pane, theme_value, Meta, PaneState, LABEL_KEY, PINNED_KEY, THEME_KEY,
+};
 use super::{commands, Tmux, TmuxError};
+use crate::terminals::model::TerminalTheme;
 use crate::terminals::process::{HostCommand, ProcessControl, ProcessHandle, OUTPUT_QUEUE_CHUNKS};
 
 /// TRS-FR-CKIC: the clients that may end in [`REATTACH_WINDOW`] before the
@@ -29,13 +32,13 @@ pub struct Persistence {
     pub name: String,
     /// The tmux session is known to be gone.
     gone: AtomicBool,
-    /// Makes each pin write read and write the flag as one step.
-    pin_writes: Mutex<()>,
+    /// Makes each option write read and write its value as one step.
+    option_writes: Mutex<()>,
 }
 
 impl Persistence {
     pub fn new(tmux: Arc<Tmux>, name: String) -> Self {
-        Self { tmux, name, gone: AtomicBool::new(false), pin_writes: Mutex::new(()) }
+        Self { tmux, name, gone: AtomicBool::new(false), option_writes: Mutex::new(()) }
     }
 
     /// Whether the module removed the tmux session or saw it gone.
@@ -62,8 +65,25 @@ impl Persistence {
     /// TRS-FR-QMZM: writes the flag that `current` reads at the time of the
     /// write. Writes go one at a time, so the last write holds the last flag.
     pub fn write_pinned(&self, current: impl FnOnce() -> bool) -> Result<(), TmuxError> {
-        let _one_at_a_time = self.pin_writes.lock().unwrap_or_else(|p| p.into_inner());
+        let _one_at_a_time = self.option_writes.lock().unwrap_or_else(|p| p.into_inner());
         self.set_pinned(current())
+    }
+
+    /// TRS-FR-QMZM, TRS-FR-BTMT: writes the label that `current` reads at the
+    /// time of the write, on the terms of [`Self::write_pinned`].
+    pub fn write_label(&self, current: impl FnOnce() -> String) -> Result<(), TmuxError> {
+        let _one_at_a_time = self.option_writes.lock().unwrap_or_else(|p| p.into_inner());
+        self.run(commands::set_option(&self.name, LABEL_KEY, &encode(&current()))).map(|_| ())
+    }
+
+    /// TRS-FR-QMZM, TRS-FR-DOMD: writes the theme override that `current`
+    /// reads at the time of the write, empty for no override.
+    pub fn write_theme(
+        &self,
+        current: impl FnOnce() -> Option<TerminalTheme>,
+    ) -> Result<(), TmuxError> {
+        let _one_at_a_time = self.option_writes.lock().unwrap_or_else(|p| p.into_inner());
+        self.run(commands::set_option(&self.name, THEME_KEY, theme_value(current()))).map(|_| ())
     }
 
     /// TRS-FR-QMZM: keeps the pinned flag in the tmux session.

@@ -176,7 +176,7 @@ pub fn save_docker_in_docker_settings_to(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_docker_in_docker_settings(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DockerInDockerState, String> {
@@ -188,7 +188,7 @@ pub fn load_docker_in_docker_settings(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_docker_in_docker_settings(
     settings: DockerInDockerSettings,
     project: crate::project_scope::Scoped<'_, ProjectState>,

@@ -214,7 +214,7 @@ pub(super) fn log_config_outcome<S: LogSink + Clone + Send + 'static, T>(
 // ---------------------------------------------------------------------------
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_ai_api_integrations(
     app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
@@ -226,7 +226,7 @@ pub fn list_ai_api_integrations(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_ai_api_catalogs(
     store: State<'_, GlobalSettingsStore>,
 ) -> Result<Vec<AiApiCatalog>, String> {
@@ -234,7 +234,7 @@ pub fn list_ai_api_catalogs(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn verify_ai_api_integration(
     provider: String,
     base_url: String,
@@ -269,7 +269,7 @@ pub fn verify_ai_api_integration(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_ai_api_model(
     provider: String,
     model_id: Option<String>,
@@ -298,7 +298,7 @@ pub fn set_ai_api_model(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_ai_api_reasoning(
     provider: String,
     choice: Option<ReasoningChoice>,
@@ -319,7 +319,7 @@ pub fn set_ai_api_reasoning(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_active_ai_api_integration(
     provider: String,
     app: tauri::AppHandle,
@@ -338,7 +338,7 @@ pub fn set_active_ai_api_integration(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn clear_ai_api_integration(
     provider: String,
     app: tauri::AppHandle,
@@ -360,7 +360,7 @@ pub fn clear_ai_api_integration(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_project_ai_api_integration(
     app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,
@@ -375,7 +375,7 @@ pub fn get_project_ai_api_integration(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_project_ai_api_integration(
     provider: Option<String>,
     app: tauri::AppHandle,

@@ -559,7 +559,7 @@ fn require_draft(root: &fsa::RootFs, draft_id: &str) -> Result<(), String> {
 
 /// DSS-FR-YOVS: the draft's captured lifetime aggregate totals.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn read_draft_statistics(
     draft_id: String,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -578,7 +578,7 @@ pub fn read_draft_statistics(
 /// itself — no frontend call can forge an event, attribute one to another draft,
 /// or write a line of a log directly (DSS-FR-EKZI).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn record_draft_editing_interval(
     draft_id: String,
     started_at: String,

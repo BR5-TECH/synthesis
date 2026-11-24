@@ -118,7 +118,7 @@ pub fn save_delivery_layout_with<R: tauri::Runtime>(
 
 /// DMS contract surface: `"load delivery layout (scope)"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_delivery_layout(
     app: tauri::AppHandle,
     scope: String,
@@ -128,7 +128,7 @@ pub fn load_delivery_layout(
 
 /// DMS contract surface: `"save delivery layout (scope, layout)"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_delivery_layout(
     app: tauri::AppHandle,
     scope: String,
@@ -201,7 +201,7 @@ pub fn save_delivery_view_with<R: tauri::Runtime>(
 
 /// DMS contract surface: `"load delivery view (scope)"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_delivery_view(
     app: tauri::AppHandle,
     scope: String,
@@ -211,7 +211,7 @@ pub fn load_delivery_view(
 
 /// DMS contract surface: `"save delivery view (scope, view)"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_delivery_view(
     app: tauri::AppHandle,
     scope: String,

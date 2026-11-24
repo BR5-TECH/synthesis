@@ -46,7 +46,7 @@ fn no_part_of_this_module_is_reachable_from_the_frontend() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        !code.contains("#[tauri::command]"),
+        !code.contains("#[tauri::command") && !code.contains("blocking_command"),
         "BMI-FR-01: this module registers no Tauri command",
     );
     assert!(!code.contains(".emit("), "BMI-FR-01: this module emits no Tauri event of its own",);

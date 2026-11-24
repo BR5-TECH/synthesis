@@ -345,10 +345,7 @@ describe("useDraftsPanelState", () => {
     expect([...result.current.expanded]).toEqual(["backend"]);
   });
 
-  it("the newest write claims the guard even when an older one settles last", async () => {
-    // Whichever write reaches disk last is what the store holds, so an older
-    // dispatch settling later must not record what is persisted — or a change
-    // back to its value would be suppressed and never written.
+  it("CEX-FR-QZPN: a write made while one is in flight goes out after it, and a change back to the first value is still written", async () => {
     const settlers: Array<() => void> = [];
     invokeMock.mockImplementation(async (cmd: string) => {
       if (cmd === "load_drafts_panel_state") return DEFAULTS;
@@ -362,17 +359,18 @@ describe("useDraftsPanelState", () => {
     act(() => result.current.setFilter("all"));
     await waitFor(() => expect(saves()).toHaveLength(1));
     act(() => result.current.setFilter("archived"));
-    await waitFor(() => expect(saves()).toHaveLength(2));
-
-    // The OLDER write settles last.
+    // The second write waits for the first, so the backend stores the
+    // newest value last.
     await act(async () => {
-      settlers[1]();
-      await Promise.resolve();
-      settlers[0]();
       await Promise.resolve();
     });
+    expect(saves()).toHaveLength(1);
+    await act(async () => settlers[0]());
+    await waitFor(() => expect(saves()).toHaveLength(2));
+    expect(lastSaved().statusFilter).toBe("archived");
+    await act(async () => settlers[1]());
 
-    // Going back to `all` — the older write's value — must still be written.
+    // Going back to `all`, the first write's value, must still be written.
     act(() => result.current.setFilter("all"));
     await waitFor(() => expect(saves()).toHaveLength(3));
     expect(lastSaved().statusFilter).toBe("all");

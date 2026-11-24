@@ -541,7 +541,7 @@ fn activity_file(run_id: &str, dir: &std::path::Path, fs: Option<&FsAccess>) -> 
 
 /// `"read agent activity (run id, after, limit)"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn read_agent_activity(
     run_id: String,
     after: Option<u64>,

@@ -88,7 +88,7 @@ export interface Backend {
   panelState?: ChangesPanelState;
   defaultBranch?: string;
   branches?: BranchOption[];
-  uncommitted?: ChangeSet | (() => ChangeSet);
+  uncommitted?: ChangeSet | (() => ChangeSet | Promise<ChangeSet>);
   branchChanges?: ChangeSet | (() => ChangeSet);
   /** GTC-FR-21 / CHG-FR-37: the branch's standing against its upstream. */
   sync?: UpstreamSyncState | (() => UpstreamSyncState);

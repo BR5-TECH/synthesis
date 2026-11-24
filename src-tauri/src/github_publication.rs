@@ -543,7 +543,7 @@ fn load_publication_metadata_impl<R: tauri::Runtime>(
 
 /// GHP-FR-KVRH: the stored publication settings, defaults applied.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_github_publication_settings(
     app: tauri::AppHandle,
 ) -> Result<GithubPublicationSettings, String> {
@@ -568,7 +568,7 @@ fn get_github_publication_settings_impl<R: tauri::Runtime>(
 
 /// GHP-FR-NQWX: persist the five settings, or refuse and write nothing.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_github_publication_settings(
     parent_issue_types: Vec<String>,
     sub_issue_type: String,
@@ -794,7 +794,7 @@ fn resolve_draft_publication_conflict_impl<R: tauri::Runtime>(
 
 /// GHP-FR-EBSA: cancelling the choice leaves the attempt recoverable.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn cancel_draft_publication_conflict(
     draft_id: String,
     app: tauri::AppHandle,
@@ -819,7 +819,7 @@ fn cancel_draft_publication_conflict_impl<R: tauri::Runtime>(
 
 /// GHP-FR-NAXT: abandon the standing attempt, appending nothing.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn cancel_draft_publication_attempt(
     draft_id: String,
     app: tauri::AppHandle,
@@ -882,7 +882,7 @@ pub fn resolve_publication_repository_with<R: tauri::Runtime>(
 /// A URL no record of **this draft** holds is refused, so the command cannot be
 /// used to open an arbitrary address from the frontend.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn open_publication_issue(
     draft_id: String,
     url: String,

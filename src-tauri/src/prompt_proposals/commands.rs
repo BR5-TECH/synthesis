@@ -155,7 +155,7 @@ pub(super) fn require_root(project: &ProjectState) -> Result<fs::RootFs, String>
 /// interrupted transaction has been settled — so no proposal is ever reported in
 /// a state a journal has not yet resolved.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_prompt_change_proposals<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     artifact_id: String,
@@ -179,7 +179,7 @@ where
 /// PCP-FR-LDHK: the proposal's hunks and their placements against the file as
 /// it stands, for a review about to render them.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_prompt_change_proposal_hunks(
     proposal_id: String,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -251,7 +251,7 @@ where
 /// PCP-FR-ZQAH: accept one hunk, writing the file through the artifact's own
 /// save path inside the one-commit-point transaction.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn accept_prompt_change_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -284,7 +284,7 @@ where
 
 /// PCP-FR-RJHN: reject one hunk, writing nothing into the file.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn reject_prompt_change_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -313,7 +313,7 @@ where
 /// PCP-FR-HLDQ: hold one hunk for discussion, or release it. It decides
 /// nothing.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_prompt_change_hunk_discussing<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -349,7 +349,7 @@ where
 /// PCP-FR-EDTW: the author's own text over one undecided hunk. It is not a
 /// change to the file and emits no event.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn edit_prompt_change_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -383,7 +383,7 @@ where
 /// PCP-FR-RJHN: decline the proposal — reject every undecided hunk at once,
 /// writing nothing into the file.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn decline_prompt_change_proposal<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -416,7 +416,7 @@ where
 /// (PCR-FR-15), and it exists so an owed comment is reachable by a call rather
 /// than only by whatever command the author happens to make next.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn complete_prompt_change_decision<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,

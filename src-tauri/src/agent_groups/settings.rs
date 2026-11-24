@@ -41,7 +41,7 @@ impl AgentGroupSettings {
 
 /// `"load agent group settings"` (PSS-FR-CQML).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_agent_group_settings(
     project: crate::project_scope::Scoped<'_, crate::project::ProjectState>,
     store: tauri::State<'_, GlobalSettingsStore>,
@@ -52,7 +52,7 @@ pub fn load_agent_group_settings(
 
 /// `"save agent group settings"` (PSS-FR-CQML).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_agent_group_settings<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     settings: AgentGroupSettings,

@@ -51,7 +51,7 @@ fn discussion_for_write(
 /// `created_at`; whole-target ones follow, ordered by `created_at`. A note holds at
 /// most one.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_discussions(
     target: DiscussionTarget,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -70,7 +70,7 @@ pub fn list_discussions(
 /// alone (CMS-FR-52) — a call that found an existing discussion appended nothing
 /// and has nothing to announce.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_or_create_note_discussion<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     note_id: String,
@@ -117,7 +117,7 @@ pub fn get_or_create_note_discussion<R: tauri::Runtime>(
 /// CMS-FR-32: every discussion the project holds, of every owner, for
 /// `CMP-comments-panel.md`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_all_discussions(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<DiscussionListItem>, String> {
@@ -135,7 +135,7 @@ pub fn list_all_discussions(
 /// whose artifact has since been deleted. Writes nothing and emits nothing
 /// (CMS-FR-52).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn read_discussion(
     discussion_id: String,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -147,7 +147,7 @@ pub fn read_discussion(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn resolve_comment_author_identity(
     store: State<'_, GlobalSettingsStore>,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -181,7 +181,7 @@ pub fn emit_discussion_changed<R: tauri::Runtime>(
 // Reason: the flat named parameters are the IPC contract with the frontend `invoke()`.
 #[allow(clippy::too_many_arguments)]
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn open_discussion<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     target: DiscussionTarget,
@@ -236,7 +236,7 @@ pub fn open_discussion<R: tauri::Runtime>(
 // Reason: the flat named parameters are the IPC contract with the frontend `invoke()`.
 #[allow(clippy::too_many_arguments)]
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn add_comment<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     discussion_id: String,
@@ -288,7 +288,7 @@ pub fn add_comment<R: tauri::Runtime>(
 /// every log the scope holds, and this command is on the hot path — a card
 /// carrying three screenshots calls it three times as it renders (CMT-FR-49).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn read_comment_attachment(
     discussion_id: String,
     digest: String,
@@ -341,7 +341,7 @@ pub(super) fn locate_discussion_for_attachment(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_discussion_resolution<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     discussion_id: String,
@@ -364,7 +364,7 @@ pub fn set_discussion_resolution<R: tauri::Runtime>(
 
 /// CMS-FR-21: move a discussion's fragment to where its text now is.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn reanchor_discussion_fragment<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     discussion_id: String,

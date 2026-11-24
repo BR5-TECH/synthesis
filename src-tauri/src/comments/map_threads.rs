@@ -200,7 +200,7 @@ fn open_store(project: &ProjectState) -> Result<crate::fs::RootFs, String> {
 /// the node reference, or the latest open whole-map thread where the reference
 /// is absent, or nothing. It creates nothing and emits nothing.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn find_map_discussion<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     map_node: Option<MapNodeRef>,
@@ -225,7 +225,7 @@ pub fn find_map_discussion<R: tauri::Runtime>(
 /// agent conversations (AGC-FR-TFEN). The `"discussion changed"` event follows
 /// each write.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn open_map_discussion<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     map_node: Option<MapNodeRef>,
@@ -265,7 +265,7 @@ pub fn open_map_discussion<R: tauri::Runtime>(
 /// MPR-FR-NRNZ, `"list map discussions"`: every Map thread in the order they
 /// were opened.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_map_discussions<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     project: crate::project_scope::Scoped<'_, ProjectState>,

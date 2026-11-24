@@ -242,7 +242,7 @@ fn submission_events(
 /// Off the main thread: the hand-over of a plan update's answers takes the
 /// graduation write hold, which a Continue holds across its OpenSpec reads.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn submit_discussion_question_answers<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     discussion_id: String,

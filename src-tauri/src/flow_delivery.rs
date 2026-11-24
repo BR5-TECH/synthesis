@@ -411,7 +411,7 @@ pub fn compute_delivery_state<R: tauri::Runtime>(
 
 /// FDL-FR-AZQM: `"load flow delivery state"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_flow_delivery_state(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -529,7 +529,7 @@ pub fn plan_items_for_draft(
 
 /// FDL-FR-BDOD: `"find flow items for draft"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn find_flow_items_for_draft(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,

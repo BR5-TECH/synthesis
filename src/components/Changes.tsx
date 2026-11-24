@@ -89,6 +89,7 @@ import {
   comparisonLabel,
   diffScopeFor,
 } from "../comparison";
+import { coalescedRun } from "../coalescedRun";
 import type { BranchOption, ChangeSet } from "../types";
 
 export { canPush };
@@ -240,16 +241,21 @@ export function Changes({
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
+    // CHG-FR-RUAG: one event-driven read in flight at a time, and one more
+    // after it for any burst. The ticket still drops a read that a mode change
+    // or a manual refresh made stale.
+    const runner = coalescedRun(load);
     void onChangesUpdated(() => {
       // CHG-FR-38: the push state re-reads the branch's standing on the same
       // event, so Push becomes available as soon as a commit lands.
-      void load();
+      runner.run();
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
     });
     return () => {
       cancelled = true;
+      runner.dispose();
       unlisten?.();
     };
   }, [load]);
@@ -314,10 +320,12 @@ export function Changes({
   const notARepository = error?.includes(ERR_NOT_A_REPOSITORY) ?? false;
   const unknownBranch = error?.includes(ERR_UNKNOWN_BRANCH) ?? false;
 
-  const { revisioned, unrevisioned } = partitionEntries(
-    changeSet?.entries ?? [],
-    typeFilter,
-    text,
+  // A change set of a large clone holds thousands of entries, so the panel
+  // partitions and groups it once for each new change set or filter, not on
+  // every render.
+  const { revisioned, unrevisioned } = useMemo(
+    () => partitionEntries(changeSet?.entries ?? [], typeFilter, text),
+    [changeSet, typeFilter, text],
   );
 
   /**
@@ -347,8 +355,14 @@ export function Changes({
   // Read through a ref by the push listener, which subscribes once.
   const repositoriesRef = useRef(repositories);
   repositoriesRef.current = repositories;
-  const visibleEntries = [...revisioned, ...unrevisioned];
-  const groupModels = buildRepositoryGroups(visibleEntries, repositories);
+  const visibleEntries = useMemo(
+    () => [...revisioned, ...unrevisioned],
+    [revisioned, unrevisioned],
+  );
+  const groupModels = useMemo(
+    () => buildRepositoryGroups(visibleEntries, repositories),
+    [visibleEntries, repositories],
+  );
 
   const revealPath = reveal?.id ?? null;
   const revealNonce = reveal?.nonce;

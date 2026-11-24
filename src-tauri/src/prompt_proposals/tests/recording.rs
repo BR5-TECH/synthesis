@@ -81,7 +81,8 @@ fn no_tauri_command_records_a_proposal() {
         "the recording path is absent from the handler registry",
     );
     const MODULE: &str = include_str!("../commands.rs");
-    let commands: Vec<&str> = MODULE
+    let module = MODULE.replace("#[project_scope_macros::blocking_command]", "#[tauri::command]");
+    let commands: Vec<&str> = module
         .split("#[tauri::command")
         .skip(1)
         .filter_map(|tail| tail.split("pub fn ").nth(1))

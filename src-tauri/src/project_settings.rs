@@ -522,7 +522,7 @@ pub fn resolve_project_vendor_image(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_project_docker_images(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<images::ProjectVendorImageStatus>, String> {
@@ -531,7 +531,7 @@ pub fn load_project_docker_images(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_project_vendor_image(
     vendor: String,
     entry: images::ProjectVendorImage,
@@ -569,7 +569,7 @@ pub fn save_project_vendor_image(
 /// Every refusal happens before anything is started, and the project's one build
 /// slot is claimed last, so a refused build leaves the slot free.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn build_project_vendor_image(
     vendor: String,
     app: tauri::AppHandle,
@@ -681,7 +681,7 @@ pub fn build_project_vendor_image(
 /// keeps a running build rendered against its own tab and every Build control
 /// disabled on re-entry (`../ui/SET-project-settings.md` SET-FR-25, SET-FR-26).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_project_image_build_in_flight(
     registry: State<'_, images::ImageBuildRegistry>,
 ) -> Result<Option<images::InFlightImageBuild>, String> {
@@ -692,7 +692,7 @@ pub fn load_project_image_build_in_flight(
 /// `"project image build finished"` as `cancelled`, and the project's image
 /// configuration is left exactly as it was.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn cancel_project_vendor_image_build(
     operation_id: String,
     registry: State<'_, images::ImageBuildRegistry>,
@@ -731,7 +731,7 @@ pub fn save_changes_panel_state_to(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_changes_panel_state(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ChangesPanelState, String> {
@@ -744,7 +744,7 @@ pub fn load_changes_panel_state(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_changes_panel_state(
     state: ChangesPanelState,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -801,7 +801,7 @@ pub fn save_library_panel_state_to(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_library_panel_state(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<LibraryPanelState, String> {
@@ -814,7 +814,7 @@ pub fn load_library_panel_state(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_library_panel_state(
     state: LibraryPanelState,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -864,7 +864,7 @@ pub fn save_notes_panel_state_to(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_notes_panel_state(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<NotesPanelState, String> {
@@ -877,7 +877,7 @@ pub fn load_notes_panel_state(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_notes_panel_state(
     state: NotesPanelState,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -931,7 +931,7 @@ pub fn save_drafts_panel_state_to(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_drafts_panel_state(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<DraftsPanelState, String> {
@@ -944,7 +944,7 @@ pub fn load_drafts_panel_state(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_drafts_panel_state(
     state: DraftsPanelState,
     project: crate::project_scope::Scoped<'_, ProjectState>,

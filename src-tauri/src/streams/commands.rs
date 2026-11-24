@@ -72,7 +72,7 @@ pub(super) fn stream_has_live_run<R: tauri::Runtime>(
 
 /// WKS-FR-KDXF / WKS-FR-VTEY: create a stream, or create nothing.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn create_work_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     name: String,
@@ -250,7 +250,7 @@ fn listing_repo<R: tauri::Runtime>(
 
 /// WKS-FR-SGCM: every live stream, with what each holds.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_work_streams<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<Vec<WorkStreamSummary>, String> {
@@ -312,7 +312,7 @@ pub fn list_work_streams<R: tauri::Runtime>(
 
 /// WKS-FR-SGCM: one stream, or the typed refusal.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_work_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
@@ -359,7 +359,7 @@ pub(super) fn refuse<R: tauri::Runtime>(
 /// answers the unmerged check alone and `discard_uncommitted` the dirty check
 /// alone; neither reaches the three before them.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn delete_work_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
@@ -513,7 +513,7 @@ pub fn delete_work_stream<R: tauri::Runtime>(
 /// Empty where the working copy is missing. Writes nothing, and is the read a
 /// deletion confirmation names the discarded paths from.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_work_stream_uncommitted_paths<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,

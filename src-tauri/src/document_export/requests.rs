@@ -512,7 +512,7 @@ fn resolve_locked(
 
 /// DXP contract surface: `"get export request (id)"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_export_request(
     request_id: String,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -523,7 +523,7 @@ pub fn get_export_request(
 
 /// DXP contract surface: `"resolve export request (id, outcome, destination, error)"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn resolve_export_request<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     request_id: String,

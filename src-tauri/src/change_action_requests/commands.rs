@@ -166,7 +166,7 @@ pub(super) fn decision_context<R: tauri::Runtime>(
 
 /// CAR-FR-ALHA: `"list change action requests"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn list_change_action_requests(
     stream_id: String,
     change: String,
@@ -200,7 +200,7 @@ where
 
 /// CAR-FR-WXDA: `"decline change action request"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn decline_change_action_request<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     request_id: String,

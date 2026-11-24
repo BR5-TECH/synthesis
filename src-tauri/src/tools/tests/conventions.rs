@@ -81,7 +81,7 @@ fn no_tool_is_reachable_from_the_frontend() {
             .collect::<Vec<_>>()
             .join("\n");
         assert!(
-            !code.contains("#[tauri::command]"),
+            !code.contains("#[tauri::command") && !code.contains("blocking_command"),
             "{name} registers no Tauri command (TLC-FR-01)",
         );
         assert!(!code.contains(".emit("), "{name} emits no Tauri event of its own (TLC-FR-01)",);

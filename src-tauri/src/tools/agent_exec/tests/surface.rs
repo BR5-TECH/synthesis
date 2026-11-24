@@ -24,7 +24,8 @@ fn the_executor_is_not_reachable_from_the_frontend() {
     // `runtime.rs` or `descriptor.rs` would be just as reachable.
     for source in module_sources() {
         for declaration in [
-            "#[tauri::command]",
+            "#[tauri::command",
+            "#[project_scope_macros::blocking_command]",
             "impl rig::tool::PortableTool",
             "fn parameters(",
             "const NAME",

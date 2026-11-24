@@ -805,7 +805,7 @@ impl Inner {
 /// not worth failing the caller over (`../ui/LOG-logs.md` LOG-FR-19) — and
 /// answers normally with no project open.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn append_log_records(app: tauri::AppHandle, records: Vec<LogInput>) {
     append_and_publish(&app, &BUFFER, records);
 }
@@ -813,7 +813,7 @@ pub fn append_log_records(app: tauri::AppHandle, records: Vec<LogInput>) {
 /// LGC-FR-09 – LGC-FR-12 / LGC-FR-22: the records matching `filter`, positioned
 /// by `cursor` and bounded by `limit`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn query_logs(
     filter: LogFilter,
     cursor: Option<Cursor>,
@@ -835,7 +835,7 @@ pub fn query_logs(
 /// file there is replaced, since choosing an occupied path in a save dialog is
 /// how a user asks for that.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn export_logs(
     app: tauri::AppHandle,
     fs_access: tauri::State<'_, fs::FsAccessState>,

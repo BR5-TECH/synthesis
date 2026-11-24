@@ -64,7 +64,7 @@ fn log_failure(app: &tauri::AppHandle, message: &str, code: &str) {
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_voice_ai_integrations(
     store: State<'_, GlobalSettingsStore>,
 ) -> Result<VoiceAiIntegrations, String> {
@@ -130,7 +130,7 @@ pub async fn verify_voice_ai_integration(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_voice_ai_routes(
     provider: String,
     transcription_route: TranscriptionRoute,
@@ -147,7 +147,7 @@ pub fn set_voice_ai_routes(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_voice_ai_default_voice(
     provider: String,
     voice_name: String,
@@ -164,7 +164,7 @@ pub fn set_voice_ai_default_voice(
 
 /// VOP-FR-HQTQ.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_voice_ai_speech_options(
     provider: String,
     speed_percent: Option<u16>,
@@ -181,7 +181,7 @@ pub fn set_voice_ai_speech_options(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_active_voice_ai_integration(
     provider: String,
     app: tauri::AppHandle,
@@ -196,7 +196,7 @@ pub fn set_active_voice_ai_integration(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn clear_voice_ai_integration(
     provider: String,
     app: tauri::AppHandle,
@@ -360,7 +360,7 @@ pub async fn retry_voice_capture(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn cancel_voice_capture(session_id: String, voice: State<'_, VoiceAi>) -> Result<(), String> {
     voice.cancel_capture(&session_id)
 }
@@ -438,7 +438,7 @@ pub async fn speak_voice_segment(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn cancel_voice_speech(speech_id: String, voice: State<'_, VoiceAi>) -> Result<(), String> {
     voice.cancel_speech(&speech_id);
     Ok(())

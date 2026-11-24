@@ -13,7 +13,7 @@ use crate::logging::{log_info, Domain, BUFFER};
 
 /// `"load embeddings settings"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_embeddings_settings(
     store: tauri::State<'_, GlobalSettingsStore>,
 ) -> Result<EmbeddingsSettings, String> {
@@ -22,7 +22,7 @@ pub fn load_embeddings_settings(
 
 /// `"save embeddings settings"` (EMB-FR-JFOV, EMB-FR-TGCL).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_embeddings_settings<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     settings: EmbeddingsSettings,
@@ -61,14 +61,14 @@ pub(crate) fn save_settings<R: tauri::Runtime>(
 
 /// `"list embedding models"` (EMB-FR-MIDG).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_embedding_models() -> Vec<super::catalog::EmbeddingModelEntry> {
     super::catalog::list()
 }
 
 /// `"retry embeddings model download"` (EMB-FR-KEGS).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn retry_embeddings_model_download<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> EmbeddingsStatus {
@@ -81,7 +81,7 @@ pub fn retry_embeddings_model_download<R: tauri::Runtime>(
 
 /// `"load project embeddings mode"` (GSS-FR-DSUG).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_project_embeddings_mode(
     project: crate::project_scope::Scoped<'_, crate::project::ProjectState>,
     store: tauri::State<'_, GlobalSettingsStore>,
@@ -92,7 +92,7 @@ pub fn load_project_embeddings_mode(
 
 /// `"save project embeddings mode"` (EMB-FR-CTXC).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_project_embeddings_mode<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     mode: ProjectEmbeddingsMode,
@@ -117,7 +117,7 @@ pub fn save_project_embeddings_mode<R: tauri::Runtime>(
 
 /// `"get embeddings status"` (EMB-FR-ZFGT).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_embeddings_status(
     service: crate::project_scope::Scoped<'_, EmbeddingsService>,
 ) -> EmbeddingsStatus {
@@ -126,7 +126,7 @@ pub fn get_embeddings_status(
 
 /// `"start reindex (scope)"` (EMB-FR-HRYV, EMB-FR-QNWF).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn start_reindex<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     scope: ReindexScope,

@@ -836,7 +836,7 @@ impl SearchRegistry {
 /// and ends immediately with `completed`. That is not an error: v1 search is
 /// scoped to the open project's content root.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn start_search<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     query: String,
@@ -941,7 +941,7 @@ fn search_thread_body<R: tauri::Runtime>(
 /// SCC-FR-14: stop a running search. A `search_id` that is already ended is a
 /// no-op, not an error.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn cancel_search(
     search_id: String,
     registry: crate::project_scope::Scoped<'_, SearchRegistry>,

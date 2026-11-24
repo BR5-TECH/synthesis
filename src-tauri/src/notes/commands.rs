@@ -9,7 +9,7 @@ use crate::project_scope::ProjectStores;
 // ---------------------------------------------------------------------------
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_notes_for_entity(
     entity_id: String,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -20,7 +20,7 @@ pub fn list_notes_for_entity(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_project_notes(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<NoteListItem>, String> {
@@ -30,7 +30,7 @@ pub fn list_project_notes(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_all_notes(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<NoteListItem>, String> {
@@ -84,7 +84,7 @@ fn note_warn<R: tauri::Runtime>(
 /// (NTC-FR-23) is the one an author hits in ordinary use, and a handled error
 /// that reports nothing is invisible in the one place anybody will look.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn create_note<R: tauri::Runtime>(
     scope: NoteScope,
     body: String,
@@ -120,7 +120,7 @@ pub fn create_note<R: tauri::Runtime>(
 /// channel; an update that changed only the reminder or only the scope does not,
 /// neither of them changing what is indexed (BMI-FR-29).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn update_note<R: tauri::Runtime>(
     id: String,
     fields: NoteFields,
@@ -175,7 +175,7 @@ pub fn update_note<R: tauri::Runtime>(
 /// whole, and cancelling an agent mid-answer in a conversation that is still
 /// there would cost the author work for nothing (AGC-FR-30).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn delete_note<R: tauri::Runtime>(id: String, app: tauri::AppHandle<R>) -> Result<(), String> {
     delete_note_transaction(&app, &id)
 }

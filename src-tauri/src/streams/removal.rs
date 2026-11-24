@@ -238,7 +238,7 @@ pub(super) fn sweep_gone_streams<R: tauri::Runtime>(
 /// WKS-FR-YLBX: the notices of the open project. Reading consumes none of them:
 /// a listing runs on any surface, and a remount of the selector reads again.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_removed_work_streams<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<Vec<RemovedStreamNotice>, String> {
@@ -251,7 +251,7 @@ pub fn list_removed_work_streams<R: tauri::Runtime>(
 
 /// WKS-FR-YLBX: drop one notice. An id with no notice is no error.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn dismiss_removed_work_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,

@@ -785,7 +785,7 @@ pub fn resolve_github_identity(
 // ---------------------------------------------------------------------------
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_github_tokens(
     store: State<'_, GlobalSettingsStore>,
     tokens: State<'_, GithubTokens>,
@@ -794,7 +794,7 @@ pub fn list_github_tokens(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn add_github_token(
     label: String,
     secret: String,
@@ -817,7 +817,7 @@ pub fn add_github_token(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn validate_github_token(
     id: String,
     app: tauri::AppHandle,
@@ -831,7 +831,7 @@ pub fn validate_github_token(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn rename_github_token(
     id: String,
     label: String,
@@ -845,7 +845,7 @@ pub fn rename_github_token(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn remove_github_token(
     id: String,
     app: tauri::AppHandle,
@@ -861,7 +861,7 @@ pub fn remove_github_token(
 /// Transmits nothing, receives nothing — the token comes back only by the author
 /// pasting it.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn open_github_token_creation_page(
     host: Option<String>,
     app: tauri::AppHandle,
@@ -888,7 +888,7 @@ fn log_refusal(app: &tauri::AppHandle, message: &str, code: &str) {
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_project_github_token_binding(
     store: State<'_, GlobalSettingsStore>,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -897,7 +897,7 @@ pub fn get_project_github_token_binding(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_project_github_token_binding(
     token_id: String,
     app: tauri::AppHandle,

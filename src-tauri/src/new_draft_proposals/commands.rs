@@ -18,7 +18,7 @@ pub struct NewDraftBody {
 
 /// DCP-FR-ZDSP: every new-draft proposal of the draft, newest first.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_new_draft_proposals(
     draft_id: String,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -29,7 +29,7 @@ pub fn list_new_draft_proposals(
 
 /// DCP contract surface: the proposed body as it stands.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_new_draft_proposal_body(
     proposal_id: String,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -65,7 +65,7 @@ where
 
 /// DCP-FR-KOOA: accept one new-draft proposal and create its draft.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn accept_new_draft_proposal<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -86,7 +86,7 @@ where
 
 /// DCP-FR-FZEP: reject one new-draft proposal; nothing is created.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn reject_new_draft_proposal<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -102,7 +102,7 @@ where
 
 /// DCP-FR-VLLP: the author ends the decomposition.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn confirm_draft_decomposition<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,

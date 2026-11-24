@@ -8,6 +8,7 @@ use tokio::sync::Notify;
 
 use super::flow::{Batcher, FlowControl, MAX_FRAME_BYTES};
 use super::history::History;
+use super::input::{InputQueue, InputRefusal, QueueRefusal};
 use super::model::*;
 use super::process::{ProcessControl, ProcessHandle};
 use super::tmux::supervisor::Persistence;
@@ -61,6 +62,9 @@ struct Inner {
     history: History,
     attached: Option<Attached>,
     control: Option<Arc<dyn ProcessControl>>,
+    /// TRS-FR-GSYR: the input queue of `control`, started at the first write.
+    /// It is dropped with the control, which ends its writer thread.
+    input: Option<InputQueue>,
     /// The session was closed or its target is gone: a process that starts
     /// later is ended at once.
     ended_by_module: bool,
@@ -107,6 +111,7 @@ impl Session {
                 history,
                 attached: None,
                 control: None,
+                input: None,
                 ended_by_module: false,
                 size: None,
                 persistence: None,
@@ -332,6 +337,31 @@ impl Session {
         self.lock().control.clone()
     }
 
+    /// TRS-FR-GSYR, TRS-FR-DUME: puts `data` last in the input queue of the
+    /// running process and returns at once. `start` makes the queue at the
+    /// first write to a process. A session that is not running takes nothing.
+    pub fn queue_input(
+        &self,
+        data: &[u8],
+        start: impl FnOnce(Arc<dyn ProcessControl>) -> std::io::Result<InputQueue>,
+    ) -> Result<(), InputRefusal> {
+        let mut inner = self.lock();
+        if inner.state != TerminalState::Running {
+            return Err(InputRefusal::NotRunning);
+        }
+        let Some(control) = inner.control.clone() else {
+            return Err(InputRefusal::NotRunning);
+        };
+        if inner.input.is_none() {
+            inner.input = Some(start(control).map_err(|_| InputRefusal::NotRunning)?);
+        }
+        let queue = inner.input.as_ref().expect("the queue was just set");
+        queue.push(data).map_err(|refusal| match refusal {
+            QueueRefusal::BacklogFull { first } => InputRefusal::BacklogFull { first },
+            QueueRefusal::Closed => InputRefusal::NotRunning,
+        })
+    }
+
     /// The process started. Returns false where the session was ended
     /// meanwhile; the caller then terminates the process.
     pub fn started(
@@ -349,6 +379,7 @@ impl Session {
             let _ = control.resize(cols, rows);
         }
         inner.control = Some(control);
+        inner.input = None;
         inner.state = TerminalState::Running;
         true
     }
@@ -365,12 +396,14 @@ impl Session {
         inner.end_reason = Some(EndReason::StartFailed);
         inner.end_detail = Some(line);
         inner.control = None;
+        inner.input = None;
     }
 
     /// TRS-FR-DVBF, TRS-FR-HWNA: the process ended on its own.
     pub fn process_ended(&self, exit_code: Option<i32>, reason: EndReason) {
         let mut inner = self.lock();
         inner.control = None;
+        inner.input = None;
         if inner.state == TerminalState::TargetGone || inner.ended_by_module {
             return;
         }
@@ -387,6 +420,7 @@ impl Session {
         inner.state = TerminalState::TargetGone;
         inner.end_reason = Some(EndReason::TargetGone);
         let control = inner.control.take();
+        inner.input = None;
         drop(inner);
         // A pump that waits for an acknowledgement drains the ended process.
         self.resume.notify_one();
@@ -400,6 +434,7 @@ impl Session {
         inner.attached = None;
         inner.history.clear();
         let control = inner.control.take();
+        inner.input = None;
         drop(inner);
         // A pump that waits for an acknowledgement drains the ended process.
         self.resume.notify_one();

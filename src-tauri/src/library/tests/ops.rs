@@ -361,8 +361,11 @@ fn index_reading_commands_are_async() {
         for name in names {
             let marker = format!("pub fn {name}(");
             let before = source.split_once(&marker).unwrap_or_else(|| panic!("{name}")).0;
-            let attribute = before.rsplit("#[tauri::command").next().unwrap_or("");
-            assert!(attribute.starts_with("(async)]"), "{name} must be #[tauri::command(async)]");
+            let attribute = before.trim_end().lines().last().unwrap_or("").trim();
+            assert_eq!(
+                attribute, "#[project_scope_macros::blocking_command]",
+                "{name} must run off the main thread (CEX-FR-JBTB)"
+            );
         }
     }
 }

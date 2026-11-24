@@ -445,7 +445,7 @@ fn carry_out<R: tauri::Runtime>(
 /// GTC-FR-UMXA: read-only. What deleting a local branch would remove and
 /// discard, or the typed refusal.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn inspect_branch_deletion(
     name: String,
     app: tauri::AppHandle,

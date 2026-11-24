@@ -682,7 +682,7 @@ fn end_speech<R: tauri::Runtime>(
 
 /// AGC-FR-SJQP: `dispatch_speech_turn(nickname, origin, speech_id, text)`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn dispatch_speech_turn<R: tauri::Runtime>(
     nickname: String,
     origin: ConversationOrigin,
@@ -722,7 +722,7 @@ pub fn dispatch_speech_turn<R: tauri::Runtime>(
 
 /// AGC-FR-KXOJ: `steer_speech_turn(speech_id, text)`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn steer_speech_turn<R: tauri::Runtime>(
     speech_id: String,
     text: String,
@@ -737,7 +737,7 @@ pub fn steer_speech_turn<R: tauri::Runtime>(
 
 /// AGC-FR-TCDQ / AGC-FR-NFYK: `end_speech_turn(speech_id, comment_id?)`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn end_speech_turn<R: tauri::Runtime>(
     speech_id: String,
     comment_id: Option<String>,

@@ -171,7 +171,7 @@ pub(super) fn require_store(project: &ProjectState) -> Result<fs::RootFs, String
 // Async: it takes the change lock, which a commit can hold for a while,
 // so it never blocks the main thread.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn list_change_edit_proposals<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
@@ -194,7 +194,7 @@ where
 // Async: it takes the change lock, which a commit can hold for a while,
 // so it never blocks the main thread.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn load_change_edit_proposal_hunks<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -254,7 +254,7 @@ where
 
 /// CEP-FR-OPGW: accept one hunk, writing its file in the stream's working copy.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn accept_change_edit_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -273,7 +273,7 @@ where
 
 /// CEP-FR-UCVO: reject one hunk. It writes nothing into the working copy.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn reject_change_edit_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -292,7 +292,7 @@ where
 
 /// CEP-FR-UCVO: decline the proposal — reject every undecided hunk.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn decline_change_edit_proposal<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -311,7 +311,7 @@ where
 // Async: it takes the change lock, which a commit can hold for a while,
 // so it never blocks the main thread.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn set_change_edit_hunk_discussing<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -352,7 +352,7 @@ where
 // Async: it takes the change lock, which a commit can hold for a while,
 // so it never blocks the main thread.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn edit_change_edit_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -385,7 +385,7 @@ where
 /// CEP-FR-IYHP: finish a decision: settle an interrupted acceptance, append an
 /// owed comment, and commit every file the change still owes.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn complete_change_edit_decision<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,

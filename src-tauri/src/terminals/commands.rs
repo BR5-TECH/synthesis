@@ -43,13 +43,13 @@ impl OutputSink for ChannelSink {
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_terminal_targets(app: tauri::AppHandle) -> Result<Vec<TerminalTarget>, TerminalError> {
     logged(&app, "list_targets", service::list_targets(&app))
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_terminals(app: tauri::AppHandle) -> Result<Vec<TerminalSummary>, TerminalError> {
     logged(&app, "list", service::list(&app))
 }
@@ -74,7 +74,7 @@ pub async fn create_terminal(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn attach_terminal(
     app: tauri::AppHandle,
     terminal_id: String,
@@ -84,7 +84,7 @@ pub fn attach_terminal(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn detach_terminal(app: tauri::AppHandle, terminal_id: String) -> Result<(), TerminalError> {
     logged(&app, "detach", service::detach(&app, &terminal_id))
 }
@@ -121,7 +121,7 @@ pub fn acknowledge_terminal_output(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_terminal_pinned(
     app: tauri::AppHandle,
     terminal_id: String,
@@ -131,7 +131,7 @@ pub fn set_terminal_pinned(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_terminal_label(
     app: tauri::AppHandle,
     terminal_id: String,
@@ -141,7 +141,7 @@ pub fn set_terminal_label(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_terminal_theme(
     app: tauri::AppHandle,
     terminal_id: String,
@@ -151,7 +151,7 @@ pub fn set_terminal_theme(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn close_terminal(app: tauri::AppHandle, terminal_id: String) -> Result<(), TerminalError> {
     logged(&app, "close", service::close(&app, &terminal_id))
 }

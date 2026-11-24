@@ -21,6 +21,7 @@ import * as api from "../api";
 import type { PullRequestSource } from "../components/CreatePullRequest/types";
 import { parseRejection } from "../components/Git/errors";
 import { onChangesUpdated } from "../events";
+import { coalescedRun } from "../coalescedRun";
 import { logWarn } from "../logging";
 import { openPullRequestReason } from "../state/openPullRequests";
 import type { BranchStack, PullRequestHeadState, PullRequestSummary } from "../types";
@@ -182,15 +183,19 @@ export function useCurrentBranchPullRequest(enabled = true) {
 
   useEffect(() => {
     if (!enabled) return;
-    void read();
+    // CHG-FR-RUAG: one read in flight at a time, and one more after it for
+    // any burst of events.
+    const runner = coalescedRun(read);
+    runner.run();
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    void onChangesUpdated(() => void read()).then((fn) => {
+    void onChangesUpdated(() => runner.run()).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
     });
     return () => {
       cancelled = true;
+      runner.dispose();
       seq.current += 1;
       stackRead.current = null;
       unlisten?.();

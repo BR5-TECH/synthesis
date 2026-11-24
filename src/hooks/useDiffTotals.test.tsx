@@ -179,3 +179,31 @@ describe("re-rooting on a worktree change (STB-FR-30)", () => {
     await waitFor(() => expect(reads()).toBe(before + 1));
   });
 });
+
+describe("a burst of events (STB-FR-GAYM)", () => {
+  it("STB-FR-GAYM: events during a read start exactly one more read, and the newest answer shows", async () => {
+    const { result } = renderHook(() => useDiffTotals(0));
+    await waitFor(() => expect(result.current?.addedLines).toBe(412));
+    await waitFor(() => expect(listeners[CHANGES_UPDATED]?.length).toBe(1));
+
+    const releases: Array<(v: DiffTotals) => void> = [];
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd !== "get_uncommitted_diff_totals") {
+        return Promise.reject(new Error(`unexpected invoke ${cmd}`));
+      }
+      return new Promise<DiffTotals>((r) => releases.push(r));
+    });
+    const before = reads();
+    fireChangesUpdated();
+    expect(reads()).toBe(before + 1);
+    // A submodule clone: many events while the first read is in flight.
+    for (let i = 0; i < 20; i += 1) fireChangesUpdated();
+    expect(reads()).toBe(before + 1);
+
+    await act(async () => releases[0]({ addedLines: 1, removedLines: 1, fileCount: 1 }));
+    await waitFor(() => expect(reads()).toBe(before + 2));
+    await act(async () => releases[1]({ addedLines: 9, removedLines: 9, fileCount: 9 }));
+    await waitFor(() => expect(result.current?.addedLines).toBe(9));
+    expect(reads()).toBe(before + 2);
+  });
+});

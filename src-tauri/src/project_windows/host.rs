@@ -8,7 +8,7 @@
 use crate::project_scope::events::EmitToProject;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{mpsc, Mutex, MutexGuard, OnceLock};
 
 use serde::Serialize;
 use tauri::{Emitter, Manager, Runtime};
@@ -50,6 +50,14 @@ const DOMAINS: [Domain; 1] = [Domain::Backend];
 pub struct ProjectWindows {
     list: Mutex<ProjectWindowList>,
     counter: AtomicU32,
+    /// PWN-FR-SCFZ: the queue of the one thread that publishes the list.
+    /// `None` when the thread could not start: each publish then runs on the
+    /// caller's thread.
+    publisher: OnceLock<Option<mpsc::Sender<()>>>,
+    /// How many publishes were asked for, so a test knows how many events to
+    /// wait for.
+    #[cfg(test)]
+    requested: std::sync::atomic::AtomicUsize,
 }
 
 impl ProjectWindows {
@@ -103,8 +111,54 @@ fn log_event<R: Runtime>(app: &tauri::AppHandle<R>, message: &str, name: &str, l
     );
 }
 
+/// PWN-FR-NEYF, PWN-FR-SCFZ: ask the publisher thread to tell every window
+/// about the list. It returns at once.
+///
+/// Commands that change the list run on several workers at the same time
+/// (`CEX-command-execution.md` CEX-FR-FUUP). One thread publishes, and it
+/// reads the list when it publishes, so the events keep the order of the
+/// changes and the last event holds the current list. The publish does not run
+/// on the caller's thread: a title read waits for the main thread, and a
+/// main-thread caller must not wait for itself.
+fn publish<R: Runtime>(app: &tauri::AppHandle<R>) {
+    let windows = app.state::<ProjectWindows>();
+    let sender = windows.publisher.get_or_init(|| start_publisher(app.clone()));
+    #[cfg(test)]
+    windows.requested.fetch_add(1, Ordering::SeqCst);
+    let sent = sender.as_ref().is_some_and(|sender| sender.send(()).is_ok());
+    if !sent {
+        let snapshot = windows.lock().snapshot();
+        publish_now(app, &snapshot);
+    }
+}
+
+fn start_publisher<R: Runtime>(app: tauri::AppHandle<R>) -> Option<mpsc::Sender<()>> {
+    let (sender, requests) = mpsc::channel::<()>();
+    let publisher = app.clone();
+    let started =
+        std::thread::Builder::new().name("project-windows-publish".into()).spawn(move || {
+            for () in requests {
+                let snapshot = publisher.state::<ProjectWindows>().lock().snapshot();
+                publish_now(&publisher, &snapshot);
+            }
+        });
+    match started {
+        Ok(_) => Some(sender),
+        Err(error) => {
+            logging::log_error(
+                &app,
+                &BUFFER,
+                &DOMAINS,
+                "project window publisher could not start",
+                log_fields! { "cause" => error.to_string() },
+            );
+            None
+        }
+    }
+}
+
 /// Tell every window about the list, and bring the OS titles in line with it.
-fn publish<R: Runtime>(app: &tauri::AppHandle<R>, snapshot: &ProjectWindowsSnapshot) {
+fn publish_now<R: Runtime>(app: &tauri::AppHandle<R>, snapshot: &ProjectWindowsSnapshot) {
     for entry in &snapshot.windows {
         if let Some(window) = app.get_webview_window(&entry.window_label) {
             let title = project_window_title(&entry.name, entry.needs_attention);
@@ -204,13 +258,13 @@ pub fn project_id_of_path(path: &str) -> String {
 }
 
 /// PWN-FR-TJEN.
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_project_windows(windows: tauri::State<'_, ProjectWindows>) -> ProjectWindowsSnapshot {
     windows.lock().snapshot()
 }
 
 /// The entry of the window that makes the call, if it holds a project.
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn current_project_window<R: Runtime>(
     window: tauri::Window<R>,
     windows: tauri::State<'_, ProjectWindows>,
@@ -220,7 +274,7 @@ pub fn current_project_window<R: Runtime>(
 
 /// PWN-FR-AYTY: the calling window holds this project now. Called after the
 /// project is mounted, at the first open in a window and at "This tab".
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn attach_project_to_window<R: Runtime>(
     project_id: String,
     window: tauri::Window<R>,
@@ -231,7 +285,7 @@ pub fn attach_project_to_window<R: Runtime>(
     let label = window.label().to_string();
     let name = crate::project::basename(&project_id);
     let mut replaced_project = None;
-    let snapshot = {
+    {
         let mut list = windows.lock();
         if let Some(previous) = list.find_by_label(&label).map(|e| e.project_id.clone()) {
             if previous != project_id {
@@ -246,35 +300,33 @@ pub fn attach_project_to_window<R: Runtime>(
             return Err(ERR_PROJECT_ALREADY_OPEN.to_string());
         }
         list.activate(&project_id);
-        list.snapshot()
-    };
+    }
     // PWN-FR-AYTY: the project this window held leaves with its scope.
     if let Some(previous) = replaced_project {
         scopes.remove(&previous);
     }
     log_event(&app, "project attached to window", &name, &label);
-    publish(&app, &snapshot);
+    publish(&app);
     Ok(())
 }
 
 /// The calling window holds no project now: it shows the Project picker.
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn detach_project_from_window<R: Runtime>(
     window: tauri::Window<R>,
     app: tauri::AppHandle<R>,
     windows: tauri::State<'_, ProjectWindows>,
 ) {
     let label = window.label().to_string();
-    let snapshot = {
+    {
         let mut list = windows.lock();
         let Some(id) = list.find_by_label(&label).map(|e| e.project_id.clone()) else {
             return;
         };
         list.close(&id);
-        list.snapshot()
-    };
+    }
     log_event(&app, "project detached from window", "", &label);
-    publish(&app, &snapshot);
+    publish(&app);
 }
 
 /// The result of `open_project_window`.
@@ -302,21 +354,16 @@ pub async fn open_project_window<R: Runtime>(
     let label = windows.next_label();
     let outcome = windows.lock().open(entry_for(&project_id, &label));
     if let OpenOutcome::AlreadyOpen { window_label } = outcome {
-        let snapshot = windows.lock().snapshot();
         bring_to_front(&app, &window_label);
-        publish(&app, &snapshot);
+        publish(&app);
         return Ok(OpenProjectWindowResult { project_id, window_label, created: false });
     }
     let name = crate::project::basename(&project_id);
     log_event(&app, "project window creation started", &name, &label);
     let created = create_project_window(&app, &window, &label, &name);
     if let Err(reason) = created {
-        let snapshot = {
-            let mut list = windows.lock();
-            list.close(&project_id);
-            list.snapshot()
-        };
-        publish(&app, &snapshot);
+        windows.lock().close(&project_id);
+        publish(&app);
         logging::log_error(
             &app,
             &BUFFER,
@@ -326,9 +373,8 @@ pub async fn open_project_window<R: Runtime>(
         );
         return Err(reason);
     }
-    let snapshot = windows.lock().snapshot();
     log_event(&app, "project window created", &name, &label);
-    publish(&app, &snapshot);
+    publish(&app);
     Ok(OpenProjectWindowResult { project_id, window_label: label, created: true })
 }
 
@@ -439,24 +485,21 @@ fn join_tab_group<R: Runtime>(
 }
 
 /// PWN-FR-XUJP.
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn activate_project_window<R: Runtime>(
     project_id: String,
     app: tauri::AppHandle<R>,
     windows: tauri::State<'_, ProjectWindows>,
 ) -> Result<(), String> {
-    let (label, snapshot) = {
-        let mut list = windows.lock();
-        let label = list.activate(&project_id).ok_or_else(|| ERR_PROJECT_NOT_OPEN.to_string())?;
-        (label, list.snapshot())
-    };
+    let label =
+        windows.lock().activate(&project_id).ok_or_else(|| ERR_PROJECT_NOT_OPEN.to_string())?;
     bring_to_front(&app, &label);
-    publish(&app, &snapshot);
+    publish(&app);
     Ok(())
 }
 
 /// PWN-FR-BYCL.
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn request_project_window_close<R: Runtime>(
     project_id: String,
     app: tauri::AppHandle<R>,
@@ -483,22 +526,21 @@ pub struct CloseProjectWindowResult {
 
 /// PWN-FR-YRXF, PWN-FR-QEGI: drop the scope of the project, remove its entry,
 /// and close its window. The last window stays and shows the Project picker.
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn close_project_window<R: Runtime>(
     project_id: String,
     app: tauri::AppHandle<R>,
     windows: tauri::State<'_, ProjectWindows>,
     scopes: tauri::State<'_, crate::project_scope::ProjectScopes>,
 ) -> Result<CloseProjectWindowResult, String> {
-    let (label, name, outcome, snapshot) = {
+    let (label, name, outcome, last_closed) = {
         let mut list = windows.lock();
         let entry =
             list.find(&project_id).cloned().ok_or_else(|| ERR_PROJECT_NOT_OPEN.to_string())?;
         let outcome = list.close(&project_id);
-        (entry.window_label, entry.name, outcome, list.snapshot())
+        (entry.window_label, entry.name, outcome, list.snapshot().windows.is_empty())
     };
     scopes.remove(&project_id);
-    let last_closed = snapshot.windows.is_empty();
     log_event(&app, "project window closed", &name, &label);
     if !last_closed {
         if let Some(window) = app.get_webview_window(&label) {
@@ -512,19 +554,19 @@ pub fn close_project_window<R: Runtime>(
             bring_to_front(&app, &next);
         }
     }
-    publish(&app, &snapshot);
+    publish(&app);
     Ok(CloseProjectWindowResult { last_closed })
 }
 
 /// PWN-FR-CFSW.
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_project_window_attention<R: Runtime>(
     project_id: String,
     needs_attention: bool,
     app: tauri::AppHandle<R>,
     windows: tauri::State<'_, ProjectWindows>,
 ) -> Result<(), String> {
-    let snapshot = {
+    {
         let mut list = windows.lock();
         if list.find(&project_id).is_none() {
             return Err(ERR_PROJECT_NOT_OPEN.to_string());
@@ -532,9 +574,8 @@ pub fn set_project_window_attention<R: Runtime>(
         if !list.set_attention(&project_id, needs_attention) {
             return Ok(());
         }
-        list.snapshot()
-    };
-    publish(&app, &snapshot);
+    }
+    publish(&app);
     Ok(())
 }
 
@@ -550,13 +591,10 @@ pub fn activate_neighbour<R: Runtime>(app: &tauri::AppHandle<R>, step: i32) {
     let Some(project_id) = target else {
         return;
     };
-    let label_and_snapshot = {
-        let mut list = windows.lock();
-        list.activate(&project_id).map(|label| (label, list.snapshot()))
-    };
-    if let Some((label, snapshot)) = label_and_snapshot {
+    let label = windows.lock().activate(&project_id);
+    if let Some(label) = label {
         bring_to_front(app, &label);
-        publish(app, &snapshot);
+        publish(app);
     }
 }
 
@@ -565,7 +603,7 @@ pub fn note_window_focused<R: Runtime>(app: &tauri::AppHandle<R>, label: &str) {
     let Some(windows) = app.try_state::<ProjectWindows>() else {
         return;
     };
-    let snapshot = {
+    {
         let mut list = windows.lock();
         let Some(id) = list.find_by_label(label).map(|e| e.project_id.clone()) else {
             return;
@@ -576,9 +614,8 @@ pub fn note_window_focused<R: Runtime>(app: &tauri::AppHandle<R>, label: &str) {
             return;
         }
         list.activate(&id);
-        list.snapshot()
-    };
-    publish(app, &snapshot);
+    }
+    publish(app);
 }
 
 /// PWN-FR-NTFY: the window label of one project, if a window holds it.
@@ -602,11 +639,11 @@ pub fn activate_project_for_notification<R: Runtime>(
         return None;
     }
     let windows = app.try_state::<ProjectWindows>()?;
-    let (label, snapshot) = {
-        let mut list = windows.lock();
-        let label = list.activate(project_id)?;
-        (label, list.snapshot())
-    };
-    publish(app, &snapshot);
+    let label = windows.lock().activate(project_id)?;
+    publish(app);
     Some(label)
 }
+
+#[cfg(test)]
+#[path = "host_tests.rs"]
+mod host_tests;

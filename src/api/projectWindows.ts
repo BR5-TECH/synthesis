@@ -35,7 +35,7 @@ export const detachProjectFromWindow = () =>
 export const openProjectWindow = (path: string) =>
   invoke<OpenProjectWindowResult>("open_project_window", { path });
 
-// PWN-FR-XUJP.
+// PWN-FR-XUJP. CEX-FR-QZPN: in one order with the attention flag.
 export const activateProjectWindow = (projectId: string) =>
   invoke<void>("activate_project_window", { projectId });
 

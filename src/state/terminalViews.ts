@@ -11,7 +11,7 @@
  */
 import type { FitAddon, Ghostty as GhosttyInstance, Terminal } from "ghostty-web";
 import * as api from "../api";
-import { logDebug, logWarn } from "../logging";
+import { logDebug, logInfo, logWarn } from "../logging";
 import { subscribeTheme } from "../components/markdownMermaidRender";
 import { isMacPlatform } from "../platform";
 import { TERMINAL_INPUT_LIMIT } from "../api/terminals";
@@ -29,6 +29,20 @@ export const TERMINAL_SCROLLBACK_LINES = 10_000;
  */
 export const TERMINAL_SCROLLBACK_BYTES = TERMINAL_SCROLLBACK_LINES * 160 * 14;
 
+/**
+ * TRM-FR-VBOY, TRM-FR-PLUX: the most WebAssembly memory that one terminal
+ * keeps. ghostty-web 0.4.0 grows its memory with no limit when output with
+ * many styles or graphemes moves into the scrollback.
+ */
+export const TERMINAL_MEMORY_CAP_BYTES = 256 * 1024 * 1024;
+
+/**
+ * TRM-FR-VBOY: the output that a terminal receives before the memory cap
+ * applies to it. It is two histories (TRS-FR-IZWM, 4 MiB), so the history
+ * that a new terminal replays can never make it again at once.
+ */
+export const TERMINAL_REMAKE_MIN_OUTPUT_BYTES = 2 * 4 * 1024 * 1024;
+
 interface ViewEntry {
   id: string;
   host: HTMLDivElement;
@@ -41,10 +55,16 @@ interface ViewEntry {
   released: boolean;
   /** TRM-FR-WRVB: the theme changed while the tab was hidden; the next show makes the terminal again. */
   stale: boolean;
+  /** Why the next show makes the terminal again. */
+  staleReason: RebuildReason;
   /** TRM-FR-IUMC: the key of the theme that the terminal shows, or null before the first terminal. */
   themeKey: string | null;
   /** Counts the terminals made for this tab; output of an older one is dropped. */
   generation: number;
+  /** TRM-FR-VBOY: the WebAssembly memory of the terminal's own instance, or null. */
+  memory: WasmMemory | null;
+  /** TRM-FR-VBOY: the bytes of output that the current terminal received. */
+  received: number;
   dispose: (() => void)[];
 }
 
@@ -255,37 +275,60 @@ function restyle(remakeUnmade: boolean) {
   for (const entry of views.values()) {
     if (entry.released) continue;
     if (entry.themeKey === null ? !remakeUnmade : themeOf(entry).key === entry.themeKey) continue;
-    if (entry.host.isConnected) rebuild(entry);
+    if (entry.host.isConnected) rebuild(entry, "theme");
     else if (!entry.stale) {
       entry.stale = true;
+      entry.staleReason = "theme";
       logDebug(["frontend"], "terminal theme deferred until shown", { terminalId: entry.id });
     }
   }
 }
 
+/** TRM-FR-HQZN: disposes the terminal and keeps no reference to it or to its instance. */
 function teardownTerm(entry: ViewEntry) {
   for (const stop of entry.dispose.splice(0)) stop();
   entry.fit?.dispose();
   entry.term?.dispose();
   entry.fit = null;
   entry.term = null;
+  entry.memory = null;
+  entry.received = 0;
   entry.host.replaceChildren();
 }
 
-function rebuild(entry: ViewEntry) {
+type RebuildReason = "theme" | "memory";
+
+/**
+ * Makes the terminal of `entry` again. `keepFocus` keeps the focus where it is
+ * when it is outside the terminal: a remake for memory comes with no action of
+ * the user (TRM-FR-VBOY), and the library's `open()` takes the focus.
+ */
+function rebuild(entry: ViewEntry, reason: RebuildReason, keepFocus = false) {
   if (entry.released) return;
-  logDebug(["frontend"], "terminal rebuilt for theme", { terminalId: entry.id });
+  logDebug(["frontend"], "terminal rebuilt", { terminalId: entry.id, reason });
   // The new terminal starts at the size of the old one, so it is not made
   // smaller than the terminal that was just freed.
   const size = entry.lastSize;
+  const focused = keepFocus ? focusOutside(entry) : null;
   entry.stale = false;
   teardownTerm(entry);
   // The session keeps its size, so `sentSize` stays: an unchanged size is not sent again.
   entry.lastSize = null;
-  entry.starting = start(entry, size);
+  entry.starting = start(entry, size, focused);
 }
 
-async function start(entry: ViewEntry, size: { cols: number; rows: number } | null = null): Promise<void> {
+/** The element that has the focus, where it is in the page and outside the terminal of `entry`. */
+function focusOutside(entry: ViewEntry): HTMLElement | null {
+  const active = typeof document === "undefined" ? null : document.activeElement;
+  if (!(active instanceof HTMLElement) || active === document.body) return null;
+  return entry.host.contains(active) ? null : active;
+}
+
+async function start(
+  entry: ViewEntry,
+  size: { cols: number; rows: number } | null = null,
+  focused: HTMLElement | null = null,
+): Promise<void> {
   const generation = ++entry.generation;
   let ghostty: Ghostty;
   try {
@@ -306,6 +349,16 @@ async function start(entry: ViewEntry, size: { cols: number; rows: number } | nu
     return;
   }
   if (entry.released || generation !== entry.generation) return;
+  // TRM-FR-WRVB: a terminal made out of the page cannot measure its size. A
+  // tab that was hidden while the instance loaded makes it when it shows.
+  if (!entry.host.isConnected) {
+    entry.stale = true;
+    logDebug(["frontend"], "terminal start deferred until shown", { terminalId: entry.id });
+    return;
+  }
+  entry.memory = wasmMemory(instance);
+  entry.received = 0;
+  if (!entry.memory) logDebug(["frontend"], "terminal memory not readable", { terminalId: entry.id });
   const font = terminalFont();
   const theme = themeOf(entry);
   entry.themeKey = theme.key;
@@ -322,6 +375,7 @@ async function start(entry: ViewEntry, size: { cols: number; rows: number } | nu
   const fit = new ghostty.FitAddon();
   term.loadAddon(fit);
   term.open(entry.host);
+  if (focused?.isConnected && document.activeElement !== focused) focused.focus();
   entry.term = term;
   entry.fit = fit;
   const id = entry.id;
@@ -348,16 +402,47 @@ async function start(entry: ViewEntry, size: { cols: number; rows: number } | nu
   fit.fit();
   fit.observeResize();
   reportSize(entry, term.cols, term.rows);
-  let writeFailed = false;
   try {
-    await api.attachTerminal(id, (frame) => {
-      if (generation !== entry.generation || !entry.term) return;
-      const bytes = frame.length;
-      // TRS-FR-VYIB: ghostty-web parses a write before it returns and paints
-      // on a later frame. The acknowledgement follows the parse, so a window
-      // that paints no frames (hidden or minimized) holds no process back.
+    // The frame handler is made outside this scope, so it holds no reference
+    // to the terminal: Tauri keeps the callback of a channel for the life of
+    // the page (TRM-FR-HQZN).
+    await api.attachTerminal(id, frameHandler(entry, generation));
+    logDebug(["frontend"], "terminal attached", { terminalId: id });
+  } catch (err) {
+    logWarn(["frontend"], "terminal attach failed", { terminalId: id, code: errorCode(err) });
+  }
+}
+
+/** The part of a `WebAssembly.Memory` that the memory cap reads. */
+interface WasmMemory {
+  readonly buffer: { readonly byteLength: number };
+}
+
+/** The WebAssembly memory of a `ghostty-web` instance, where it has one. */
+function wasmMemory(instance: GhosttyInstance): WasmMemory | null {
+  const memory = (instance as unknown as { memory?: Partial<WasmMemory> }).memory;
+  return typeof memory?.buffer?.byteLength === "number" ? (memory as WasmMemory) : null;
+}
+
+/**
+ * TRM-FR-AULS: writes each frame of one attach into the terminal, and
+ * acknowledges it. Output of an older terminal of the tab is dropped. A tab
+ * whose terminal is gone for its memory (TRM-FR-PLUX) acknowledges the frame
+ * and writes nothing.
+ */
+function frameHandler(entry: ViewEntry, generation: number): (frame: Uint8Array) => void {
+  const id = entry.id;
+  let writeFailed = false;
+  return (frame) => {
+    if (entry.released || generation !== entry.generation) return;
+    const bytes = frame.length;
+    const term = entry.term;
+    // TRS-FR-VYIB: ghostty-web parses a write before it returns and paints
+    // on a later frame. The acknowledgement follows the parse, so a window
+    // that paints no frames (hidden or minimized) holds no process back.
+    if (term) {
       try {
-        entry.term.write(frame);
+        term.write(frame);
       } catch (err) {
         // TRM-FR-AULS: a failed write is acknowledged too, so a fault in the
         // view never holds the process back. One record for each terminal.
@@ -366,12 +451,33 @@ async function start(entry: ViewEntry, size: { cols: number; rows: number } | nu
           logWarn(["frontend"], "terminal write failed", { terminalId: id, error: String(err) });
         }
       }
-      api.acknowledgeTerminalOutput(id, bytes).catch(() => {});
-    });
-    logDebug(["frontend"], "terminal attached", { terminalId: id });
-  } catch (err) {
-    logWarn(["frontend"], "terminal attach failed", { terminalId: id, code: errorCode(err) });
+    }
+    api.acknowledgeTerminalOutput(id, bytes).catch(() => {});
+    if (term) {
+      entry.received += bytes;
+      capMemory(entry);
+    }
+  };
+}
+
+/**
+ * TRM-FR-VBOY, TRM-FR-PLUX: a terminal past the memory cap is made again from
+ * the history. A shown terminal is made again at once. A hidden one is
+ * disposed now and made again when its tab shows, because a terminal made out
+ * of the page cannot measure its size (TRM-FR-WRVB).
+ */
+function capMemory(entry: ViewEntry) {
+  const size = entry.memory?.buffer.byteLength ?? 0;
+  if (size <= TERMINAL_MEMORY_CAP_BYTES || entry.received < TERMINAL_REMAKE_MIN_OUTPUT_BYTES) return;
+  const shown = entry.host.isConnected;
+  logInfo(["frontend"], "terminal remade for memory", { terminalId: entry.id, memoryBytes: size, shown });
+  if (shown) {
+    rebuild(entry, "memory", true);
+    return;
   }
+  teardownTerm(entry);
+  entry.stale = true;
+  entry.staleReason = "memory";
 }
 
 /** TRM-FR-ILRQ: one resize call for each new size. */
@@ -419,8 +525,11 @@ export function showTerminalView(id: string, container: HTMLElement): void {
       starting: null,
       released: false,
       stale: false,
+      staleReason: "theme",
       themeKey: null,
       generation: 0,
+      memory: null,
+      received: 0,
       dispose: [],
     };
     views.set(id, entry);
@@ -428,7 +537,7 @@ export function showTerminalView(id: string, container: HTMLElement): void {
   }
   container.appendChild(entry.host);
   if (entry.themeKey !== null) paint(entry, themeOf(entry));
-  if (entry.stale) rebuild(entry);
+  if (entry.stale) rebuild(entry, entry.staleReason);
   else if (!entry.term && !entry.starting) entry.starting = start(entry);
   else entry.fit?.fit();
 }

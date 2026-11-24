@@ -13,9 +13,12 @@ import {
   setTerminalThemePreference,
   subscribeTerminalThemePreference,
 } from "../../state/terminalThemes";
+import { contrastRatio, parseColor } from "../../state/terminalContrast";
 import type { TerminalSummary } from "../../types";
 import { TerminalTab } from "./TerminalTab";
-import { commands, resetTerminalFixtures, serve, session } from "./terminalFixtures";
+import { FakeChannel, commands, resetTerminalFixtures, serve, session } from "./terminalFixtures";
+import { fakeNoRenderer, type FakeTerminal } from "../../test/ghosttyMock";
+import { logDebug, logWarn } from "../../logging";
 
 vi.mock("@tauri-apps/api/core", async () => {
   const f = await import("./terminalFixtures");
@@ -31,15 +34,8 @@ const ANSI = [
   "brightBlack", "brightRed", "brightGreen", "brightYellow", "brightBlue", "brightMagenta", "brightCyan", "brightWhite",
 ] as const;
 
-function luminance(hex: string): number {
-  const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16) / 255);
-  const channel = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-}
-
 function contrast(a: string, b: string): number {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
+  return contrastRatio(parseColor(a)!, parseColor(b)!);
 }
 
 describe("the five terminal themes", () => {
@@ -207,5 +203,137 @@ describe("a theme change of an open terminal tab", () => {
     await mount("b");
     await waitFor(() => expect(attaches("b")).toHaveLength(2));
     expect(background("b")).toBe("#10141c");
+  });
+});
+
+describe("the colours that a program in an open terminal tab gets", () => {
+  beforeEach(() => {
+    resetTerminalFixtures();
+    serve("acknowledge_terminal_output", null);
+    serve("resize_terminal", null);
+    serve("detach_terminal", null);
+    serve("write_terminal_input", null);
+  });
+  afterEach(() => {
+    delete document.documentElement.dataset.theme;
+    cleanup();
+  });
+
+  async function open(id: string, theme: string, historyBytes = 0) {
+    serve("attach_terminal", { state: "running", historyBytes });
+    serve("list_terminals", () => [session({ id, theme: theme as never })]);
+    await act(() => refreshTerminals());
+    render(<TerminalTab terminalId={id} />);
+    await act(() => terminalViewStarted(id));
+    const all = commands("attach_terminal").filter((c) => c.args.terminalId === id);
+    const attach = all[all.length - 1];
+    const terms = fakeTerminals.filter((t) => (t.opened as HTMLElement | null)?.dataset.terminalId === id);
+    const term = terms[terms.length - 1];
+    return { channel: attach.args.output as FakeChannel<ArrayBuffer>, term };
+  }
+
+  const frame = (text: string) => new TextEncoder().encode(text).buffer as ArrayBuffer;
+  const inputs = (id: string) =>
+    commands("write_terminal_input").filter((c) => c.args.terminalId === id).map((c) => c.args.data);
+
+  it("TRM-FR-XBAP: a live OSC 11 query gets the background of the theme as input of the session", async () => {
+    const { channel } = await open("a", "paper");
+    act(() => channel.push(frame("\x1b]11;?\x1b\\")));
+    await waitFor(() => expect(inputs("a")).toEqual(["\x1b]11;rgb:fbfb/fafa/f7f7\x1b\\"]));
+  });
+
+  it("TRM-FR-XBAP: a query in the history that the attach sends first gets no answer", async () => {
+    const history = "prompt\x1b]11;?\x07";
+    const { channel } = await open("a", "night", history.length);
+    act(() => channel.push(frame(history)));
+    act(() => channel.push(frame("\x1b]10;?\x07")));
+    await waitFor(() => expect(inputs("a")).toEqual(["\x1b]10;rgb:d9d9/dfdf/e8e8\x07"]));
+  });
+
+  it("TRM-FR-XBAP: the answer has the colours of the terminal's own theme, also a dark override on the light app theme", async () => {
+    document.documentElement.dataset.theme = "light";
+    const { channel } = await open("a", "ember");
+    act(() => channel.push(frame("\x1b]11;?\x07\x1b]10;?\x07")));
+    await waitFor(() =>
+      expect(inputs("a")).toEqual(["\x1b]11;rgb:1b1b/1515/1212\x07", "\x1b]10;rgb:ecec/e1e1/d4d4\x07"]),
+    );
+  });
+
+  it("TRM-FR-XBAP, TRM-FR-LNOZ: an ended session gets no answer and no DEBUG record of one", async () => {
+    const { channel, term } = await open("a", "paper");
+    await act(() => upsertTerminal(session({ id: "a", theme: "paper", state: "exited" })));
+    vi.mocked(logDebug).mockClear();
+    act(() => channel.push(frame("\x1b]11;?\x07")));
+    // The frame reached the terminal, and still no answer went out.
+    expect(term.writtenText()).toContain("\x1b]11;?\x07");
+    expect(inputs("a")).toEqual([]);
+    expect(vi.mocked(logDebug).mock.calls.filter((c) => c[1] === "terminal colour query answered")).toEqual([]);
+  });
+
+  async function openGated(id: string, theme: string) {
+    let finish!: (value: unknown) => void;
+    serve("attach_terminal", () => new Promise((resolve) => (finish = resolve)));
+    serve("list_terminals", () => [session({ id, theme: theme as never })]);
+    await act(() => refreshTerminals());
+    render(<TerminalTab terminalId={id} />);
+    await waitFor(() => expect(commands("attach_terminal")).toHaveLength(1));
+    const channel = commands("attach_terminal")[0].args.output as FakeChannel<ArrayBuffer>;
+    return { channel, finish: (value: unknown) => finish(value) };
+  }
+
+  it("TRM-FR-XBAP: queries that come before the attach answers wait for the history size", async () => {
+    const { channel, finish } = await openGated("a", "paper");
+    const history = "old\x1b]11;?\x07";
+    act(() => channel.push(frame(history)));
+    act(() => channel.push(frame("\x1b]10;?\x07")));
+    expect(inputs("a")).toEqual([]);
+    await act(async () => finish({ state: "running", historyBytes: history.length }));
+    await waitFor(() => expect(inputs("a")).toEqual(["\x1b]10;rgb:1f1f/2121/2424\x07"]));
+  });
+
+  it("TRM-FR-XBAP: a terminal remade while its attach waits does not answer the queries of the old attach", async () => {
+    const { channel, finish } = await openGated("a", "paper");
+    act(() => channel.push(frame("\x1b]11;?\x07")));
+    serve("attach_terminal", { state: "running", historyBytes: 0 });
+    act(() => upsertTerminal(session({ id: "a", theme: "night" })));
+    await waitFor(() => expect(commands("attach_terminal")).toHaveLength(2));
+    await act(async () => finish({ state: "running", historyBytes: 0 }));
+    const second = commands("attach_terminal")[1].args.output as FakeChannel<ArrayBuffer>;
+    act(() => second.push(frame("\x1b]11;?\x07")));
+    await waitFor(() => expect(inputs("a")).toEqual(["\x1b]11;rgb:1010/1414/1c1c\x07"]));
+  });
+
+  it("TRM-FR-XBAP: after a theme change the new attach's history replay gets no answer", async () => {
+    const replay = "\x1b]11;?\x07";
+    const { channel } = await open("a", "paper", replay.length);
+    act(() => channel.push(frame(replay)));
+    serve("attach_terminal", { state: "running", historyBytes: replay.length });
+    act(() => upsertTerminal(session({ id: "a", theme: "night" })));
+    await waitFor(() => expect(commands("attach_terminal")).toHaveLength(2));
+    const second = commands("attach_terminal")[1].args.output as FakeChannel<ArrayBuffer>;
+    await act(async () => {});
+    act(() => second.push(frame(replay)));
+    act(() => second.push(frame(replay)));
+    await waitFor(() => expect(inputs("a")).toEqual(["\x1b]11;rgb:1010/1414/1c1c\x07"]));
+  });
+
+  it("TRM-FR-LNOZ: a terminal library without the contrast hook gives one WARN for the terminal, also over remakes", async () => {
+    fakeNoRenderer.on = true;
+    vi.mocked(logWarn).mockClear();
+    await open("a", "paper");
+    act(() => upsertTerminal(session({ id: "a", theme: "sand" })));
+    await waitFor(() => expect(commands("attach_terminal")).toHaveLength(2));
+    const warns = vi.mocked(logWarn).mock.calls.filter((c) => c[1] === "terminal contrast not applied");
+    expect(warns).toEqual([[["frontend"], "terminal contrast not applied", { terminalId: "a", reason: "no_renderer_hook" }]]);
+  });
+
+  it("TRM-FR-DLJP: the terminal of a tab draws a light-blue cell with 4.5:1 on a light theme", async () => {
+    const { term } = await open("a", "sand");
+    const renderer = (term as FakeTerminal).renderer!;
+    const cell = { fg_r: 177, fg_g: 185, fg_b: 249, bg_r: 0, bg_g: 0, bg_b: 0, flags: 0 };
+    renderer.renderCellText(cell, 0, 0);
+    const [drawn] = renderer.drawn;
+    const hex = (c: number) => c.toString(16).padStart(2, "0");
+    expect(contrast(`#${hex(drawn.fg_r)}${hex(drawn.fg_g)}${hex(drawn.fg_b)}`, "#f5eedf")).toBeGreaterThanOrEqual(4.5);
   });
 });

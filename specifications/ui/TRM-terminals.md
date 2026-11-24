@@ -85,10 +85,14 @@ The Terminals panel and the terminal tab let the author open an interactive term
 53. **TRM-FR-CFXM** The app offers five terminal themes: the light themes **Paper** (`paper`), **Sand** (`sand`), and **Mist** (`mist`), and the dark themes **Night** (`night`) and **Ember** (`ember`). Each is an original palette of this app.
 54. **TRM-FR-PXDQ** Each theme sets the background, the foreground, the cursor, the selection, and the 16 ANSI colours. The foreground has a contrast ratio of at least 7:1 on the background. Each ANSI colour, except black, white, and bright black on a dark theme and white and bright white on a light theme, has at least 4.5:1.
 55. **TRM-FR-IUMC** A terminal shows its own theme override where it has one, else the Terminal theme of `GLS-global-settings.md` GLS-FR-SOJD, else the colours of TRM-FR-WRVB. A change of any of the three applies on the terms of TRM-FR-WRVB. The tab's surface around the terminal has the terminal's background.
+56. **TRM-FR-DLJP** Every terminal draws the text of a cell with a contrast ratio of at least 4.5:1 on the background of that cell. A colour with less moves toward black on a light background and toward white on a dark one, by the smallest step that gives 4.5:1. Selected, inverse, and faint text keep their colours.
+    - *Why:* programs such as Claude Code pick 24-bit colours for a dark background, and no palette changes them.
+57. **TRM-FR-XBAP** The terminal answers each query `OSC 10 ; ?` with the foreground and each query `OSC 11 ; ?` with the background that it shows, as `rgb:rrrr/gggg/bbbb`, with the terminator of the query (BEL or ST). It answers only live output, never a query in the history that the attach sends first (per `../core/TRS-terminal-sessions.md` TRS-FR-HIIK).
+    - *Why:* a program that gets no answer thinks that the background is dark and picks colours for it.
 
 ### Platform and logging
 53. **TRM-FR-DQYZ** On Windows, the Terminals toggle, the panel, the New terminal menu, and the terminal tab are not rendered.
-54. **TRM-FR-LNOZ** The panel and the tab emit a `DEBUG` record for each create, close, attach, detach, rename, and theme change, and a `WARN` record for each failed call. No record carries input, output, or a path.
+54. **TRM-FR-LNOZ** The panel and the tab emit a `DEBUG` record for each create, close, attach, detach, rename, theme change, and colour query answered (TRM-FR-XBAP), a `WARN` record for each failed call, and one `WARN` record for each terminal where the terminal library gives no way to apply TRM-FR-DLJP. No record carries input, output, or a path.
 
 ## Wireframes
 The Terminals panel with three sessions in two groups:
@@ -131,7 +135,7 @@ Layout notes:
 - The menu aligns its trailing edge with the button and stays inside the window. A submenu opens on the trailing side of its entry, or on the leading side where the window has no space.
 
 ## UI contract boundary
-- **Owned by the UI**: the Terminals panel with its groups, sort order, rows, pinned, persistent and busy markers, empty state and keyboard list; the New terminal menu with its active-worktree section, its submenus, its keyboard, and its greyed entries; the row context menu, its entries, their enablement, the label field, the Theme submenu, and the confirmation for running terminals; the five terminal themes and their resolution; the terminal tab with `ghostty-web`, its fit, theme, font, keys, wheel reports, copy and paste, scrollback, banners and state lines; the tab's attach and detach; and the routing of the tab's pin actions to the session.
+- **Owned by the UI**: the Terminals panel with its groups, sort order, rows, pinned, persistent and busy markers, empty state and keyboard list; the New terminal menu with its active-worktree section, its submenus, its keyboard, and its greyed entries; the row context menu, its entries, their enablement, the label field, the Theme submenu, and the confirmation for running terminals; the five terminal themes and their resolution; the minimum contrast of drawn text and the answers to colour queries; the terminal tab with `ghostty-web`, its fit, theme, font, keys, wheel reports, copy and paste, scrollback, banners and state lines; the tab's attach and detach; and the routing of the tab's pin actions to the session.
 - **Delegated to backend (abstract)**:
   - `"list terminal targets"` — the targets and kinds of the New terminal menu. Owned by `../core/TRS-terminal-sessions.md`.
   - `"list terminals"` — the panel's rows. Owned by `../core/TRS-terminal-sessions.md`.

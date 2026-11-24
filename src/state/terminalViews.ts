@@ -17,6 +17,8 @@ import { isMacPlatform } from "../platform";
 import { TERMINAL_INPUT_LIMIT } from "../api/terminals";
 import { errorCode, findTerminal, subscribeTerminals } from "./terminals";
 import { handleTerminalWheel, newWheelTravel } from "./terminalWheel";
+import { enforceMinimumContrast } from "./terminalContrast";
+import { newColorQueryReplier, type ColorQueryReplier } from "./terminalColorQueries";
 import { resolveTerminalTheme, subscribeTerminalThemePreference, type ResolvedTerminalTheme } from "./terminalThemes";
 
 /** TRM-FR-DTCA: the scrollback of each terminal, in lines. */
@@ -59,6 +61,8 @@ interface ViewEntry {
   staleReason: RebuildReason;
   /** TRM-FR-IUMC: the key of the theme that the terminal shows, or null before the first terminal. */
   themeKey: string | null;
+  /** TRM-FR-LNOZ: the WARN of a missing contrast hook was logged for this terminal. */
+  contrastWarned: boolean;
   /** Counts the terminals made for this tab; output of an older one is dropped. */
   generation: number;
   /** TRM-FR-VBOY: the WebAssembly memory of the terminal's own instance, or null. */
@@ -124,14 +128,16 @@ export function inputParts(data: string): string[] {
   return parts;
 }
 
-function sendInput(id: string, data: string) {
+/** Returns false where the session is not running and so takes no input. */
+function sendInput(id: string, data: string): boolean {
   // TRM-FR-FFPL: an ended session receives no more input.
-  if (findTerminal(id)?.state !== "running") return;
+  if (findTerminal(id)?.state !== "running") return false;
   for (const part of inputParts(data)) {
     api.writeTerminalInput(id, part).catch((err) => {
       logWarn(["frontend"], "terminal input failed", { terminalId: id, code: errorCode(err) });
     });
   }
+  return true;
 }
 
 /** TRM-FR-RFVP, TRM-FR-DHEM: the keys the terminal handles itself. Returns true when handled. */
@@ -380,6 +386,11 @@ async function start(
   entry.fit = fit;
   const id = entry.id;
   const send = (data: string) => sendInput(id, data);
+  // TRM-FR-DLJP: text that a program colours for another background stays
+  // readable. TRM-FR-LNOZ: one WARN for each terminal, not for each remake.
+  if (!enforceMinimumContrast(term, id, !entry.contrastWarned)) entry.contrastWarned = true;
+  // TRM-FR-XBAP: a program that asks for the colours gets the ones of this theme.
+  const colorQueries = colorQueriesFor(id, theme.theme.foreground, theme.theme.background);
   term.attachCustomKeyEventHandler((event) => handleTerminalKey(event, term, send));
   // TRM-FR-QMXG, TRM-FR-PACR: the wheel goes to a program that reports the mouse.
   const travel = newWheelTravel();
@@ -406,11 +417,26 @@ async function start(
     // The frame handler is made outside this scope, so it holds no reference
     // to the terminal: Tauri keeps the callback of a channel for the life of
     // the page (TRM-FR-HQZN).
-    await api.attachTerminal(id, frameHandler(entry, generation));
+    const attachment = await api.attachTerminal(id, frameHandler(entry, generation, colorQueries));
     logDebug(["frontend"], "terminal attached", { terminalId: id });
+    if (generation === entry.generation && !entry.released) colorQueries.historyKnown(attachment?.historyBytes);
   } catch (err) {
     logWarn(["frontend"], "terminal attach failed", { terminalId: id, code: errorCode(err) });
   }
+}
+
+/**
+ * TRM-FR-XBAP, TRM-FR-HQZN: the colour queries of one attach. They are made
+ * outside `start()`, because the channel callback keeps them for the life of
+ * the page and a closure made in `start()` shares the scope that holds the
+ * terminal.
+ */
+function colorQueriesFor(
+  id: string,
+  foreground: string | undefined,
+  background: string | undefined,
+): ColorQueryReplier {
+  return newColorQueryReplier({ terminalId: id, foreground, background, send: (data) => sendInput(id, data) });
 }
 
 /** The part of a `WebAssembly.Memory` that the memory cap reads. */
@@ -428,9 +454,14 @@ function wasmMemory(instance: GhosttyInstance): WasmMemory | null {
  * TRM-FR-AULS: writes each frame of one attach into the terminal, and
  * acknowledges it. Output of an older terminal of the tab is dropped. A tab
  * whose terminal is gone for its memory (TRM-FR-PLUX) acknowledges the frame
- * and writes nothing.
+ * and writes nothing. Each frame goes to the colour queries of the attach
+ * (TRM-FR-XBAP), also where the terminal is gone, because the program waits.
  */
-function frameHandler(entry: ViewEntry, generation: number): (frame: Uint8Array) => void {
+function frameHandler(
+  entry: ViewEntry,
+  generation: number,
+  colorQueries: ColorQueryReplier,
+): (frame: Uint8Array) => void {
   const id = entry.id;
   let writeFailed = false;
   return (frame) => {
@@ -453,6 +484,7 @@ function frameHandler(entry: ViewEntry, generation: number): (frame: Uint8Array)
       }
     }
     api.acknowledgeTerminalOutput(id, bytes).catch(() => {});
+    colorQueries.scan(frame);
     if (term) {
       entry.received += bytes;
       capMemory(entry);
@@ -527,6 +559,7 @@ export function showTerminalView(id: string, container: HTMLElement): void {
       stale: false,
       staleReason: "theme",
       themeKey: null,
+      contrastWarned: false,
       generation: 0,
       memory: null,
       received: 0,

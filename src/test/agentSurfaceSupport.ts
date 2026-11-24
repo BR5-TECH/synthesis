@@ -53,6 +53,13 @@ export async function loadedPanel(getByTestId: (id: string) => HTMLElement): Pro
     const panel = getByTestId("agent-surface");
     expect(panel.dataset.state).not.toBe("loading");
     expect(panel.querySelector(".agent-surface__loading")).toBeNull();
+    // The official renderer fills the panel in a later render, after the lazy
+    // chunk loads. On a slow runner a test that reads the panel before then finds
+    // it empty, so the panel counts as loaded once its root element is there.
+    // A React card renders its options with its root. Nested content of a Lit
+    // root comes later, and a test of it still waits with `waitFor`.
+    const content = panel.querySelector(".agent-surface__fieldset");
+    if (content) expect(content.childElementCount).toBeGreaterThan(0);
   });
   return getByTestId("agent-surface");
 }

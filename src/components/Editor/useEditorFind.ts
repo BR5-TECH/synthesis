@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { Editor as TiptapEditor } from "@tiptap/react";
 import { getMarkdown } from "../markdownFidelity";
+import { logDebug } from "../../logging";
 import { useFind, type FindTarget, type SurfaceMatch } from "../../hooks/useFind";
 import { useSourceTokens } from "../../hooks/useSourceTokens";
 import { EditSessionStore } from "../../state/editSessions";
@@ -26,6 +27,7 @@ import {
   findHighlightKey,
   rangeToPositions,
   type DocText,
+  type FindHighlightPayload,
   type PosRange,
 } from "../findHighlight";
 
@@ -48,6 +50,11 @@ export interface EditorFindDeps {
   fmExpanded: boolean;
   bodyRef: RefObject<string>;
   replacingRef: RefObject<boolean>;
+  /**
+   * EFR-FR-DOQR, EFR-FR-KQWT: true while the find panel moves the view to its
+   * current match. The Editor clears it on each edit of the author.
+   */
+  followRef: RefObject<boolean>;
   rootRef: RefObject<HTMLDivElement | null>;
   docVersion: number;
   currentDoc: () => string;
@@ -73,6 +80,7 @@ export function useEditorFind(deps: EditorFindDeps) {
     fmExpanded,
     bodyRef,
     replacingRef,
+    followRef,
     rootRef,
     docVersion,
     currentDoc,
@@ -126,6 +134,11 @@ export function useEditorFind(deps: EditorFindDeps) {
   const sourceWrapRef = useRef<HTMLDivElement>(null);
   const fmInputRef = useRef<HTMLTextAreaElement>(null);
   const [findFocus, setFindFocus] = useState<"query" | "replacement">("query");
+  /**
+   * EFR-FR-HZRM: changed to bring the current match into view again when the
+   * current match itself did not change.
+   */
+  const [revealNonce, setRevealNonce] = useState(0);
 
   /**
    * The rich body projected to flat text, with the index back to ProseMirror
@@ -176,6 +189,61 @@ export function useEditorFind(deps: EditorFindDeps) {
     find.mode,
     findActive,
     usableMatch,
+  );
+
+  /**
+   * EFR-FR-DOQR: opening a panel, a query change and a mode change are find
+   * actions, so the view follows the current match again. A modal that blocks
+   * the tab is not one (EFR-FR-HSET). The editing-mode toggle arms the view in
+   * the Editor itself, because an undo also changes the mode and is an edit of
+   * the author (EFR-FR-KQWT).
+   */
+  const panelOpen = find.form !== null;
+  useEffect(() => {
+    if (!panelOpen) return;
+    // The current match can stay the same one, and the effects that reveal it
+    // then have nothing else that makes them run again.
+    if (!followRef.current) setRevealNonce((n) => n + 1);
+    followRef.current = true;
+  }, [panelOpen, find.query, find.mode, followRef]);
+
+  /** EFR-FR-KQWT: a load of the buffer (EFR-FR-HVVO) is an edit of the author. */
+  const seedRef = useRef(session.seedToken);
+  useEffect(() => {
+    if (seedRef.current === session.seedToken) return;
+    seedRef.current = session.seedToken;
+    followRef.current = false;
+  }, [session.seedToken, followRef]);
+
+  // EDT-FR-UERT: a tab that comes back with its find panel open shows the
+  // document where the author left it. The match that is current when it comes
+  // back was already brought into view before, so only a later one is.
+  const resumedFind = useRef(findActive);
+  const resumedMatch = useRef<string | null>(null);
+
+  /**
+   * EFR-FR-HZRM: when an edit of the author moved the view off the find panel,
+   * the first next-match brings the current match into view and does not step
+   * past it. Every other press steps (EFR-FR-DYMA).
+   */
+  const stepMatch = useCallback(
+    (delta: 1 | -1) => {
+      const wasFollowing = followRef.current;
+      followRef.current = true;
+      if (!wasFollowing && delta === 1 && engine.current >= 0) {
+        // A request from the author, so the resumed tab's own rule (EDT-FR-UERT)
+        // does not hold it back.
+        resumedFind.current = false;
+        setRevealNonce((n) => n + 1);
+        logDebug(["frontend"], "find next-match revealed the current match after an edit", {
+          current: engine.current,
+          total: engine.matches.length,
+        });
+        return;
+      }
+      engine.step(delta);
+    },
+    [engine, followRef],
   );
 
   const patchFind = useCallback(
@@ -277,8 +345,10 @@ export function useEditorFind(deps: EditorFindDeps) {
    */
   const currentSurface = engine.currentMatch?.surface;
   useEffect(() => {
+    // EFR-FR-KQWT: a match that an edit of the author made current peeks nothing.
+    if (!followRef.current) return;
     if (currentSurface === "frontmatter") setExpandOverride(true);
-  }, [currentSurface, engine.current]);
+  }, [currentSurface, engine.current, revealNonce, followRef]);
 
   /**
    * EFR-FR-DOQR: push the body's matches into the decoration plugin. A meta-only
@@ -313,23 +383,25 @@ export function useEditorFind(deps: EditorFindDeps) {
 
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
-    const tr = editor.state.tr.setMeta(findHighlightKey, {
+    const payload: FindHighlightPayload = {
       ranges: bodyRanges,
       current: currentBodyRange,
-    });
+    };
+    // EFR-FR-DGBG, EFR-FR-KQWT: a find action moves the diagram peek to the
+    // current match. After an edit of the author the peek is left out, so the
+    // plugin keeps the one it has.
+    if (!findActive) payload.peek = null;
+    else if (followRef.current) {
+      payload.peek = currentBodyRange >= 0 ? bodyRanges[currentBodyRange] : null;
+    }
+    const tr = editor.state.tr.setMeta(findHighlightKey, payload);
     tr.setMeta("addToHistory", false);
     editor.view.dispatch(tr);
-  }, [editor, bodyRanges, currentBodyRange]);
-
-  // EDT-FR-UERT: a tab that comes back with its find panel open shows the
-  // document where the author left it. The match that is current when it comes
-  // back was already brought into view before, so only a later one is.
-  const resumedFind = useRef(findActive);
-  const resumedMatch = useRef<string | null>(null);
+  }, [editor, bodyRanges, currentBodyRange, findActive, revealNonce, followRef]);
 
   /**
-   * EFR-FR-DOQR: bring the current match into view. Each surface scrolls its own
-   * way — the source textarea is scrolled to the offset its highlight layer
+   * EFR-FR-DOQR: bring the current match into view after a find action. Each
+   * surface scrolls its own way — the source textarea is scrolled to the offset its highlight layer
    * reports, while the body and the frontmatter region live in the document's
    * own scroll container and can be scrolled to directly.
    */
@@ -339,16 +411,23 @@ export function useEditorFind(deps: EditorFindDeps) {
     if (resumedFind.current) {
       // The match's index rather than its offset: content that arrives after
       // the tab comes back moves offsets without the author moving anything.
+      // Recorded also while the view does not follow, so the first find action
+      // after an edit is not taken for the match the tab came back with.
       const key = [find.query, find.mode, engine.current].join("\u0000");
       if (resumedMatch.current === null) resumedMatch.current = key;
       if (resumedMatch.current === key) return;
       resumedFind.current = false;
     }
+    // EFR-FR-KQWT: an edit of the author recomputes the matches and can make
+    // another one current. The view stays on the caret.
+    if (!followRef.current) return;
     const raf =
       typeof requestAnimationFrame === "function"
         ? requestAnimationFrame
         : (fn: FrameRequestCallback) => setTimeout(() => fn(0), 0);
     raf(() => {
+      // An edit of the author can come between the schedule and the frame.
+      if (!followRef.current) return;
       const surface = engine.currentMatch?.surface;
       if (surface === "source") {
         const mark = sourceHlRef.current?.querySelector<HTMLElement>(
@@ -375,6 +454,8 @@ export function useEditorFind(deps: EditorFindDeps) {
     engine.current,
     engine.currentMatch,
     bodyRanges,
+    revealNonce,
+    followRef,
   ]);
 
   /**
@@ -435,14 +516,21 @@ export function useEditorFind(deps: EditorFindDeps) {
       // artifact dirty (EDT-FR-04) or occupy a position in the history
       // (EDT-FR-23). Reachable when the replacement text equals what it
       // replaces, and it is what keeps a no-op honest.
-      if (next === before) return;
+      if (next === before) {
+        followRef.current = true;
+        return;
+      }
       sealBurst(session.history);
       noteEdit(next, session.mode, targets[0].surface);
       sealBurst(session.history);
+      // EFR-FR-DOQR: a replacement is a find action, not an edit of the author,
+      // so the view follows the current match it advances to (EFR-FR-EXHA).
+      followRef.current = true;
     },
     [
       blocked,
       session,
+      followRef,
       applySourceText,
       applyFm,
       editor,
@@ -482,6 +570,7 @@ export function useEditorFind(deps: EditorFindDeps) {
     fmInputRef,
     findFocus,
     engine,
+    stepMatch,
     patchFind,
     replaceCurrent,
     replaceAll,

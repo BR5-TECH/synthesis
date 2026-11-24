@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  ghostty-web@0.4.0: 1f93472c3dd01edf7cf8a1e7400a92217e0d78353ea28f3bb359e6cc9254ba77
+
 importers:
 
   .:
@@ -55,7 +58,7 @@ importers:
         version: 0.12.1
       ghostty-web:
         specifier: 0.4.0
-        version: 0.4.0
+        version: 0.4.0(patch_hash=1f93472c3dd01edf7cf8a1e7400a92217e0d78353ea28f3bb359e6cc9254ba77)
       highlight.js:
         specifier: ^11.12.0
         version: 11.12.0
@@ -3598,7 +3601,7 @@ snapshots:
 
   gensync@1.0.0-beta.2: {}
 
-  ghostty-web@0.4.0: {}
+  ghostty-web@0.4.0(patch_hash=1f93472c3dd01edf7cf8a1e7400a92217e0d78353ea28f3bb359e6cc9254ba77): {}
 
   hachure-fill@0.5.2: {}
 

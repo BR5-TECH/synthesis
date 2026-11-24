@@ -172,5 +172,6 @@ Typed errors: `platform_unsupported`, `terminal_limit_reached`, `unknown_target`
 - The pseudo-terminal layer runs on macOS and Linux. The Windows build compiles the module with every command returning `platform_unsupported`.
 - The worst-case memory of output history is 16 sessions of 4 MiB for each project window. The tmux server holds at most 10,000 lines of scrollback for each persistent session, outside the application process.
 - Persistence needs tmux 3.2 or later on the host. The application installs no tmux and starts no tmux server other than its own.
+- A test that starts a real tmux server ends that server and removes its socket when the test ends, also when the test fails.
 - A keystroke reaches the process with no batching delay on the input path. Output reaches the tab at most 16 ms after the process writes it, while the channel is not held back by flow control.
 - A session never blocks the async runtime: the module reads and writes each pseudo-terminal on a task of its own.

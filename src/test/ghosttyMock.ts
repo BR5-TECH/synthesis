@@ -40,6 +40,9 @@ export const fakeLoadGate: { promise: Promise<void> | null; waiting: number } = 
 
 /** A stand-in for the WebAssembly instance that each terminal owns (TRM-FR-CGRR). */
 export class FakeGhostty {
+  /** Test hook: the size of the instance's WebAssembly memory (TRM-FR-VBOY). */
+  memory = { buffer: { byteLength: 2 * 1024 * 1024 } };
+
   static async load(): Promise<FakeGhostty> {
     const gate = fakeLoadGate.promise;
     if (gate) {

@@ -331,6 +331,14 @@ describe("Terminal memory cap of a hidden tab", () => {
     expect(vi.mocked(logging.logWarn)).not.toHaveBeenCalled();
   });
 
+  it("TRM-FR-PLUX, TRM-FR-XBAP: a colour query that arrives while the terminal is disposed still gets an answer", async () => {
+    await hiddenOverCap();
+    await push("b", 0, bytes("\x1b]11;?\x07"));
+    const replies = commands("write_terminal_input").filter((c) => c.args.terminalId === "b").map((c) => c.args.data);
+    expect(replies).toHaveLength(1);
+    expect(String(replies[0])).toMatch(/^\x1b\]11;rgb:[0-9a-f]{4}\/[0-9a-f]{4}\/[0-9a-f]{4}\x07$/);
+  });
+
   it("TRM-FR-PLUX, TRM-FR-VBOY, TRM-FR-WRVB: the show makes the terminal again with its size and the current theme", async () => {
     await hiddenOverCap();
     await setTheme("dark");

@@ -10,7 +10,7 @@ use crate::project::ProjectState;
 
 /// AUI contract surface: `"get agent surface (id)"` (AUI-FR-QBXZ).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_agent_surface(
     surface_id: String,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -34,7 +34,7 @@ pub(crate) fn get_with(
 
 /// AUI contract surface: `"submit surface action (id, action)"` (AUI-FR-KBVY).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn submit_surface_action<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     surface_id: String,
@@ -54,7 +54,7 @@ where
 
 /// AUI contract surface: `"read surface media (id, source)"` (AUI-FR-JUDL).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn read_surface_media<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     surface_id: String,

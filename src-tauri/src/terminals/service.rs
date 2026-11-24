@@ -6,8 +6,9 @@ use std::sync::Arc;
 use tauri::{AppHandle, Runtime};
 
 use super::gather::{self, ProjectFacts};
+use super::input::{InputQueue, InputRefusal};
 use super::model::*;
-use super::process::{ProcessControl, ProcessHandle};
+use super::process::ProcessHandle;
 use super::registry::{NewSession, Registry};
 use super::session::{pump, Session};
 use super::targets;
@@ -361,7 +362,8 @@ pub fn detach<R: Runtime>(app: &AppHandle<R>, terminal_id: &str) -> Result<(), T
 /// TRS-FR-AVNH: the most input one call carries.
 pub const MAX_INPUT_BYTES: usize = 64 * 1024;
 
-/// TRS-FR-AVNH.
+/// TRS-FR-AVNH, TRS-FR-GSYR, TRS-FR-DUME: queues the input and returns
+/// without waiting for the process.
 pub fn write_input<R: Runtime>(
     app: &AppHandle<R>,
     terminal_id: &str,
@@ -372,18 +374,23 @@ pub fn write_input<R: Runtime>(
         return Err(TerminalError::new("input_too_large"));
     }
     let session = registry(app).get(terminal_id)?;
-    let control = running_control(&session)?;
-    control.write(data).map_err(|e| {
-        warn(app, "terminal write failed", terminal_id, &e.kind().to_string());
-        TerminalError::with_message("terminal_not_running", e.to_string())
-    })
-}
-
-fn running_control(session: &Session) -> Result<Arc<dyn ProcessControl>, TerminalError> {
-    if session.state() != TerminalState::Running {
-        return Err(TerminalError::new("terminal_not_running"));
+    let result = session.queue_input(data, |control| {
+        let app = app.clone();
+        let id = terminal_id.to_string();
+        InputQueue::spawn(control, move |e| {
+            warn(&app, "terminal write failed", &id, &e.kind().to_string());
+        })
+    });
+    match result {
+        Ok(()) => Ok(()),
+        Err(InputRefusal::NotRunning) => Err(TerminalError::new("terminal_not_running")),
+        Err(InputRefusal::BacklogFull { first }) => {
+            if first {
+                warn(app, "terminal input backlog full", terminal_id, "input_backlog_full");
+            }
+            Err(TerminalError::new("input_backlog_full"))
+        }
     }
-    session.control().ok_or_else(|| TerminalError::new("terminal_not_running"))
 }
 
 /// TRS-FR-UNIL: the accepted sizes.

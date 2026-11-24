@@ -68,7 +68,7 @@ pub fn active_catalog_impl(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_active_ai_api_catalog(
     app: tauri::AppHandle,
     store: State<'_, GlobalSettingsStore>,

@@ -26,7 +26,7 @@ pub const ERR_HUNK_NOT_EDITABLE: &str = "hunk_not_editable";
 /// acceptance journal has been reconciled — so no proposal is ever reported in a
 /// state the journal has not yet settled.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_draft_change_proposals<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,
@@ -44,7 +44,7 @@ where
 /// DCP-FR-10: the proposal's hunks and their placements, for a review about to
 /// render them.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_draft_change_proposal_hunks(
     proposal_id: String,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -55,7 +55,7 @@ pub fn load_draft_change_proposal_hunks(
 
 /// a turn (DCR-FR-15).
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn accept_draft_change_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -77,7 +77,7 @@ where
 
 /// DCP-FR-14: reject one change, writing nothing into the draft.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn reject_draft_change_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -126,7 +126,7 @@ where
 /// A held change is **undecided**, so it still occupies the draft's one slot —
 /// a change the author is talking about is one they have not decided.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_draft_change_hunk_discussing<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -219,7 +219,7 @@ pub fn edit_hunk_impl(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn edit_draft_change_hunk<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -237,7 +237,7 @@ where
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn decline_draft_change_proposal<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,

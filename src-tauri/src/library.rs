@@ -119,7 +119,7 @@ pub(crate) fn project_artifacts<R: tauri::Runtime>(
 
 /// ASC-FR-KVIE: the direct children of one folder of the project tree.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn list_tree_children(
     path: String,
     app: tauri::AppHandle,
@@ -134,7 +134,7 @@ pub fn list_tree_children(
 
 /// ASC-FR-AGGG: the children of each folder on the way to `path`.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn list_tree_path(
     path: String,
     app: tauri::AppHandle,
@@ -149,7 +149,7 @@ pub fn list_tree_path(
 
 /// ASC-FR-SKRN: the nodes of the tree that match the panel's text filter.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn filter_project_tree(
     text: String,
     lens: scanning::Lens,
@@ -166,7 +166,7 @@ pub fn filter_project_tree(
 
 /// ASC-FR-YNJR: every typed node of the project.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn list_project_artifacts(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -180,7 +180,7 @@ pub fn list_project_artifacts(
 
 /// ASC-FR-AVVY: the project paths of one kind that hold a text.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn search_project_paths(
     text: String,
     kind: scanning::PathKind,
@@ -197,7 +197,7 @@ pub fn search_project_paths(
 
 /// ASC-FR-QKXR: the paths of a list that the project index holds.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn existing_project_paths(
     paths: Vec<String>,
     app: tauri::AppHandle,
@@ -214,7 +214,7 @@ pub fn existing_project_paths(
 /// children of the project root. Never throws on a transient filesystem race
 /// (the scan skips errored entries).
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn rescan_project_tree(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -231,7 +231,7 @@ pub fn rescan_project_tree(
 /// so the UI can re-tag it without a reload. The folders whose answer the
 /// assignment changed reach the UI through `"project tree changed"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn assign_artifact_type(
     path: String,
     artifact_type: scanning::ArtifactType,
@@ -249,7 +249,7 @@ pub fn assign_artifact_type(
 /// ASC-FR-07: remove a stored assignment (no-op if absent), then return the
 /// node of `path`.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn clear_artifact_type(
     path: String,
     app: tauri::AppHandle,
@@ -756,7 +756,7 @@ fn create_folder_impl(
 /// holding anything comes back as `ERR_NOT_EMPTY` with nothing removed, which is
 /// how the Library learns it must ask before taking a subtree (LCM-FR-11).
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn delete_path(
     app: tauri::AppHandle,
     path: String,
@@ -772,7 +772,7 @@ pub fn delete_path(
 
 /// PST-FR-19: rename a project file or folder within its parent (`"rename path"`).
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn rename_path(
     app: tauri::AppHandle,
     path: String,
@@ -794,7 +794,7 @@ pub fn rename_path(
 /// PST-FR-20: copy a project file or folder into a destination folder
 /// (`"copy path into folder"`). Copy, not move — the source is left in place.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn copy_path_into_folder(
     app: tauri::AppHandle,
     source_path: String,
@@ -816,7 +816,7 @@ pub fn copy_path_into_folder(
 /// structural change also reaches the Library through the ASC watcher's
 /// `"project tree changed"` event.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn create_file(
     app: tauri::AppHandle,
     location: Option<String>,
@@ -840,7 +840,7 @@ pub fn create_file(
 /// node so the UI can reveal it. The structural change also reaches the Library
 /// through the ASC watcher's `"project tree changed"` event.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn create_folder(
     app: tauri::AppHandle,
     location: Option<String>,
@@ -884,7 +884,7 @@ pub fn create_folder(
 /// reaches the Project panel through the ASC watcher's `"project tree changed"`
 /// event (ASC-FR-10).
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn create_typed_file(
     app: tauri::AppHandle,
     location: Option<String>,

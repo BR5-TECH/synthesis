@@ -20,7 +20,7 @@ use super::model::{
 
 /// DCL-FR-SQEP: the in-memory snapshot. It does not wait for a refresh.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_documents(
     app: tauri::AppHandle,
     collection: crate::project_scope::Scoped<'_, DocumentsCollection>,

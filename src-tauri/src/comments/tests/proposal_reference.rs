@@ -19,7 +19,10 @@ fn no_frontend_route_can_put_a_proposal_reference_on_a_comment() {
     // can hand in a value of the shape a `proposal` reference has. Checked
     // over the source rather than the handler list, because it is the
     // *parameter type* that is the guarantee.
-    for command in THIS.split("#[tauri::command]").skip(1) {
+    let this = THIS.replace("#[project_scope_macros::blocking_command]", "#[tauri::command]");
+    let commands: Vec<&str> = this.split("#[tauri::command]").skip(1).collect();
+    assert!(!commands.is_empty(), "the scan finds the commands of this module");
+    for command in commands {
         let signature = command.split_once('{').map(|(head, _)| head).unwrap_or(command);
         assert!(
             !signature.contains("Vec<Attachment>") && !signature.contains(": Attachment"),

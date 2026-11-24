@@ -788,7 +788,7 @@ fn open_worktree(project: &ProjectState) -> Option<RootFs> {
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_personal_agents(
     store: State<'_, GlobalSettingsStore>,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -797,7 +797,7 @@ pub fn list_personal_agents(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_project_agents<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     store: State<'_, GlobalSettingsStore>,
@@ -821,7 +821,7 @@ pub fn list_project_agents<R: tauri::Runtime>(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn create_agent<R: tauri::Runtime>(
     scope: AgentScope,
     draft: AgentDraft,
@@ -844,7 +844,7 @@ pub fn create_agent<R: tauri::Runtime>(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn update_agent<R: tauri::Runtime>(
     scope: AgentScope,
     id: String,
@@ -872,7 +872,7 @@ pub fn update_agent<R: tauri::Runtime>(
 /// Project agent's turns are cancelled in the open project; a Personal agent's
 /// in every project.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn delete_agent<R: tauri::Runtime>(
     scope: AgentScope,
     id: String,

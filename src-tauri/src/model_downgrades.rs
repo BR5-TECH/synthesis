@@ -109,7 +109,7 @@ fn now_unix() -> i64 {
 
 /// `"load model downgrade suppressions"` (GSS-FR-PCPW).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_model_downgrade_suppressions<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<Vec<ModelDowngradeSuppression>, String> {
@@ -152,7 +152,7 @@ pub fn load_model_downgrade_suppressions<R: tauri::Runtime>(
 
 /// `"save model downgrade suppression"` (GSS-FR-UUET).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_model_downgrade_suppression<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     requested_model: String,

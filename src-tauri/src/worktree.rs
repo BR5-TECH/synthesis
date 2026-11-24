@@ -729,7 +729,7 @@ fn reroot_with<R: tauri::Runtime>(
 // ---------------------------------------------------------------------------
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_worktrees_and_branches(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -742,7 +742,7 @@ pub fn list_worktrees_and_branches(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_active_worktree(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<WorktreeEntry, String> {
@@ -750,7 +750,7 @@ pub fn get_active_worktree(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn propose_worktree_path(
     branch: String,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -759,7 +759,7 @@ pub fn propose_worktree_path(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn activate_worktree(
     path: String,
     app: tauri::AppHandle,
@@ -797,7 +797,7 @@ pub(crate) fn activate_worktree_at<R: tauri::Runtime>(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn check_out_branch_in_active_worktree(
     branch: String,
     app: tauri::AppHandle,
@@ -933,7 +933,7 @@ pub async fn refresh_worktrees_and_branches(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn create_worktree(
     branch: String,
     path: String,

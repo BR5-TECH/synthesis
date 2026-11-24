@@ -60,14 +60,14 @@ impl GlobalSettingsStore {
 
 /// GSS contract: `"load document limit percent"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_document_limit_percent(store: State<'_, GlobalSettingsStore>) -> Result<u8, String> {
     store.load_document_limit_percent()
 }
 
 /// GSS contract: `"save document limit percent"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_document_limit_percent(
     percent: i64,
     app: tauri::AppHandle,

@@ -33,7 +33,7 @@ fn is_a_portable_tool_named_search_notes() {
         .filter(|line| !line.trim_start().starts_with("//"))
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(!code.contains("#[tauri::command]"));
+    assert!(!code.contains("#[tauri::command") && !code.contains("blocking_command"));
     assert!(!code.contains(".emit("));
 }
 

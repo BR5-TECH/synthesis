@@ -666,7 +666,7 @@ pub async fn post_notification(
 
 /// Idempotent: an id that names nothing showing is not an error.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn withdraw_notification(
     id: String,
     registry: State<'_, NotificationRegistry>,
@@ -679,7 +679,7 @@ pub fn withdraw_notification(
 
 /// NTD-FR-12: withdraw everything this run posted.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn withdraw_all_notifications(
     registry: State<'_, NotificationRegistry>,
     notifier: State<'_, Notifier>,

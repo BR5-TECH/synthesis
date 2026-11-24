@@ -25,6 +25,7 @@ pub mod change_history;
 pub mod change_proposals;
 pub mod change_statistics;
 pub mod changes;
+pub mod command_thread;
 pub mod comments;
 pub mod dashboard;
 pub mod delivery;

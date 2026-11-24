@@ -1,4 +1,5 @@
 use super::*;
+use crate::terminals::process::ProcessControl;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tauri::{Listener, Manager};
 
@@ -209,6 +210,97 @@ fn input_rules() {
         registry(&handle).get("a").unwrap().process_ended(Some(0), EndReason::ProcessExited);
         assert_eq!(write_input(&handle, "a", b"ls\n").unwrap_err().code, "terminal_not_running");
     });
+}
+
+/// A process that reads no input until the test drops the sender.
+struct Stuck(std::sync::Mutex<std::sync::mpsc::Receiver<()>>);
+
+impl ProcessControl for Stuck {
+    fn write(&self, _data: &[u8]) -> std::io::Result<()> {
+        let _ = self.0.lock().unwrap().recv();
+        Ok(())
+    }
+    fn resize(&self, _cols: u16, _rows: u16) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn terminate(&self) {}
+}
+
+// TRS-FR-GSYR, TRS-FR-DUME, CEX-FR-VWRP: input to a process that reads nothing
+// returns at once, and once more than 1 MiB waits the call returns
+// `input_backlog_full`. The refusal is logged without the input.
+#[test]
+fn input_to_a_process_that_reads_nothing_never_blocks() {
+    let f = fixture();
+    let handle = f.app.handle().clone();
+    let (release, stuck) = std::sync::mpsc::channel::<()>();
+    context::run_in("p", || {
+        add(&handle, "stuck", worktree("/r"), false);
+        let session = registry(&handle).get("stuck").unwrap();
+        assert!(session.started(Arc::new(Stuck(std::sync::Mutex::new(stuck))), None));
+        let chunk = vec![b'k'; MAX_INPUT_BYTES];
+        let limit = crate::terminals::input::MAX_QUEUED_INPUT_BYTES / MAX_INPUT_BYTES + 1;
+        for _ in 0..limit {
+            write_input(&handle, "stuck", &chunk).unwrap();
+        }
+        assert_eq!(write_input(&handle, "stuck", b"x").unwrap_err().code, "input_backlog_full");
+        assert_eq!(write_input(&handle, "stuck", b"y").unwrap_err().code, "input_backlog_full");
+        // TRS-FR-DUME: a resize and an acknowledgement return while the
+        // writer thread waits on the process.
+        resize(&handle, "stuck", 100, 30).unwrap();
+        acknowledge(&handle, "stuck", 1024).unwrap();
+    });
+    drop(release);
+    let refused: Vec<_> = records("terminal input backlog full")
+        .into_iter()
+        .filter(|r| r.fields.get("terminal_id").and_then(|v| v.as_str()) == Some("stuck"))
+        .collect();
+    assert_eq!(refused.len(), 1);
+    assert!(!format!("{:?}", refused[0].fields).contains("kkkk"));
+}
+
+/// A process that records the input it receives.
+#[derive(Default)]
+struct Recorder(std::sync::Mutex<Vec<u8>>);
+
+impl ProcessControl for Recorder {
+    fn write(&self, data: &[u8]) -> std::io::Result<()> {
+        self.0.lock().unwrap().extend_from_slice(data);
+        Ok(())
+    }
+    fn resize(&self, _cols: u16, _rows: u16) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn terminate(&self) {}
+}
+
+fn wait_for(what: &str, done: impl Fn() -> bool) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while !done() {
+        assert!(std::time::Instant::now() < deadline, "timed out waiting for {what}");
+        std::thread::yield_now();
+    }
+}
+
+// TRS-FR-GSYR: after the process starts again, input goes to the new process
+// and not to the one before it.
+#[test]
+fn input_after_a_restart_goes_to_the_new_process() {
+    let f = fixture();
+    let handle = f.app.handle().clone();
+    let old = Arc::new(Recorder::default());
+    let new = Arc::new(Recorder::default());
+    context::run_in("p", || {
+        add(&handle, "r", worktree("/r"), false);
+        let session = registry(&handle).get("r").unwrap();
+        assert!(session.started(old.clone(), None));
+        write_input(&handle, "r", b"one").unwrap();
+        wait_for("the first input", || old.0.lock().unwrap().as_slice() == b"one");
+        assert!(session.started(new.clone(), None));
+        write_input(&handle, "r", b"two").unwrap();
+        wait_for("the second input", || new.0.lock().unwrap().as_slice() == b"two");
+    });
+    assert_eq!(old.0.lock().unwrap().as_slice(), b"one");
 }
 
 // TRS-FR-UNIL: a size outside the bounds is refused.

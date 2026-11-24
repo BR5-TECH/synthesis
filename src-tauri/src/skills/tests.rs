@@ -866,7 +866,7 @@ fn the_module_registers_exactly_one_tauri_command() {
     let code: String =
         source.lines().filter(|l| !l.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n");
     assert_eq!(
-        code.matches("#[tauri::command]").count(),
+        code.matches("#[tauri::command").count() + code.matches("blocking_command]").count(),
         1,
         "this module registers one Tauri command (DSL-FR-01)"
     );

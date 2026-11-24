@@ -506,3 +506,29 @@ describe("the top-chrome Push while a pull runs (GIT-FR-CNQO, GIT-FR-QMYB)", () 
     await waitAvailable();
   });
 });
+
+describe("a burst of changes updated (CHG-FR-RUAG)", () => {
+  it("CHG-FR-RUAG: events during an upstream sync read start exactly one more read", async () => {
+    renderControl();
+    await waitAvailable();
+    const releases: Array<() => void> = [];
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "get_upstream_sync_state")
+        return new Promise((resolve) => releases.push(() => resolve(sync)));
+      if (cmd === "append_log_records") return Promise.resolve(undefined);
+      return Promise.reject(new Error(`unexpected invoke ${cmd}`));
+    });
+    const reads = () =>
+      invokeMock.mock.calls.filter((c) => c[0] === "get_upstream_sync_state").length;
+    const before = reads();
+    await act(async () => {
+      for (let i = 0; i < 20; i += 1) bus.emit("changes-updated", {});
+    });
+    await waitFor(() => expect(releases).toHaveLength(1));
+    expect(reads()).toBe(before + 1);
+    await act(async () => releases[0]());
+    await waitFor(() => expect(releases).toHaveLength(2));
+    await act(async () => releases[1]());
+    expect(reads()).toBe(before + 2);
+  });
+});

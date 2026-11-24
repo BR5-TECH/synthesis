@@ -185,7 +185,7 @@ fn quit_windows<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Vec<String> {
 /// released, so a later quit is held and flushed again rather than slipping
 /// through unflushed.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn finish_exit<R: tauri::Runtime>(
     proceed: bool,
     window: tauri::Window<R>,

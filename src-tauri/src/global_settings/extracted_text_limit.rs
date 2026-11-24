@@ -64,14 +64,14 @@ impl GlobalSettingsStore {
 
 /// GSS contract: `"load extracted text limit kb"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_extracted_text_limit_kb(store: State<'_, GlobalSettingsStore>) -> Result<u32, String> {
     store.load_extracted_text_limit_kb()
 }
 
 /// GSS contract: `"save extracted text limit kb"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_extracted_text_limit_kb(
     kb: i64,
     app: tauri::AppHandle,

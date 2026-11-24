@@ -102,7 +102,7 @@ pub fn system_font_families() -> Vec<FontFamily> {
 /// whether or not a project is open and whichever worktree is active — nothing
 /// here takes a project, a path, or any managed state.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_system_fonts() -> Vec<FontFamily> {
     system_font_families()
 }

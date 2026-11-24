@@ -95,10 +95,11 @@ fn the_save_the_merge_and_the_starts_run_the_check() {
 }
 
 /// Whether `source` declares `name` as a command that does not run on the main
-/// thread: an `async` command, or a sync one that asks for a thread of its own.
+/// thread: an `async` command, or a sync one that carries `blocking_command`
+/// (`CEX-command-execution.md` CEX-FR-JBTB).
 fn off_main_thread(source: &str, name: &str) -> bool {
     let generic = [format!("pub async fn {name}<"), format!("pub async fn {name}(")];
-    let asked = format!("#[tauri::command(async)]\npub fn {name}<");
+    let asked = format!("#[project_scope_macros::blocking_command]\npub fn {name}<");
     generic.iter().any(|signature| source.contains(&format!("#[tauri::command]\n{signature}")))
         || source.contains(&asked)
 }
@@ -181,10 +182,10 @@ fn the_library_writes_and_the_accepts_run_the_check() {
     assert!(off_main_thread(new_drafts, "accept_new_draft_proposal"));
 }
 
-/// Whether `source` declares `name` as a non-generic sync command that asks for
-/// a thread of its own.
+/// Whether `source` declares `name` as a non-generic sync command that carries
+/// `blocking_command` (`CEX-command-execution.md` CEX-FR-JBTB).
 fn off_main_thread_sync(source: &str, name: &str) -> bool {
-    source.contains(&format!("#[tauri::command(async)]\npub fn {name}("))
+    source.contains(&format!("#[project_scope_macros::blocking_command]\npub fn {name}("))
 }
 
 // GSM-FR-GHFY, GTC-FR-OVSD: the commit and the push check every repository

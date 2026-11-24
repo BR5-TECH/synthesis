@@ -502,7 +502,7 @@ pub fn terminate_scope_and_publish(
 /// started first. Answers normally with no project open, because an operation
 /// need not be project-scoped. Never returns an error.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_in_flight_operations(
     registry: crate::project_scope::Scoped<'_, ProgressRegistry>,
 ) -> Vec<Operation> {

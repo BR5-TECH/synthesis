@@ -7,7 +7,7 @@ use crate::project_scope::ProjectStores;
 /// GSU-FR-ELZO: start a run, or start nothing. Off the main thread, because
 /// the guard read can reach GitHub (GRD-FR-WJLO).
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn start_graduation<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,
@@ -82,7 +82,7 @@ pub fn start_graduation<R: tauri::Runtime>(
 
 /// GRD-FR-LGDV: every run the project has made, in the project's run order.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_graduation_queue<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<GraduationQueue, String> {
@@ -105,7 +105,7 @@ pub fn list_graduation_queue<R: tauri::Runtime>(
 
 /// GRD-FR-LGDV: one run's whole record.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_graduation_run<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     run_id: String,
@@ -115,7 +115,7 @@ pub fn get_graduation_run<R: tauri::Runtime>(
 
 /// DRS-FR-18: the run a draft's row names, if it has one.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_draft_graduation<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,
@@ -130,7 +130,7 @@ pub fn get_draft_graduation<R: tauri::Runtime>(
 /// thread, because Continue from a plan rest runs the OpenSpec CLI
 /// (OPU-FR-PXDY).
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn continue_graduation_run<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     run_id: String,
@@ -258,7 +258,7 @@ pub fn continue_graduation_run<R: tauri::Runtime>(
 /// GRD-FR-MDQZ: the author's own stop, accepted only while the run is doing
 /// agent work.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn pause_graduation_run<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     run_id: String,
@@ -290,7 +290,7 @@ pub fn pause_graduation_run<R: tauri::Runtime>(
 
 /// GRD-FR-TKUR: whether a stream's queue may start this run.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_graduation_auto_start<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     run_id: String,
@@ -317,7 +317,7 @@ pub fn set_graduation_auto_start<R: tauri::Runtime>(
 
 /// GRD-FR-JOFE: where the author filed a run. Independent of its lifecycle.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn archive_graduation_run<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     run_id: String,
@@ -326,7 +326,7 @@ pub fn archive_graduation_run<R: tauri::Runtime>(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn unarchive_graduation_run<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     run_id: String,
@@ -355,7 +355,7 @@ fn set_archived<R: tauri::Runtime>(
 
 /// GXD-FR-BJYT: the author's answers, covering every recorded question.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn answer_graduation_escalation<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     run_id: String,
@@ -478,7 +478,7 @@ pub fn answer_graduation_escalation<R: tauri::Runtime>(
 
 /// GRD-FR-BLCR: revert the commits one completed run made, as new commits.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn revert_graduation_run<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     run_id: String,
@@ -537,7 +537,7 @@ pub fn revert_graduation_run<R: tauri::Runtime>(
 
 /// GRD-FR-EWTN: end a run without reverting anything it committed.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn discard_graduation_run<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     run_id: String,
@@ -602,7 +602,7 @@ fn end_discarded<R: tauri::Runtime>(
 /// GRD-FR-ZAMI: a new run over a discarded run's captured prompt. Off the main
 /// thread, because the guard read can reach GitHub (GRD-FR-WJLO).
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn restart_graduation_run<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     run_id: String,
@@ -873,7 +873,7 @@ fn mut_app<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::AppHandle<R> 
 // Reason: the flat named parameters are the IPC contract with the frontend `invoke()`.
 #[allow(clippy::too_many_arguments)]
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn read_graduation_logs<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     run_id: String,

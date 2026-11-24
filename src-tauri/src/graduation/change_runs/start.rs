@@ -41,7 +41,7 @@ impl Phase<'_> {
 /// OCR-FR-IDFC: `"start change apply"`. Off the main thread, because the
 /// guard read can reach GitHub (GRD-FR-WJLO).
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn start_change_apply<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
@@ -73,7 +73,7 @@ pub fn start_change_apply_in_process<R: tauri::Runtime>(
 /// OCR-FR-IDFC, OCR-FR-UAWO: `"start change rework"`. The start opens its
 /// own request thread once every check has passed.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn start_change_rework<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,

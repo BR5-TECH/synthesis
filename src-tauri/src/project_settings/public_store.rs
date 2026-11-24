@@ -160,7 +160,7 @@ pub fn line_endings_for(root: &crate::fs::RootFs) -> LineEndings {
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_project_config(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ProjectConfig, String> {
@@ -169,7 +169,7 @@ pub fn load_project_config(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_project_config<R: tauri::Runtime>(
     config: ProjectConfig,
     project: crate::project_scope::Scoped<'_, ProjectState>,

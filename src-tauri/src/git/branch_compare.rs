@@ -305,7 +305,7 @@ pub fn branch_compare_file_diff_reported<R: tauri::Runtime>(
 
 /// GTC-FR-YQVD / GTC-FR-MBBH: the paths one branch changed against its base.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_branch_compare_files(
     name: String,
     kind: String,
@@ -317,7 +317,7 @@ pub fn list_branch_compare_files(
 
 /// GTC-FR-PYVV: one branch's change to one path against its base.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_branch_compare_file_diff(
     name: String,
     kind: String,

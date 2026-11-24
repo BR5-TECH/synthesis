@@ -167,7 +167,7 @@ pub(crate) fn completed_run_summaries<R: tauri::Runtime>(
 /// GRD-FR-HMDW: enqueue a PR summary run for the pull request from `head` into
 /// `base`, and offer the project a dispatch.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn start_pull_request_summary<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     head: String,

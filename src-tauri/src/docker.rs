@@ -751,7 +751,7 @@ const DOMAINS: [Domain; 1] = [Domain::Backend];
 /// GSS-FR-35: the stored record. Reads the store, runs no executable, and
 /// reaches no daemon, so the Docker section renders offline and instantly.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_docker_backend(store: State<'_, GlobalSettingsStore>) -> Result<DockerBackend, String> {
     Ok(store.load_docker_backend()?.outbound())
 }
@@ -759,7 +759,7 @@ pub fn load_docker_backend(store: State<'_, GlobalSettingsStore>) -> Result<Dock
 /// GSS-FR-39: persist the selection, and return the record with the
 /// verification state those values carry.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_docker_backend(
     config: DockerBackendConfig,
     app: tauri::AppHandle,
@@ -799,7 +799,7 @@ pub fn save_docker_backend_with<S: LogSink + Clone + Send + 'static>(
 /// GSS-FR-37: the first Docker CLI on `PATH` or in a conventional location.
 /// Persists nothing and executes nothing.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn detect_docker_cli_binary(
     seams: State<'_, DockerBackendSeams>,
 ) -> Result<DetectedDockerCli, String> {
@@ -813,7 +813,7 @@ pub fn detect_docker_cli_binary(
 /// GSS-FR-38: verify the selected mode, and commit the success only where the
 /// daemon answered.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn verify_docker_backend(
     config: DockerBackendConfig,
     app: tauri::AppHandle,

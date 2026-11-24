@@ -12,7 +12,7 @@ use crate::watcher::ProjectWatcher;
 /// changes (EDT-FR-33) — a torn-down project has no root, so `save_artifact_contents`
 /// would fail from here on. Writes no file itself, and is idempotent.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 // Reason: the parameters of a Tauri command are its IPC contract with `invoke()`.
 #[allow(clippy::too_many_arguments)]
 pub fn close_project<R: tauri::Runtime>(

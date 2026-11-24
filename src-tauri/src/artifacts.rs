@@ -171,7 +171,7 @@ fn save_artifact_contents_impl(
 
 /// PST-FR-15: load a markdown artifact's body + baseline checksum (EXC-FR-WCOM).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_artifact_contents_by_id(
     app: tauri::AppHandle,
     id: String,
@@ -413,7 +413,7 @@ pub(crate) fn resolved_type(root: &fs::RootFs, id: &str) -> Option<scanning::Art
 /// artifact type answers `kind = "text"`, so a plain file opens in the Editor as
 /// plain text (`../ui/EDT-editor.md` ESH-FR-ATDS) rather than having nowhere to go.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn open_artifact_by_id(
     id: String,
     project: crate::project_scope::Scoped<'_, ProjectState>,

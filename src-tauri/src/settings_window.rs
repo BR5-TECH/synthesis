@@ -213,11 +213,11 @@ fn set_parent_enabled<R: tauri::Runtime>(app: &tauri::AppHandle<R>, enabled: boo
 fn set_parent_enabled<R: tauri::Runtime>(app: &tauri::AppHandle<R>, enabled: bool) {
     let parents = blocked_windows(app);
     // PJT-FR-BQTD: every project window is blocked, not only the first one.
-    // AppKit is main-thread-only and a command runs on a worker thread, so the
-    // block is posted rather than performed here. The post also fixes the order
-    // it happens in: `create` blocks on building the settings window, which is
-    // served by the same event loop, so a block posted first is in place before
-    // that window exists rather than some frames after it.
+    // AppKit is main-thread-only, and this can run off it, so the block is
+    // posted rather than performed here. `create` runs on the main thread
+    // (`open_settings_window` posts its request there), so the posted block
+    // runs once the window is built and shown. The main thread is busy until
+    // then, so no input reaches a parent window in between.
     let handle = app.clone();
     let post = app.run_on_main_thread(move || {
         // A window that went between the request and the main thread is left
@@ -741,10 +741,30 @@ pub fn request_open<R: tauri::Runtime>(app: &tauri::AppHandle<R>, section: Optio
 /// (`AGT-agents.md` AGT-FR-06), the GitHub section a failed Git operation
 /// offers, the section a notification's address carries. `None` opens the
 /// window on Appearance (SWN-FR-MRNB).
+///
+/// The command runs off the main thread (`CEX-command-execution.md`
+/// CEX-FR-JBTB) and posts the request to the main thread, where the menu
+/// route also runs. So two requests at the same time check and create the
+/// window one after the other, and only one window is created (SWN-FR-05).
+/// A lock would not do: the create waits for the main thread, and the menu
+/// route would wait for the lock on the main thread.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn open_settings_window<R: tauri::Runtime>(section: Option<String>, app: tauri::AppHandle<R>) {
-    dispatch(&app, Request::Open { section });
+    let handle = app.clone();
+    // The request reads the open project, so it carries the project context.
+    let request = crate::project_scope::context::wrap_fn(move || {
+        dispatch(&handle, Request::Open { section });
+    });
+    if let Err(e) = app.run_on_main_thread(request) {
+        logging::log_error(
+            &app,
+            &BUFFER,
+            &DOMAINS,
+            "settings window request could not reach the main thread",
+            log_fields! { "reason" => e.to_string() },
+        );
+    }
 }
 
 /// What the Settings window needs to know about the project behind it.
@@ -775,7 +795,7 @@ pub struct SettingsWindowContext {
 /// the window is reachable in exactly that state (SWN-FR-15), and the window
 /// then shows its Global group alone.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_settings_window_context(
     project: crate::project_scope::Scoped<'_, crate::project::ProjectState>,
 ) -> SettingsWindowContext {
@@ -800,7 +820,7 @@ pub fn get_settings_window_context(
 /// released (SWN-FR-11, SWN-FR-19). `section` names the section address that
 /// failed, so the window can present it.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn finish_settings_close<R: tauri::Runtime>(
     ok: bool,
     section: Option<String>,

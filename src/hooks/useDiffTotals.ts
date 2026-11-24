@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import * as api from "../api";
+import { coalescedRun } from "../coalescedRun";
 import { onChangesUpdated } from "../events";
 import type { DiffTotals } from "../types";
 
@@ -31,8 +32,8 @@ export function useDiffTotals(epoch: number): DiffTotals | null {
     // against the new one while the reload is in flight.
     setTotals(null);
 
-    const load = () => {
-      void api
+    const load = () =>
+      api
         .getUncommittedDiffTotals()
         .then((next) => {
           // Same boundary guard as the progress read: a malformed answer
@@ -51,19 +52,22 @@ export function useDiffTotals(epoch: number): DiffTotals | null {
           // message, which would be noise in a strip of ambient facts.
           if (!cancelled) setTotals(null);
         });
-    };
 
-    load();
+    // STB-FR-GAYM: one read in flight at a time. A burst of events, such as a
+    // submodule clone makes, starts exactly one more read after it.
+    const runner = coalescedRun(load);
+    runner.run();
     // STB-FR-27: the totals track edits made in the app and by external
     // processes alike, and do not depend on the Changes panel ever having been
     // opened — this subscription is the status bar's own.
-    void onChangesUpdated(load).then((fn) => {
+    void onChangesUpdated(() => runner.run()).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
     });
 
     return () => {
       cancelled = true;
+      runner.dispose();
       unlisten?.();
     };
   }, [epoch]);

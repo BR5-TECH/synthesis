@@ -333,7 +333,7 @@ fn stat_artifacts(
 /// Answers with an empty list rather than an error when no project is open
 /// (PST-FR-12), which is what hides the widget on an empty Dashboard.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn list_recently_edited_artifacts(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -386,7 +386,7 @@ fn active_drafts_from(drafts: Vec<DraftSummary>) -> Vec<ActiveDraftItem> {
 
 /// `"list active drafts"` (PST-FR-32).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_active_drafts(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -492,7 +492,7 @@ fn agent_runs_impl<R: tauri::Runtime>(
 
 /// `"list recent agent runs"` (PST-FR-33).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_recent_agent_runs(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -537,7 +537,7 @@ fn pending_git_impl(root: &crate::fs::RootFs) -> Result<PendingGitActivity, Stri
 
 /// `"list pending git activity"` (PST-FR-34).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_pending_git_activity(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<PendingGitActivity, String> {
@@ -554,7 +554,7 @@ pub fn list_pending_git_activity(
 /// `"list due/upcoming reminders"` (PST-FR-12), backed by the notes carrying a
 /// reminder (NTC-FR-17). Soonest first, which is the order that module returns.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_due_reminders(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<ReminderItem>, String> {
@@ -577,7 +577,7 @@ pub fn list_due_reminders(
 /// `"list project health signals"` (PST-FR-12). Empty in the walking skeleton,
 /// which hides the widget (DSH-FR-04).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_project_health_signals(
     _project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<ProjectHealthSignal>, String> {

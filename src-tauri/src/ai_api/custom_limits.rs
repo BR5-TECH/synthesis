@@ -130,7 +130,7 @@ fn shown(tokens: Option<u64>) -> String {
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_ai_api_max_output_tokens(
     provider: String,
     tokens: Option<u64>,
@@ -150,7 +150,7 @@ pub fn set_ai_api_max_output_tokens(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_ai_api_max_context_size(
     provider: String,
     tokens: Option<u64>,

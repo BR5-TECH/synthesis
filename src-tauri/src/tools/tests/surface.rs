@@ -129,7 +129,8 @@ fn the_loop_facing_tool_is_unreachable_by_any_model() {
             "fn parameters(",
             "fn description(",
             "const NAME",
-            "#[tauri::command]",
+            "#[tauri::command",
+            "#[project_scope_macros::blocking_command]",
         ] {
             assert!(
                 !source.lines().any(|line| line.trim_start().starts_with(declaration)),

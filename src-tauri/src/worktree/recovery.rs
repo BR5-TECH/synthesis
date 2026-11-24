@@ -126,7 +126,7 @@ fn state_of_project(project: &ProjectState) -> Result<ActiveRootState, String> {
 
 /// WTC-FR-CPRM: changes nothing.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn active_root_state(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<ActiveRootState, String> {
@@ -134,7 +134,7 @@ pub fn active_root_state(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn leave_gone_worktree(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,

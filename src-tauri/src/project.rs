@@ -699,7 +699,7 @@ fn open_project_at_path_impl(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn open_project_at_path(
     path: String,
     app: tauri::AppHandle,
@@ -713,7 +713,7 @@ pub fn open_project_at_path(
 
 /// PJT-FR-IOEV: resolve a path into a project without mounting it. The Project
 /// picker uses it, so the choice of This tab or New tab comes before any mount.
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn resolve_project_at_path(
     path: String,
     store: State<'_, GlobalSettingsStore>,
@@ -722,7 +722,7 @@ pub fn resolve_project_at_path(
 }
 
 /// PJT-FR-IOEV: [`resolve_project_at_path`] for a Git URL.
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn resolve_project_from_git_url(
     url: String,
     store: State<'_, GlobalSettingsStore>,
@@ -731,7 +731,7 @@ pub fn resolve_project_from_git_url(
 }
 
 /// PJT-FR-IOEV: [`resolve_project_at_path`] for a new project.
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn resolve_new_project(
     name: String,
     mode: CreateMode,
@@ -780,7 +780,7 @@ fn open_project_from_git_url_impl(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn open_project_from_git_url(
     url: String,
     app: tauri::AppHandle,
@@ -812,7 +812,7 @@ fn create_project_impl(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn create_project(
     name: String,
     mode: CreateMode,

@@ -9,7 +9,7 @@ use crate::project_scope::ProjectStores;
 /// Both positions index that queue from its earliest-dispatching member as
 /// zero. Every refusal leaves the order exactly as it was.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn reorder_graduation_run<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     run_id: String,

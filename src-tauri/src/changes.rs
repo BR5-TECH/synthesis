@@ -611,7 +611,7 @@ pub fn common_dir_change_count(result: &DebounceEventResult, common_dir: Option<
 /// registers and terminates within the call, which is exactly what PRG-FR-06
 /// prescribes for work that finishes quickly.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_uncommitted_changes(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -643,7 +643,7 @@ fn log_unopened(app: &tauri::AppHandle, set: &ChangeSet) {
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_branch_changes(
     target_branch: String,
     app: tauri::AppHandle,
@@ -666,7 +666,7 @@ pub fn list_branch_changes(
 /// renders. Independent of the Changes panel — it holds no change set of its own
 /// and needs none to have been loaded.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_uncommitted_diff_totals(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -684,7 +684,7 @@ pub fn get_uncommitted_diff_totals(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_default_branch(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<String, String> {
@@ -694,7 +694,7 @@ pub fn get_default_branch(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_comparison_branches(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<BranchOption>, String> {

@@ -213,7 +213,7 @@ pub fn estimate_impl<R: tauri::Runtime>(
 
 /// AGC contract: `"estimate discussion context"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn estimate_discussion_context<R: tauri::Runtime>(
     target: DiscussionTarget,
     discussion_id: Option<String>,

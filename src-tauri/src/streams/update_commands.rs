@@ -71,7 +71,7 @@ fn missing_at<R: tauri::Runtime>(
 /// Returns the update's record in `running`. The update runs to rest on a thread
 /// of its own, and what it settled is read back through `get_work_stream_update`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn update_work_stream<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
@@ -179,7 +179,7 @@ pub(crate) fn update_work_stream_with<R: tauri::Runtime>(
 
 /// WKS-FR-GYHF: what one stream's last update did, or nothing.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_work_stream_update<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
@@ -189,7 +189,7 @@ pub fn get_work_stream_update<R: tauri::Runtime>(
 
 /// WKS-FR-CBXW: the author's answers to an update that asked.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn answer_work_stream_update_escalation<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
@@ -295,7 +295,7 @@ pub(crate) fn answer_work_stream_update_escalation_with<R: tauri::Runtime>(
 
 /// WKS-FR-DPNM: run the update again, with three fresh semantic turns.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn retry_work_stream_update<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
@@ -364,7 +364,7 @@ pub(crate) fn retry_work_stream_update_with<R: tauri::Runtime>(
 
 /// WKS-FR-LRAV: forget what an update settled.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn clear_work_stream_update<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
@@ -405,7 +405,7 @@ pub fn clear_work_stream_update<R: tauri::Runtime>(
 /// settled between the author reading the row and pressing the control is not a
 /// failure of the request.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn cancel_work_stream_update<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,

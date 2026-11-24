@@ -402,7 +402,7 @@ where
 /// (GSU-FR-MLEJ), which needs the whole of what Git reports rather than a
 /// classified and filterable change set.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_working_tree_status(
     expected_worktree: Option<String>,
     app: tauri::AppHandle,
@@ -414,7 +414,7 @@ pub fn get_working_tree_status(
 
 /// GTC-FR-23: return the named paths to `HEAD`, per path rather than atomically.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn rollback_paths(
     paths: Vec<String>,
     app: tauri::AppHandle,
@@ -434,7 +434,7 @@ pub fn rollback_paths(
 /// GTC-FR-21: the current branch's standing against its upstream, from local
 /// refs alone.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_upstream_sync_state(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -557,7 +557,7 @@ pub(crate) fn push_checkout<R: tauri::Runtime>(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_diff(
     scope: DiffScope,
     app: tauri::AppHandle,
@@ -570,7 +570,7 @@ pub fn get_diff(
 /// side-by-side, final, and rich modes of `../ui/DFV-diff-viewer.md` render
 /// (DFV-FR-25).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_file_revisions(
     scope: DiffScope,
     app: tauri::AppHandle,
@@ -580,7 +580,7 @@ pub fn get_file_revisions(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_branches(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,

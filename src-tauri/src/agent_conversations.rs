@@ -785,7 +785,7 @@ struct ContributionFlags<'a> {
 // ---------------------------------------------------------------------------
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn dispatch_agent_turn<R: tauri::Runtime>(
     nickname: String,
     origin: ConversationOrigin,
@@ -810,7 +810,7 @@ pub fn dispatch_agent_turn<R: tauri::Runtime>(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn cancel_agent_turn<R: tauri::Runtime>(
     turn_id: String,
     app: tauri::AppHandle<R>,
@@ -825,7 +825,7 @@ pub fn cancel_agent_turn<R: tauri::Runtime>(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_agent_turns(
     origin: Option<ConversationOrigin>,
     turns: crate::project_scope::Scoped<'_, TurnRegistry>,
@@ -845,7 +845,7 @@ pub fn list_agent_turns(
 /// for. A turn returned here is not outstanding, so `list_agent_turns` returns
 /// it under neither form.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_recoverable_agent_turn_failures(
     origin: Option<ConversationOrigin>,
     turns: crate::project_scope::Scoped<'_, TurnRegistry>,
@@ -868,7 +868,7 @@ pub fn list_recoverable_agent_turn_failures(
 /// retired by a later turn that carried its images successfully or carried none
 /// at all.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_agent_turn_image_notices(
     origin: Option<ConversationOrigin>,
     turns: crate::project_scope::Scoped<'_, TurnRegistry>,
@@ -891,7 +891,7 @@ pub fn list_agent_turn_image_notices(
 /// its own endpoint and key, so the failed turn is neither mutated nor
 /// resurrected and keeps its own id and terminal state.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn retry_agent_turn<R: tauri::Runtime>(
     turn_id: String,
     app: tauri::AppHandle<R>,

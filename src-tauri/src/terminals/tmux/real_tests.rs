@@ -1,8 +1,9 @@
 //! The module against a real tmux, on a socket of each test's own. A machine
 //! with no usable tmux fails these tests: CI installs tmux.
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Once, OnceLock};
 use std::time::Duration;
 
 use super::locate::{find_tmux, version_usable};
@@ -15,15 +16,26 @@ use crate::terminals::process::{terminal_env, HostCommand, ProcessHandle};
 
 const KEY: &str = "/real/project";
 
-/// A tmux server on a socket of its own, which ends with the test.
+/// The start of the socket name of every server of these tests.
+const SOCKET_PREFIX: &str = "synthesis-test-";
+
+/// A tmux server on a socket of its own, which ends with the test, also when
+/// the test fails. tmux leaves the socket file of a server that a
+/// `kill-server` ends, so the drop removes it. A test that nextest stops at
+/// its time limit runs no `Drop`: the next test process reaps what it left
+/// (`reap_in`).
 struct Server {
     tmux: Arc<Tmux>,
     runner: Arc<RealTmux>,
+    dir: Option<PathBuf>,
 }
 
 impl Drop for Server {
     fn drop(&mut self) {
         let _ = self.runner.run(&["kill-server".to_string()]);
+        if let Some(dir) = &self.dir {
+            remove_socket(dir, &self.runner.socket);
+        }
     }
 }
 
@@ -34,14 +46,94 @@ fn server() -> Server {
     version.arg("-V");
     let text = run_bounded(version, CALL_TIMEOUT).expect("tmux -V");
     assert!(version_usable(&text), "tmux 3.2 or later must be installed, found {text}");
+    static SOCKET_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
+    let dir = SOCKET_DIR.get_or_init(|| socket_dir(&program)).clone();
+    static REAPED: Once = Once::new();
+    REAPED.call_once(|| {
+        if let Some(dir) = &dir {
+            reap_in(&program, dir, SOCKET_PREFIX);
+        }
+    });
     let socket =
-        format!("synthesis-test-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst));
+        format!("{SOCKET_PREFIX}{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst));
     let runner = Arc::new(RealTmux { program: program.clone(), socket: socket.clone() });
     let tmux = Arc::new(Tmux {
         runner: runner.clone(),
         clients: Arc::new(RealClients { program, socket }),
     });
-    Server { tmux, runner }
+    Server { tmux, runner, dir }
+}
+
+/// The directory of the tmux sockets, as tmux names it. A server of its own
+/// answers, so the path is the real one also where `/tmp` is a link.
+fn socket_dir(program: &str) -> Option<PathBuf> {
+    let probe = RealTmux {
+        program: program.to_string(),
+        socket: format!("{SOCKET_PREFIX}{}-probe", std::process::id()),
+    };
+    let args = commands::join(vec![
+        vec!["new-session".into(), "-d".into(), "-s".into(), "probe".into()],
+        vec![
+            "display-message".into(),
+            "-p".into(),
+            "-t".into(),
+            "=probe:".into(),
+            "#{socket_path}".into(),
+        ],
+    ]);
+    let path = probe.run(&args);
+    let _ = probe.run(&["kill-server".to_string()]);
+    let dir = PathBuf::from(path.ok()?.trim()).parent().map(PathBuf::from)?;
+    remove_socket(&dir, &probe.socket);
+    Some(dir)
+}
+
+/// Removes the socket file `name` in `dir`, where it is there.
+fn remove_socket(dir: &std::path::Path, name: &str) {
+    if let Ok(access) = crate::fs::FsAccess::builder().allow_root(dir).build() {
+        let _ = access.delete_path(dir.join(name), false);
+    }
+}
+
+/// The process id in a socket name of these tests, `synthesis-test-<pid>-<n>`.
+fn test_socket_pid(name: &str, prefix: &str) -> Option<i32> {
+    let (pid, _) = name.strip_prefix(prefix)?.split_once('-')?;
+    pid.parse().ok()
+}
+
+fn process_alive(pid: i32) -> bool {
+    // SAFETY: signal 0 sends nothing; `kill` only checks that the process exists.
+    let found = unsafe { libc::kill(pid, 0) } == 0;
+    found || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}
+
+/// Ends each server of these tests in `dir` whose test process is gone, and
+/// removes its socket. Returns the socket names it removed.
+fn reap_in(program: &str, dir: &std::path::Path, prefix: &str) -> Vec<String> {
+    let Ok(access) = crate::fs::FsAccess::builder().allow_root(dir).build() else {
+        return Vec::new();
+    };
+    let Ok(entries) = access.list_dir(dir) else { return Vec::new() };
+    let mut reaped = Vec::new();
+    for entry in entries {
+        let Some(pid) = test_socket_pid(&entry.name, prefix) else { continue };
+        if process_alive(pid) {
+            continue;
+        }
+        let stale = RealTmux { program: program.to_string(), socket: entry.name.clone() };
+        let _ = stale.run(&["kill-server".to_string()]);
+        let _ = access.delete_path(dir.join(&entry.name), false);
+        reaped.push(entry.name);
+    }
+    reaped
+}
+
+/// A process id that no process has: the id of a child that ended.
+fn ended_pid() -> i32 {
+    let mut child = std::process::Command::new("/usr/bin/true").spawn().expect("true");
+    let pid = child.id() as i32;
+    child.wait().expect("true ends");
+    pid
 }
 
 fn meta() -> Meta {
@@ -315,4 +407,154 @@ async fn sessions_are_named_exactly() {
     while other.output.recv().await.is_some() {}
     assert_eq!(other.exit.await.unwrap(), None);
     assert_eq!(ten.pane(), Ok(Some(PaneState::Alive)));
+}
+
+/// The prefix of the sockets of the reaper test. No other test process reaps
+/// it, so the sockets that the test leaves for its reaper stay until it runs.
+const REAP_TEST_PREFIX: &str = "synthesis-reaptest-";
+
+/// A server on a socket of the reaper test, which ends with the guard.
+struct Left {
+    runner: RealTmux,
+    dir: PathBuf,
+}
+
+impl Left {
+    fn start(program: &str, dir: &std::path::Path, pid: i32) -> Left {
+        let runner = RealTmux {
+            program: program.to_string(),
+            socket: format!("{REAP_TEST_PREFIX}{pid}-0-{}", std::process::id()),
+        };
+        runner
+            .run(&commands::join(
+                [
+                    commands::server_options(),
+                    vec![vec![
+                        "new-session".into(),
+                        "-d".into(),
+                        "-s".into(),
+                        "left".into(),
+                        "sleep 600".into(),
+                    ]],
+                ]
+                .concat(),
+            ))
+            .expect("the left server starts");
+        Left { runner, dir: dir.to_path_buf() }
+    }
+}
+
+impl Drop for Left {
+    fn drop(&mut self) {
+        let _ = self.runner.run(&["kill-server".to_string()]);
+        remove_socket(&self.dir, &self.runner.socket);
+    }
+}
+
+fn socket_names(dir: &std::path::Path) -> Vec<String> {
+    let access = crate::fs::FsAccess::builder().allow_root(dir).build().unwrap();
+    access.list_dir(dir).unwrap().into_iter().map(|e| e.name).collect()
+}
+
+// TRS non-functional requirement: a server that a test process left, as when
+// nextest stops a test at its time limit, ends with its socket at the next
+// run. The server of a live test process stays.
+#[test]
+fn a_server_of_an_ended_test_process_goes_with_its_socket() {
+    let program = find_tmux().expect("tmux 3.2 or later must be installed for these tests");
+    let dir = socket_dir(&program).expect("the socket directory");
+    let left = Left::start(&program, &dir, ended_pid());
+    let live = Left::start(&program, &dir, std::process::id() as i32);
+    assert!(socket_names(&dir).contains(&left.runner.socket));
+
+    let reaped = reap_in(&program, &dir, REAP_TEST_PREFIX);
+    assert!(reaped.contains(&left.runner.socket), "{reaped:?}");
+    assert!(!reaped.contains(&live.runner.socket), "{reaped:?}");
+    assert!(left.runner.run(&commands::list()).is_err(), "the left server still answers");
+    assert!(!socket_names(&dir).contains(&left.runner.socket), "the socket is still there");
+    assert!(live.runner.run(&commands::list()).is_ok(), "the live server ended");
+    assert!(socket_names(&dir).contains(&live.runner.socket));
+}
+
+// TRS non-functional requirement: the reaper reads only the socket names of
+// these tests, with a process id.
+#[test]
+fn the_reaper_reads_only_test_socket_names() {
+    let pid = |name: &str| test_socket_pid(name, SOCKET_PREFIX);
+    assert_eq!(pid("synthesis-test-123-0"), Some(123));
+    assert_eq!(pid("synthesis-test-123-probe"), Some(123));
+    // Signal 0 to pid 0 reaches the caller's group, so it reads as alive.
+    assert_eq!(pid("synthesis-test-0-1"), Some(0));
+    assert!(process_alive(0));
+    for name in [
+        "default",
+        "synthesis",
+        "synthesis-test-",
+        "synthesis-test-x-1",
+        "synthesis-test-12",
+        "synthesis-test-99999999999-1",
+        "syn-exp-94935",
+    ] {
+        assert_eq!(pid(name), None, "{name}");
+    }
+}
+
+// TRS non-functional requirement: the server of a test that fails ends with
+// its socket too.
+#[test]
+fn the_server_of_a_failed_test_ends_with_its_socket() {
+    let (dir, socket, runner) = {
+        let server = server();
+        let runner = RealTmux {
+            program: server.runner.program.clone(),
+            socket: server.runner.socket.clone(),
+        };
+        (server.dir.clone().expect("the socket directory"), server.runner.socket.clone(), runner)
+    };
+    let failed = std::panic::catch_unwind(|| {
+        let server = server();
+        server
+            .runner
+            .run(&commands::join(vec![vec![
+                "new-session".into(),
+                "-d".into(),
+                "-s".into(),
+                "s".into(),
+                "sleep 600".into(),
+            ]]))
+            .expect("the server starts");
+        let socket = server.runner.socket.clone();
+        assert!(socket_names(server.dir.as_ref().unwrap()).contains(&socket));
+        std::panic::panic_any(socket);
+    });
+    let socket_of_failed = *failed.expect_err("the test fails").downcast::<String>().unwrap();
+    let ended = RealTmux { program: runner.program.clone(), socket: socket_of_failed.clone() };
+    assert!(ended.run(&commands::list()).is_err(), "the server of the failed test still answers");
+    assert!(!socket_names(&dir).contains(&socket_of_failed), "the socket is still there");
+    assert!(!socket_names(&dir).contains(&socket));
+}
+
+// TRS non-functional requirement: the server of a test ends with the test and
+// leaves no socket.
+#[test]
+fn a_test_server_ends_with_its_socket() {
+    let server = server();
+    let dir = server.dir.clone().expect("the socket directory");
+    let socket = server.runner.socket.clone();
+    let runner = RealTmux { program: server.runner.program.clone(), socket: socket.clone() };
+    runner
+        .run(&commands::join(vec![vec![
+            "new-session".into(),
+            "-d".into(),
+            "-s".into(),
+            "s".into(),
+            "sleep 600".into(),
+        ]]))
+        .expect("the server starts");
+    let access = crate::fs::FsAccess::builder().allow_root(&dir).build().unwrap();
+    let has_socket = || access.list_dir(&dir).unwrap().iter().any(|e| e.name == socket);
+    assert!(has_socket());
+    drop(server);
+    assert!(runner.run(&commands::list()).is_err(), "the server still answers");
+    assert!(!has_socket(), "the socket is still there");
 }

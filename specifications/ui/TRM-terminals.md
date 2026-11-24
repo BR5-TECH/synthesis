@@ -64,6 +64,10 @@ The Terminals panel and the terminal tab let the author open an interactive term
 41. **TRM-FR-AWXC** A key with Shift alone keeps its Shift in what goes to the session. Shift+Tab sends `ESC [ Z`. Shift+Enter sends `ESC CR`. Shift with Home, End, Insert, Delete, or F1 to F12 sends the xterm form with modifier 2, for example `ESC [ 1 ; 2 H` for Shift+Home and `ESC [ 15 ; 2 ~` for Shift+F5.
 42. **TRM-FR-DHEM** The terminal copies selected text with Cmd+C on macOS and Ctrl+Shift+C on Linux, and pastes with Cmd+V and Ctrl+Shift+V. A paste uses bracketed paste where the session turned it on.
 43. **TRM-FR-DTCA** The terminal keeps a scrollback of 10,000 lines, which the user scrolls with the wheel, the scroll bar, and Shift+PageUp and Shift+PageDown.
+43. **TRM-FR-HQZN** A terminal that a tab disposes releases its WebAssembly instance. After the dispose, no listener of that terminal stays on the document, the window, or the tab's host element, and the app keeps no reference to the terminal or to its instance.
+43. **TRM-FR-VBOY** When a shown terminal received at least 8 MiB of output and its WebAssembly memory is more than 256 MiB after a write, the tab makes it again with the same size and theme and attaches again, so that it shows the history (per TRM-FR-AULS). The tab emits one `INFO` record with the terminal id and the memory size.
+    - *Why:* `ghostty-web` grows its memory with no limit when output with many styles or graphemes moves into the scrollback.
+43. **TRM-FR-PLUX** When a hidden terminal passes the cap of TRM-FR-VBOY after a write, the tab disposes the terminal at once. Until the tab shows again, it acknowledges each frame that it receives and writes none. When the tab shows, it makes the terminal again on the terms of TRM-FR-VBOY.
 43. **TRM-FR-QMXG** While the program has mouse reporting on, a wheel step over the terminal sends a wheel report for the cell under the pointer. The report is `ESC [ < b ; col ; row M` in mode 1006, else `ESC [ M` and three bytes. `b` is 64 up or 65 down, plus 8 for Alt and 16 for Ctrl.
 43. **TRM-FR-PACR** Wheel travel adds up for each terminal, and one wheel report goes for each cell height of travel, at most 5 for one wheel event. Shift with the wheel scrolls the scrollback of TRM-FR-DTCA, also while mouse reporting is on. An ended session receives no wheel report.
 44. **TRM-FR-DPWA** The tab's title is the session's label, and it follows each change of the label. An exited session and a session with a gone target show a state marker on the tab.
@@ -147,3 +151,4 @@ Layout notes:
 - The Content Security Policy of the Tauri window allows the WebAssembly that `ghostty-web` loads (`wasm-unsafe-eval`), and nothing wider.
 - A hidden terminal tab costs no layout work: it writes output into its terminal model and renders on the next frame that shows it.
 - The terminal renders at the display's device pixel ratio.
+- The WebAssembly memory of one terminal is at most 256 MiB, plus the growth of its first 8 MiB of output and of one write over the cap. A project window has at most 16 terminals.

@@ -63,8 +63,19 @@ function select(ed: Editor, pos: number): void {
   ed.view.dispatch(ed.state.tr.setSelection(TextSelection.create(ed.state.doc, pos)));
 }
 
-function setFind(ed: Editor, ranges: { from: number; to: number }[], current: number): void {
-  const tr = ed.state.tr.setMeta(findHighlightKey, { ranges, current });
+/**
+ * Push a find payload. `peek` defaults to the current match, which is what the
+ * Editor pushes for a find action; `"keep"` leaves it out, which is what the
+ * Editor pushes after an edit of the author (EFR-FR-KQWT).
+ */
+function setFind(
+  ed: Editor,
+  ranges: { from: number; to: number }[],
+  current: number,
+  peek: "keep" | { from: number; to: number } | null = ranges[current] ?? null,
+): void {
+  const payload = peek === "keep" ? { ranges, current } : { ranges, current, peek };
+  const tr = ed.state.tr.setMeta(findHighlightKey, payload);
   tr.setMeta("addToHistory", false);
   ed.view.dispatch(tr);
 }
@@ -301,6 +312,35 @@ describe("the Find peek (EFR-FR-DGBG)", () => {
     const ed = mount(MD, false);
     await rendered(ed);
     setFind(ed, [inFence], 0);
+    expect(viewOf(ed)).toBe("diagram");
+  });
+
+  it("EFR-FR-KQWT: a match that an edit makes current does not start a peek", async () => {
+    const ed = mount();
+    await rendered(ed);
+    setFind(ed, [outside, inFence], 0);
+    setFind(ed, [outside, inFence], 1, "keep");
+    expect(viewOf(ed)).toBe("diagram");
+    expect(pre(ed).querySelector(".find-match--current")?.textContent).toBe("A-->B");
+  });
+
+  it("EFR-FR-KQWT: an open peek stays open when an edit moves the current match out", async () => {
+    const ed = mount();
+    await rendered(ed);
+    setFind(ed, [outside, inFence], 1);
+    setFind(ed, [outside, inFence], 0, "keep");
+    expect(viewOf(ed)).toBe("source");
+  });
+
+  it("EFR-FR-KQWT: a kept peek follows the fence through an edit above it", async () => {
+    const ed = mount();
+    await rendered(ed);
+    setFind(ed, [outside, inFence], 1);
+    // Long enough that the unmapped range would sit in the first paragraph.
+    ed.view.dispatch(ed.state.tr.insertText("x".repeat(40), 1));
+    setFind(ed, [], -1, "keep");
+    expect(viewOf(ed)).toBe("source");
+    setFind(ed, [], -1, null);
     expect(viewOf(ed)).toBe("diagram");
   });
 

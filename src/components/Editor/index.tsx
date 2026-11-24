@@ -220,8 +220,15 @@ function LiveEditor({
    * funnels through here, so the buffer a flush writes (EDT-FR-31) is always the
    * document the user is looking at, whichever surface produced it.
    */
+  /**
+   * EFR-FR-DOQR, EFR-FR-KQWT: whether the find panel moves the view to its
+   * current match. A find action sets it; an edit of the author clears it, so
+   * the recomputation that the edit causes leaves the view on the caret.
+   */
+  const findFollowRef = useRef(true);
   const noteEdit = useCallback(
     (next: string, editMode: EditMode, surface: EditSurface) => {
+      findFollowRef.current = false;
       session.buffer = next;
       recordEdit(session.history, next, editMode, surface);
       doc.markDirty();
@@ -308,6 +315,8 @@ function LiveEditor({
       // to the top (expanded) on any switch rather than trusting stale scroll state.
       setAtTop(true);
       setExpandOverride(null);
+      // EFR-FR-DOQR: an editing-mode change is a find action.
+      findFollowRef.current = true;
       if (next === "text") {
         // Compose the full file from the live WYSIWYG state for inline editing.
         applySourceText(
@@ -354,6 +363,7 @@ function LiveEditor({
     fmExpanded,
     bodyRef,
     replacingRef,
+    followRef: findFollowRef,
     rootRef,
     docVersion,
     currentDoc,
@@ -378,6 +388,8 @@ function LiveEditor({
   const restore = useCallback(
     (move: HistoryMove) => {
       const target = move.mode ?? session.mode;
+      // EFR-FR-KQWT: an undo or redo is an edit of the author.
+      findFollowRef.current = false;
       if (target !== session.mode) {
         // Not enterMode(): that derives one surface from the other, which would
         // overwrite the restored document with the live buffer.

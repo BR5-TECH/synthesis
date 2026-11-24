@@ -142,6 +142,7 @@ export function EditorView(props: EditorViewProps) {
     fmInputRef,
     findFocus,
     engine,
+    stepMatch,
     patchFind,
     replaceCurrent,
     replaceAll,
@@ -627,7 +628,7 @@ export function EditorView(props: EditorViewProps) {
               onQueryChange={(query) => patchFind({ query })}
               onReplacementChange={(replacement) => patchFind({ replacement })}
               onModeChange={(next: LiteralSearchMode) => patchFind({ mode: next })}
-              onStep={engine.step}
+              onStep={stepMatch}
               onReplace={replaceCurrent}
               onReplaceAll={replaceAll}
               onClose={() => patchFind({ form: null })}

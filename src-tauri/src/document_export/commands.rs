@@ -15,6 +15,7 @@ use crate::project_scope::events::EmitToProject;
 use serde::{Deserialize, Serialize};
 
 use super::convert::diagrams::{self, DiagramFailure, DiagramRenderer};
+use super::convert::docx_page::{Margins, PageSetup};
 use super::convert::model::DiagramKind;
 use super::convert::{self, calm_raster, Format, Input, Picture, Stage};
 use super::source::check_doc_artifact;
@@ -23,6 +24,7 @@ use super::{
     ERR_NO_PROJECT_OPEN, ERR_READ_FAILED, ERR_WRITE_FAILED,
 };
 use crate::fs::{self, RootFs, UserChosenPath};
+use crate::global_settings::{AppPreferences, GlobalSettingsStore};
 use crate::log_fields;
 use crate::logging::{self, Domain, LogBuffer, LogSink, BUFFER};
 
@@ -76,6 +78,10 @@ pub struct ExportJob {
     pub include_frontmatter: bool,
     pub destination: String,
     pub export_id: String,
+    /// DXP-FR-PGMR, DXP-FR-LQWZ: the pages of a `docx` export, read from the
+    /// app preferences when the export starts (GSS-FR-JTZE, GSS-FR-TLHZ,
+    /// GSS-FR-MGNV).
+    pub docx_pages: PageSetup,
 }
 
 /// DXP-FR-RKJC, DXP-FR-WGLT, DXP-FR-VMPP: the renderer of each diagram kind.
@@ -122,7 +128,8 @@ pub async fn export_document<R: tauri::Runtime>(
         );
         return Err(ERR_INVALID_FORMAT.to_string());
     };
-    let job = ExportJob { path, format, include_frontmatter, destination, export_id };
+    let docx_pages = docx_page_setup(&app);
+    let job = ExportJob { path, format, include_frontmatter, destination, export_id, docx_pages };
     // DXP-FR-WLGE: the managed state is read on the worker thread too, because
     // a `State` can not cross onto it and the `AppHandle` can.
     let worker = app.clone();
@@ -150,6 +157,39 @@ pub async fn export_document<R: tauri::Runtime>(
                 log_fields! { "error" => ERR_CONVERSION_FAILED },
             );
             Err(ERR_CONVERSION_FAILED.to_string())
+        }
+    }
+}
+
+/// DXP-FR-PGMR, DXP-FR-LQWZ: the page setup of a `docx` export from the app
+/// preferences (GSS-FR-JTZE, GSS-FR-TLHZ, GSS-FR-MGNV).
+pub fn page_setup_of(preferences: &AppPreferences) -> PageSetup {
+    let m = preferences.docx_margins_mm;
+    PageSetup {
+        landscape: preferences.docx_landscape_diagrams,
+        landscape_below: f64::from(preferences.docx_landscape_threshold_percent) / 100.0,
+        margins: Margins::from_mm(m.top, m.bottom, m.left, m.right),
+    }
+}
+
+/// The page setup of the stored app preferences. A store that can not be
+/// read gives the defaults, and logs a warning.
+pub(super) fn docx_page_setup<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> PageSetup {
+    use tauri::Manager as _;
+    let Some(store) = app.try_state::<GlobalSettingsStore>() else {
+        return PageSetup::default();
+    };
+    match store.load_app_preferences() {
+        Ok(preferences) => page_setup_of(&preferences),
+        Err(error) => {
+            logging::log_warn(
+                app,
+                &BUFFER,
+                &[Domain::Backend],
+                "document export: app preferences not read, default pages",
+                log_fields! { "error" => error },
+            );
+            PageSetup::default()
         }
     }
 }
@@ -228,6 +268,7 @@ pub fn run_export<S: LogSink + Clone + Send + 'static>(
     let base = log_fields! {
         "format" => job.format.as_str(),
         "includeFrontmatter" => job.include_frontmatter,
+        "landscapeDiagrams" => job.docx_pages.landscape,
     };
     logging::log_info(sink, buffer, &[Domain::Backend], "document export started", base.clone());
     let mut diagram_count = 0;
@@ -299,6 +340,7 @@ fn export<S: LogSink + Clone + Send + 'static>(
         format: job.format,
         include_frontmatter: job.include_frontmatter,
         load_image: &load_image,
+        docx_pages: job.docx_pages,
         render_diagram,
         pictures_dir: &pictures,
         write_file: &write_file,

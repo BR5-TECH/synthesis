@@ -61,13 +61,26 @@ pub(crate) fn png_files_in(dir: &Path) -> usize {
         .count()
 }
 
-/// Convert `text` with the given renderer, writing pictures into `dir`.
+/// Convert `text` with the given renderer, writing pictures into `dir`, with
+/// the landscape pages off, as by default (DXP-FR-LQWZ).
 pub(crate) fn run(
     text: &str,
     format: Format,
     frontmatter: bool,
     render: diagrams::DiagramRenderer<'_>,
     dir: &Path,
+) -> (Converted, Vec<(Stage, usize, usize)>) {
+    run_pages(text, format, frontmatter, render, dir, docx_page::PageSetup::default())
+}
+
+/// `run` with the DOCX page setup `pages` (DXP-FR-PGMR, DXP-FR-LQWZ).
+pub(crate) fn run_pages(
+    text: &str,
+    format: Format,
+    frontmatter: bool,
+    render: diagrams::DiagramRenderer<'_>,
+    dir: &Path,
+    pages: docx_page::PageSetup,
 ) -> (Converted, Vec<(Stage, usize, usize)>) {
     let write_file = |name: &str, bytes: &[u8]| -> Option<PathBuf> {
         let path = dir.join(name);
@@ -79,6 +92,7 @@ pub(crate) fn run(
         format,
         include_frontmatter: frontmatter,
         load_image: &no_image,
+        docx_pages: pages,
         render_diagram: render,
         pictures_dir: dir,
         write_file: &write_file,

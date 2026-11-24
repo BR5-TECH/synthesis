@@ -219,6 +219,7 @@ describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-
     expect(rowsOf("Global")).toEqual([
       "Appearance",
       "Navigation",
+      "Documents",
       "Notifications",
       "Recent projects",
       "Installed plugins",

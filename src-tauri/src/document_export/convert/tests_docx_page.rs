@@ -7,9 +7,9 @@
 use std::time::Duration;
 
 use super::diagrams::{self, png_size, DiagramFailure, MAX_RASTER_PIXELS, MAX_RASTER_SIDE};
-use super::docx_page::{self, Orientation, EMU_PER_PX};
+use super::docx_page::{self, Margins, Orientation, PageSetup, EMU_PER_PX};
 use super::model::DiagramKind;
-use super::tests::{document_xml, picture, run};
+use super::tests::{document_xml, picture, run_pages};
 use super::{document_of, docx, Assets, Format, Picture};
 
 /// A diagram renderer that reads the natural size from the source.
@@ -20,9 +20,19 @@ fn sized(_: DiagramKind, source: &str) -> Result<Picture, DiagramFailure> {
     Ok(picture(3, 3, w, h))
 }
 
+/// The DOCX of `text`, with **Landscape pages for wide diagrams** on.
 fn docx_of(text: &str) -> String {
+    docx_with(text, on())
+}
+
+/// The default page setup with **Landscape pages for wide diagrams** on.
+fn on() -> PageSetup {
+    PageSetup { landscape: true, ..PageSetup::default() }
+}
+
+fn docx_with(text: &str, pages: PageSetup) -> String {
     let dir = tempfile::tempdir().unwrap();
-    let (converted, _) = run(text, Format::Docx, false, &sized, dir.path());
+    let (converted, _) = run_pages(text, Format::Docx, false, &sized, dir.path(), pages);
     assert!(converted.failed_diagrams.is_empty());
     document_xml(&converted.bytes)
 }
@@ -53,6 +63,12 @@ fn attribute<'a>(xml: &'a str, from: &str, name: &str) -> &'a str {
 /// of a paragraph ends its section with the end of that paragraph. The
 /// `w:sectPr` of the body ends the last section.
 fn sections(xml: &str) -> Vec<Section> {
+    sections_in(xml, &on())
+}
+
+/// `sections` for a document written with the page setup `setup`, whose
+/// boxes each picture must fit.
+fn sections_in(xml: &str, setup: &PageSetup) -> Vec<Section> {
     let starts: Vec<usize> = xml.match_indices("<w:sectPr").map(|(i, _)| i).collect();
     let mut sections = Vec::new();
     let mut from = 0;
@@ -81,11 +97,8 @@ fn sections(xml: &str) -> Vec<Section> {
         };
         let content = &xml[from..end];
         // DXP-FR-HKFT: each picture fits the box of the page it is on.
-        let frame = docx_page::page_box(if landscape {
-            Orientation::Landscape
-        } else {
-            Orientation::Portrait
-        });
+        let frame =
+            setup.page_box(if landscape { Orientation::Landscape } else { Orientation::Portrait });
         for (cx, cy) in extents(content) {
             assert!(cx <= frame.width_emu && cy <= frame.height_emu, "{cx} x {cy} in {frame:?}");
         }
@@ -112,11 +125,11 @@ fn extents(xml: &str) -> Vec<(u64, u64)> {
 }
 
 fn portrait_box() -> docx_page::PageBox {
-    docx_page::page_box(Orientation::Portrait)
+    on().page_box(Orientation::Portrait)
 }
 
 fn landscape_box() -> docx_page::PageBox {
-    docx_page::page_box(Orientation::Landscape)
+    on().page_box(Orientation::Landscape)
 }
 
 // DXP-FR-HKFT: the boxes of the A4 pages with the default margins, less the
@@ -124,9 +137,9 @@ fn landscape_box() -> docx_page::PageBox {
 #[test]
 fn the_page_boxes_are_the_usable_a4_areas() {
     assert_eq!(portrait_box().width_emu, 8_504 * 635);
-    assert_eq!(portrait_box().height_emu, (16_838 - 1_985 - 1_701 - 180 - 330) * 635);
+    assert_eq!(portrait_box().height_emu, (16_838 - 1_984 - 1_701 - 180 - 330) * 635);
     assert_eq!(landscape_box().width_emu, 13_436 * 635);
-    assert_eq!(landscape_box().height_emu, (11_906 - 1_985 - 1_701 - 180 - 330) * 635);
+    assert_eq!(landscape_box().height_emu, (11_906 - 1_984 - 1_701 - 180 - 330) * 635);
 }
 
 // DXP-FR-HKFT, DXP-FR-RKJC: a picture that fits stays at its natural size and
@@ -151,7 +164,7 @@ fn a_picture_fits_its_box_and_is_never_scaled_up() {
 // it larger.
 #[test]
 fn a_diagram_goes_on_a_landscape_page_only_when_it_shows_larger() {
-    let page = |w: u32, h: u32| docx_page::diagram_orientation(&picture(1, 1, w, h), 0);
+    let page = |w: u32, h: u32| on().diagram_orientation(&picture(1, 1, w, h), 0);
     // The portrait text width is 8504 twips, about 566.9 px, so 75% of the
     // natural size fits for a width of up to about 755.9 px.
     assert_eq!(page(566, 100), Orientation::Portrait, "as wide as the text");
@@ -163,7 +176,7 @@ fn a_diagram_goes_on_a_landscape_page_only_when_it_shows_larger() {
     assert_eq!(page(1000, 850), Orientation::Landscape, "landscape shows 0.605 > 0.567");
     assert_eq!(page(1000, 950), Orientation::Portrait, "landscape shows 0.541 < 0.567");
     // 75% exactly stays portrait: 724 px beside an indent of 359 twips.
-    let at = |w: u32, indent: u32| docx_page::diagram_orientation(&picture(1, 1, w, 100), indent);
+    let at = |w: u32, indent: u32| on().diagram_orientation(&picture(1, 1, w, 100), indent);
     assert_eq!(at(724, 359), Orientation::Portrait, "exactly 75%");
     // The indent counts: beside 360 twips, 723 px shows at 75.09% and 724 px at 74.99%.
     assert_eq!(at(723, 360), Orientation::Portrait);
@@ -276,16 +289,13 @@ fn a_wide_diagram_in_a_list_or_a_quote_goes_on_a_landscape_page() {
 fn an_indented_diagram_fits_the_width_beside_its_indent() {
     let indented = portrait_box().indented(360);
     assert_eq!(indented.width_emu, (8_504 - 360) * 635);
-    assert_eq!(docx_page::diagram_orientation(&picture(1, 1, 740, 100), 0), Orientation::Portrait);
+    assert_eq!(on().diagram_orientation(&picture(1, 1, 740, 100), 0), Orientation::Portrait);
     let xml = docx_of("> ```mermaid\n> 740x100\n> ```\n\nAfter\n");
     let all = sections(&xml);
     assert!(all[0].landscape && all[0].pictures == 1, "{all:?}");
     // In a quote in a list item the indent is 720 twips: 700 px shows at
     // 74.1% there, and at 77.6% beside 360 twips.
-    assert_eq!(
-        docx_page::diagram_orientation(&picture(1, 1, 700, 100), 360),
-        Orientation::Portrait
-    );
+    assert_eq!(on().diagram_orientation(&picture(1, 1, 700, 100), 360), Orientation::Portrait);
     let all = sections(&docx_of("- item\n\n  > ```mermaid\n  > 700x100\n  > ```\n\nAfter\n"));
     assert!(all.iter().any(|s| s.landscape && s.pictures == 1), "{all:?}");
     let xml = docx_of("> ```mermaid\n> 4000x300\n> ```\n");
@@ -331,7 +341,7 @@ fn a_tall_image_fits_the_usable_height_of_the_page() {
     let doc = document_of("![tall](tall.png)\n", false);
     let mut assets = Assets::default();
     assets.images.insert("tall.png".into(), picture(4, 30, 100, 3000));
-    let xml = document_xml(&docx::write(&doc, &assets).expect("writes"));
+    let xml = document_xml(&docx::write(&doc, &assets, &PageSetup::default()).expect("writes"));
     let (cx, cy) = extents(&xml)[0];
     assert!(cy <= portrait_box().height_emu && cy + 2 >= portrait_box().height_emu);
     assert!((cx as f64 / cy as f64 - 100.0 / 3000.0).abs() < 1e-4);
@@ -360,7 +370,7 @@ fn merman_renders_a_wide_sequence_diagram_in_the_raster_limits() {
     assert!(picture.width * 3 > pw + 30, "the natural size is not the raster divided by 3");
     let ratio = (pw as f64 / ph as f64) / (picture.width as f64 / picture.height as f64);
     assert!((ratio - 1.0).abs() < 0.02, "the natural size has the ratio of the raster");
-    assert_eq!(docx_page::diagram_orientation(&picture, 0), Orientation::Landscape);
+    assert_eq!(on().diagram_orientation(&picture, 0), Orientation::Landscape);
 }
 
 // DXP-FR-RKJC: a small real diagram renders at three times its natural size.
@@ -417,4 +427,105 @@ fn two_page_breaks_after_a_wide_diagram_keep_one_page_break() {
     let xml = docx_of(&text);
     assert_eq!(sections(&xml).len(), 2);
     assert_eq!(xml.matches(r#"w:type="page""#).count(), 1);
+}
+
+// DXP-FR-LQWZ, DXP-FR-HKFT: with the switch off, which is the default, a wide
+// diagram stays on the portrait page and fits it, and every page is portrait.
+#[test]
+fn with_the_switch_off_every_diagram_stays_on_a_portrait_page() {
+    let text = format!("Before\n\n{}{}<!-- % -->\n\nAfter\n", fence("1200x300"), fence("4000x300"));
+    let xml = docx_with(&text, PageSetup::default());
+    let all = sections(&xml);
+    assert_eq!(all.len(), 1, "{all:?}");
+    assert!(!all[0].landscape && all[0].pictures == 2);
+    assert!(!xml.contains("landscape"));
+    assert_eq!(xml.matches(r#"w:type="page""#).count(), 1, "the V1 break stays");
+    for (cx, _) in extents(&xml) {
+        assert!(cx <= portrait_box().width_emu && cx + 2 >= portrait_box().width_emu, "{cx}");
+    }
+}
+
+// DXP-FR-LQWZ: the landscape threshold comes from the page setup. At 50%, a
+// diagram that the portrait page shows at 56.7% stays portrait. At 75% it
+// goes landscape. At 100%, any diagram that the portrait page shrinks goes
+// landscape when the landscape page shows it larger.
+#[test]
+fn the_landscape_threshold_is_configurable() {
+    let at = |percent: f64, w: u32, h: u32| {
+        let setup = PageSetup { landscape_below: percent / 100.0, ..on() };
+        setup.diagram_orientation(&picture(1, 1, w, h), 0)
+    };
+    assert_eq!(at(50.0, 1000, 300), Orientation::Portrait);
+    assert_eq!(at(75.0, 1000, 300), Orientation::Landscape);
+    assert_eq!(at(100.0, 600, 150), Orientation::Landscape);
+    assert_eq!(at(100.0, 566, 150), Orientation::Portrait, "it fits, so it does not shrink");
+    let xml = docx_with(&fence("1000x300"), PageSetup { landscape_below: 0.5, ..on() });
+    assert!(!xml.contains("landscape"));
+}
+
+// DXP-FR-PGMR: millimetres become twentieths of a point, and the default
+// margins are 35, 30, 30, and 30 mm.
+#[test]
+fn margins_convert_from_millimetres() {
+    assert_eq!(docx_page::mm_to_twips(35), 1_984);
+    assert_eq!(docx_page::mm_to_twips(30), 1_701);
+    assert_eq!(docx_page::mm_to_twips(5), 283);
+    assert_eq!(docx_page::mm_to_twips(60), 3_402);
+    assert_eq!(Margins::default(), Margins::from_mm(35, 30, 30, 30));
+}
+
+// DXP-FR-PGMR, DXP-FR-HKFT, DXP-FR-LQWZ: smaller margins give every page,
+// portrait and landscape, those margins, a wider text width for pictures and
+// tables, and a taller usable height.
+#[test]
+fn smaller_margins_make_the_text_width_and_the_pictures_larger() {
+    let margins = Margins::from_mm(10, 12, 15, 20);
+    let setup = PageSetup { margins, ..on() };
+    let (top, bottom, left, right) = (567, 680, 850, 1_134);
+    assert_eq!(
+        (margins.top, margins.bottom, margins.left, margins.right),
+        (top, bottom, left, right)
+    );
+    let width = 11_906 - left - right;
+    assert_eq!(setup.text_width_twips(Orientation::Portrait), width);
+    assert_eq!(setup.text_width_twips(Orientation::Landscape), 16_838 - left - right);
+    let portrait = setup.page_box(Orientation::Portrait);
+    assert_eq!(portrait.height_emu, u64::from(16_838 - top - bottom - 180 - 330) * 635);
+
+    let text = format!("Before\n\n{}```text\ncode\n```\n\n{}", fence("640x100"), fence("2000x300"));
+    let xml = docx_with(&text, setup);
+    let all = sections_in(&xml, &setup);
+    assert_eq!(all.iter().map(|s| s.landscape).collect::<Vec<_>>(), vec![false, true]);
+    // Every section carries the margins.
+    let margins_xml =
+        format!(r#"<w:pgMar w:top="{top}" w:right="{right}" w:bottom="{bottom}" w:left="{left}""#);
+    assert_eq!(xml.matches(&margins_xml).count(), xml.matches("<w:pgMar").count(), "{xml}");
+    assert_eq!(xml.matches("<w:pgMar").count(), 2, "a portrait and a landscape section");
+    // 640 px fits the wider portrait text width at its natural size.
+    let extents = extents(&xml);
+    assert_eq!(extents[0], (640 * EMU_PER_PX, 100 * EMU_PER_PX));
+    // The wide diagram fills the landscape text width of these margins.
+    let landscape = setup.page_box(Orientation::Landscape).width_emu;
+    assert!(extents[1].0 <= landscape && extents[1].0 + 2 >= landscape, "{extents:?}");
+    // The code block is as wide as the text.
+    assert!(xml.contains(&format!(r#"<w:tblW w:w="{width}" w:type="dxa""#)), "{xml}");
+}
+
+// DXP-FR-PGMR, GSS-FR-JTZE, GSS-FR-TLHZ, GSS-FR-MGNV: the export takes its
+// page setup from the app preferences.
+#[test]
+fn the_page_setup_comes_from_the_app_preferences() {
+    use crate::document_export::commands::page_setup_of;
+    use crate::global_settings::{AppPreferences, DocxMarginsMm};
+    assert_eq!(page_setup_of(&AppPreferences::default()), PageSetup::default());
+    let prefs = AppPreferences {
+        docx_landscape_diagrams: true,
+        docx_landscape_threshold_percent: 60,
+        docx_margins_mm: DocxMarginsMm { top: 10, bottom: 12, left: 15, right: 20 },
+        ..AppPreferences::default()
+    };
+    let setup = page_setup_of(&prefs);
+    assert!(setup.landscape);
+    assert!((setup.landscape_below - 0.6).abs() < 1e-9);
+    assert_eq!(setup.margins, Margins::from_mm(10, 12, 15, 20));
 }

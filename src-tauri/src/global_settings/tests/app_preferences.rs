@@ -196,6 +196,11 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
             selection_follows_tab: false,
             // Non-default for the same reason (GSS-FR-OPBH).
             open_project_behaviour: OpenProjectBehaviour::NewTab,
+            // Non-default for the same reason (GSS-FR-JTZE, GSS-FR-TLHZ,
+            // GSS-FR-MGNV).
+            docx_landscape_diagrams: true,
+            docx_landscape_threshold_percent: 60,
+            docx_margins_mm: DocxMarginsMm { top: 12, bottom: 13, left: 14, right: 15 },
             // Non-default for the same reason (GSS-FR-34): a write that
             // dropped it would read back at 0.20 and pass a weaker
             // assertion than the one below.
@@ -294,6 +299,14 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
     );
     assert_eq!(after_diff.fonts.rich.size_px, Some(17.0));
     assert_eq!(after_diff.fonts.rich.line_height, Some(1.8));
+    // GSS-FR-20 / GSS-FR-JTZE / GSS-FR-TLHZ / GSS-FR-MGNV: nor the DOCX page
+    // settings, which the Documents section owns.
+    assert!(after_diff.docx_landscape_diagrams);
+    assert_eq!(after_diff.docx_landscape_threshold_percent, 60);
+    assert_eq!(
+        after_diff.docx_margins_mm,
+        DocxMarginsMm { top: 12, bottom: 13, left: 14, right: 15 }
+    );
     // GSS-FR-20 / GSS-FR-32: nor the notifications switch, which the
     // Notifications section owns. It was written `false` above, so a write
     // that dropped the field would read back `true` (its default) here.

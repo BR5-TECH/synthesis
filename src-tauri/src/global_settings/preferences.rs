@@ -72,6 +72,89 @@ where
     })
 }
 
+/// GSS-FR-TLHZ: the landscape threshold of a DOCX export, in percent, and the
+/// whole percents it may be.
+pub const DOCX_LANDSCAPE_THRESHOLD_DEFAULT: u32 = 75;
+pub const DOCX_LANDSCAPE_THRESHOLD_RANGE: std::ops::RangeInclusive<u32> = 10..=100;
+
+/// GSS-FR-MGNV: the whole millimetres a DOCX page margin may be, and the
+/// default of the top and of the other sides.
+pub const DOCX_MARGIN_MM_RANGE: std::ops::RangeInclusive<u32> = 5..=60;
+const DOCX_MARGIN_TOP_DEFAULT: u32 = 35;
+const DOCX_MARGIN_SIDE_DEFAULT: u32 = 30;
+
+/// A stored whole number in `range`, or `default` for a value that is not a
+/// whole number or is out of `range`, so one bad field never makes the whole
+/// record unreadable.
+fn lenient_whole<'de, D: Deserializer<'de>>(
+    deserializer: D,
+    range: std::ops::RangeInclusive<u32>,
+    default: u32,
+) -> Result<u32, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored {
+        Whole(i64),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Stored::deserialize(deserializer)? {
+        Stored::Whole(n) => u32::try_from(n).ok().filter(|n| range.contains(n)).unwrap_or(default),
+        Stored::Other(_) => default,
+    })
+}
+
+fn docx_landscape_threshold_default() -> u32 {
+    DOCX_LANDSCAPE_THRESHOLD_DEFAULT
+}
+
+/// GSS-FR-TLHZ: a threshold out of 10 to 100 reads as 75.
+fn lenient_docx_threshold<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u32, D::Error> {
+    lenient_whole(deserializer, DOCX_LANDSCAPE_THRESHOLD_RANGE, DOCX_LANDSCAPE_THRESHOLD_DEFAULT)
+}
+
+fn docx_margin_top_default() -> u32 {
+    DOCX_MARGIN_TOP_DEFAULT
+}
+
+fn docx_margin_side_default() -> u32 {
+    DOCX_MARGIN_SIDE_DEFAULT
+}
+
+/// GSS-FR-MGNV: a top margin out of 5 to 60 mm reads as 35 mm.
+fn lenient_margin_top<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u32, D::Error> {
+    lenient_whole(deserializer, DOCX_MARGIN_MM_RANGE, DOCX_MARGIN_TOP_DEFAULT)
+}
+
+/// GSS-FR-MGNV: another margin out of 5 to 60 mm reads as 30 mm.
+fn lenient_margin_side<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u32, D::Error> {
+    lenient_whole(deserializer, DOCX_MARGIN_MM_RANGE, DOCX_MARGIN_SIDE_DEFAULT)
+}
+
+/// GSS-FR-MGNV: the margins of a DOCX page, in whole millimetres. A side that
+/// is unset or out of range is its default.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct DocxMarginsMm {
+    #[serde(default = "docx_margin_top_default", deserialize_with = "lenient_margin_top")]
+    pub top: u32,
+    #[serde(default = "docx_margin_side_default", deserialize_with = "lenient_margin_side")]
+    pub bottom: u32,
+    #[serde(default = "docx_margin_side_default", deserialize_with = "lenient_margin_side")]
+    pub left: u32,
+    #[serde(default = "docx_margin_side_default", deserialize_with = "lenient_margin_side")]
+    pub right: u32,
+}
+
+impl Default for DocxMarginsMm {
+    fn default() -> Self {
+        DocxMarginsMm {
+            top: DOCX_MARGIN_TOP_DEFAULT,
+            bottom: DOCX_MARGIN_SIDE_DEFAULT,
+            left: DOCX_MARGIN_SIDE_DEFAULT,
+            right: DOCX_MARGIN_SIDE_DEFAULT,
+        }
+    }
+}
+
 /// How a Diff tab lays a comparison out (GSS-FR-24).
 ///
 /// User-global rather than project-scoped or per-tab because it describes how
@@ -458,6 +541,22 @@ pub struct AppPreferences {
     /// Navigation section reads and writes it. This module does not interpret it.
     #[serde(deserialize_with = "open_project_behaviour_lenient")]
     pub open_project_behaviour: OpenProjectBehaviour,
+    /// GSS-FR-JTZE: whether a DOCX export puts a wide diagram on a landscape
+    /// page (`../core/DXP-document-export.md` DXP-FR-LQWZ). It is `false`
+    /// when unset, also in a record written before the field existed, through
+    /// the struct's blanket `default`. The Documents section reads and writes
+    /// it (`../ui/GLS-global-settings.md` GLS-FR-KWVN).
+    pub docx_landscape_diagrams: bool,
+    /// GSS-FR-TLHZ: the landscape threshold of a DOCX export, a whole percent
+    /// from 10 to 100, 75 when unset or out of range.
+    #[serde(
+        default = "docx_landscape_threshold_default",
+        deserialize_with = "lenient_docx_threshold"
+    )]
+    pub docx_landscape_threshold_percent: u32,
+    /// GSS-FR-MGNV: the margins of a DOCX page, in whole millimetres.
+    #[serde(default, deserialize_with = "lenient_or_default")]
+    pub docx_margins_mm: DocxMarginsMm,
     /// GSS-FR-34: the width of the Runs panel's graduation history rail as a
     /// fraction of that panel's usable content width, `0.20` when unset.
     ///
@@ -614,6 +713,9 @@ impl Default for AppPreferences {
             voice_hotkey_behaviour: VoiceHotkeyBehaviour::default(),
             selection_follows_tab: selection_follows_tab_default(),
             open_project_behaviour: OpenProjectBehaviour::default(),
+            docx_landscape_diagrams: false,
+            docx_landscape_threshold_percent: DOCX_LANDSCAPE_THRESHOLD_DEFAULT,
+            docx_margins_mm: DocxMarginsMm::default(),
             graduation_rail_width_fraction: graduation_rail_width_default(),
             graduation_paths_width_fraction: graduation_paths_width_default(),
             git_files_width_fraction: git_files_width_default(),

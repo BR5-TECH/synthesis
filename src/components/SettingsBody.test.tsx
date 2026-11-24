@@ -19,10 +19,10 @@ import {
  */
 
 describe("the section vocabulary", () => {
-  it("SWN-FR-QXTV: the Global group lists 15 sections, the Project group 13, in the keys a route names", () => {
+  it("SWN-FR-QXTV, GLS-FR-03: the Global group lists 16 sections, the Project group 13, in the keys a route names", () => {
     expect(GLOBAL_SECTIONS.map(([key]) => key)).toEqual([...GLOBAL_SECTION_KEYS]);
     expect(PROJECT_SECTIONS.map(([key]) => key)).toEqual([...PROJECT_SECTION_KEYS]);
-    expect(GLOBAL_SECTIONS).toHaveLength(15);
+    expect(GLOBAL_SECTIONS).toHaveLength(16);
     expect(PROJECT_SECTIONS).toHaveLength(13);
   });
 

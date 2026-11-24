@@ -105,6 +105,8 @@ pub struct Input<'a> {
     pub load_image: &'a dyn Fn(&str) -> Option<Vec<u8>>,
     /// DXP-FR-RKJC: the picture of one diagram, or why it fails.
     pub render_diagram: diagrams::DiagramRenderer<'a>,
+    /// DXP-FR-PGMR, DXP-FR-LQWZ: the pages of a `docx` export.
+    pub docx_pages: docx_page::PageSetup,
     /// The folder the PDF pictures are written to, and the writer of one file.
     pub pictures_dir: &'a Path,
     pub write_file: pdf::FileWriter<'a>,
@@ -156,7 +158,7 @@ pub fn convert(
     progress(Stage::Converting, 0, 0);
     let assets = load_assets(&doc, input.load_image);
     let (bytes, regular_faces_only) = match input.format {
-        Format::Docx => (docx::write(&doc, &assets)?, false),
+        Format::Docx => (docx::write(&doc, &assets, &input.docx_pages)?, false),
         Format::Pdf => {
             let written = pdf::write(&doc, &assets, input.pictures_dir, input.write_file)?;
             (written.bytes, written.regular_faces_only)

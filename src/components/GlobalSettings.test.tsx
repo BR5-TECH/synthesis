@@ -206,7 +206,7 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
     });
   });
 
-  it("carries the full-screen flag AND the query mode through a theme save (GLS-FR-14, GSS-FR-20)", async () => {
+  it("GLS-FR-14, GSS-FR-20: carries the full-screen flag, the query mode, and the DOCX page settings through a theme save", async () => {
     // The clobber this guards against is silent: the theme applies correctly,
     // and the user only discovers full-screen and their query mode were
     // forgotten on relaunch.
@@ -224,6 +224,11 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
       editorZoomPercent: 100,
+        // GLS-FR-14, GLS-FR-KWVN, GLS-FR-PBXM, GLS-FR-MRGQ: the Documents
+        // section's DOCX page settings ride the same record.
+        docxLandscapeDiagrams: true,
+        docxLandscapeThresholdPercent: 60,
+        docxMarginsMm: { top: 12, bottom: 13, left: 14, right: 15 },
         // GLS-FR-14, GSS-FR-20: all three roles' font settings ride the same record, and
         // a theme save must carry them through unchanged too.
         fonts: {
@@ -262,6 +267,10 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
       editorZoomPercent: 100,
+        // GLS-FR-14: a theme save carries the DOCX page settings through.
+        docxLandscapeDiagrams: true,
+        docxLandscapeThresholdPercent: 60,
+        docxMarginsMm: { top: 12, bottom: 13, left: 14, right: 15 },
         // GSS-FR-20 / GLS-FR-14: and all three roles, for the same reason —
         // the theme and the fonts share this record, and a theme save that
         // dropped the fonts would be discovered only on relaunch.

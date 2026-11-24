@@ -1,0 +1,45 @@
+/* GLS-FR-MRGQ: the Page margins of the Documents section. The four fields sit
+   around an A4 outline, each on the side it sets. */
+.document-settings__margins {
+  display: grid;
+  grid-template-columns: max-content max-content max-content;
+  grid-template-areas:
+    ".    top    ."
+    "left page   right"
+    ".    bottom .";
+  align-items: center;
+  justify-items: center;
+  column-gap: var(--sp-4);
+  row-gap: var(--sp-2);
+  width: max-content;
+}
+
+.document-settings__margins .document-settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.document-settings__field .input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.document-settings__page {
+  position: relative;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-xs);
+  background: var(--bg-canvas);
+}
+
+.document-settings__text-area {
+  position: absolute;
+  border: 1px dashed var(--fg-3);
+  transition: inset 120ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .document-settings__text-area {
+    transition: none;
+  }
+}

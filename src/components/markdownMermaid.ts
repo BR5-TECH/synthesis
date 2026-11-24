@@ -523,11 +523,14 @@ function samePositions(a: readonly number[], b: readonly number[]): boolean {
   return a.length === b.length && a.every((pos, at) => pos === b[at]);
 }
 
-/** The current Find match as a position range, if there is one. */
+/**
+ * EFR-FR-DGBG, EFR-FR-KQWT: the Find match a fence peeks for, if there is one.
+ * It is the current match as the last find action left it, not the current
+ * match itself: an edit of the author can move the current match, and a fence
+ * that flips with it moves the text under the caret.
+ */
 function currentFindMatch(state: EditorState): { from: number; to: number } | null {
-  const find = findHighlightKey.getState(state);
-  if (!find || find.current < 0) return null;
-  return find.ranges[find.current] ?? null;
+  return findHighlightKey.getState(state)?.peek ?? null;
 }
 
 const overlaps = (a: { from: number; to: number }, from: number, to: number) =>

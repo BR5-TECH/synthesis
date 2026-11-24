@@ -14,7 +14,7 @@
 // is only a transitive one and importing it directly would rely on hoisting.
 import { Extension } from "@tiptap/react";
 import type { Node as PMNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
 /** One run of text in the document, and where it starts in document positions. */
@@ -117,6 +117,13 @@ export interface FindHighlightPayload {
   ranges: PosRange[];
   /** Index into `ranges` of the current match, or -1 when there is none. */
   current: number;
+  /**
+   * EFR-FR-DGBG, EFR-FR-KQWT: the match a diagram fence peeks for, or null for
+   * none. A find action sets it to the current match. An edit of the author
+   * moves the current match but not the peek, so a payload pushed for such an
+   * edit leaves it out and the plugin keeps the one it has.
+   */
+  peek?: PosRange | null;
 }
 
 export const findHighlightKey = new PluginKey<FindHighlightPayload>(
@@ -149,6 +156,15 @@ function buildDecorations(
 
 const EMPTY: FindHighlightPayload = { ranges: [], current: -1 };
 
+/** Map a range through a document change; null and absent stay as they are. */
+function mapRange(
+  tr: Transaction,
+  range: PosRange | null | undefined,
+): PosRange | null | undefined {
+  if (!range) return range;
+  return { from: tr.mapping.map(range.from), to: tr.mapping.map(range.to) };
+}
+
 /**
  * EFR-FR-DSKI: decorates the current match set inside the WYSIWYG body.
  *
@@ -172,7 +188,10 @@ export const FindHighlight = Extension.create({
             const pushed = tr.getMeta(findHighlightKey) as
               | FindHighlightPayload
               | undefined;
-            if (pushed) return pushed;
+            const kept = tr.docChanged ? mapRange(tr, value.peek) : value.peek;
+            if (pushed) {
+              return pushed.peek === undefined ? { ...pushed, peek: kept } : pushed;
+            }
             if (!tr.docChanged) return value;
             return {
               ranges: value.ranges.map((r) => ({
@@ -180,6 +199,7 @@ export const FindHighlight = Extension.create({
                 to: tr.mapping.map(r.to),
               })),
               current: value.current,
+              peek: kept,
             };
           },
         },

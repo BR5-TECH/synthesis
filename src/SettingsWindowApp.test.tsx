@@ -385,7 +385,9 @@ describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-
   it("SWN-FR-FCRT: moves the keyboard focus into the window when it opens", async () => {
     renderWindow("global/github");
     await screen.findByRole("heading", { name: "GitHub" });
-    expect(screen.getByRole("tab", { name: "GitHub" })).toHaveFocus();
+    // The nav moves the focus in an effect after its first paint, so the
+    // heading can be found before the effect runs on a slow runner.
+    await waitFor(() => expect(screen.getByRole("tab", { name: "GitHub" })).toHaveFocus());
   });
 });
 

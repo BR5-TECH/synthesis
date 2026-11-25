@@ -248,6 +248,13 @@ impl TurnScript {
 
     /// The turn answers as scripted even where the run was stopped while it
     /// ran, as an agent that finished at that same moment does.
+    /// GRD-FR-PDNY: once stopped, the executor cannot confirm the turn's
+    /// container removed, so it may still run in the working copy.
+    pub(crate) fn leaving_its_container_running(mut self) -> Self {
+        self.inner = self.inner.leaving_the_container();
+        self
+    }
+
     pub(crate) fn finishing_anyway(mut self) -> Self {
         self.inner = self.inner.ignoring_cancellation();
         self

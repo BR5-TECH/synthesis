@@ -167,7 +167,8 @@ fn unreadable_in_session<R: tauri::Runtime>(
     cancellation: &CancellationToken,
 ) -> Option<SessionRef> {
     let execution = outcome.as_ref().ok()?;
-    if execution.process_outcome != ProcessOutcome::Completed {
+    // GRD-FR-PDNY: no turn is corrected beside a container that may still run.
+    if execution.process_outcome != ProcessOutcome::Completed || !execution.container_removed {
         return None;
     }
     let response = execution.response.as_ref()?;
@@ -301,6 +302,17 @@ fn settle<R: tauri::Runtime>(
 ) {
     // GRD-FR-EWTN: a run discarded while its turn ran takes nothing.
     if discarded_meanwhile(app, run) {
+        return;
+    }
+    // GRD-FR-PDNY: a container that may still run rests the run.
+    if outcome.as_ref().is_ok_and(|execution| !execution.container_removed) {
+        super::moved_on::rest_on_running_container(app, run);
+        return;
+    }
+    // GRD-FR-HRXA: a run a later command moved on keeps the state that command
+    // wrote. A PR summary run commits nothing, so nothing else is recorded.
+    if super::moved_on::moved_on(app, run).is_some() {
+        super::moved_on::record_commit_only(app, run, None);
         return;
     }
     // GRD-FR-CCHK: a stop the author or the application made while the turn ran

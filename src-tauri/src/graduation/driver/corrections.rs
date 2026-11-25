@@ -185,6 +185,10 @@ fn correctable(
     if execution.process_outcome != ProcessOutcome::InvalidStructuredOutput {
         return None;
     }
+    // GRD-FR-PDNY: no turn is corrected beside a container that may still run.
+    if !execution.container_removed {
+        return None;
+    }
     let reason = execution.refusal?.as_str();
     correction_section(reason)?;
     let session = execution.session.as_ref()?;

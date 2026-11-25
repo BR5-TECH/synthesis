@@ -292,6 +292,13 @@ impl Outcome {
         self
     }
 
+    /// GRD-FR-HRXA: the interruption's detail is exactly the one named.
+    pub(crate) fn expect_interruption_detail_is(self, detail: &str) -> Self {
+        let held = self.run.interruption.as_ref().map(|i| i.detail.clone()).unwrap_or_default();
+        assert_eq!(held, detail, "[{}] the interruption's detail", self.name);
+        self
+    }
+
     /// GXD-FR-QGYA: the change set the checkpoint holds, written durably before
     /// the run was reported as stopped.
     pub(crate) fn expect_checkpoint_paths(self, paths: &[&str]) -> Self {
@@ -590,6 +597,40 @@ impl Outcome {
             attempts,
             vec![(other.run_id.clone(), true)],
             "[{}] the stream's queue offered the run labelled {label} a dispatch, with the stream free",
+            self.name
+        );
+        self
+    }
+
+    /// GRD-FR-QWLP / GRD-FR-TNVD: the end of the stopped loop offered the run in
+    /// focus a dispatch, and no loop stood in the run or its queue then.
+    pub(crate) fn expect_queue_offered_the_run_with_no_loop_standing(self) -> Self {
+        let tripwire = self.fx.app.state::<crate::graduation::driver::drive::SpawnTripwire>();
+        let attempts: Vec<String> = tripwire.take().into_iter().map(|(id, _)| id).collect();
+        assert_eq!(
+            attempts,
+            vec![self.run.id.clone()],
+            "[{}] the queue offered the run a dispatch once",
+            self.name
+        );
+        assert_eq!(
+            tripwire.take_loop_free(),
+            vec![(self.run.id.clone(), true)],
+            "[{}] no loop stood in the run or its queue at the offer",
+            self.name
+        );
+        self
+    }
+
+    /// GRD-FR-QWLP: no loop stood in a run or its queue at any offer the queue
+    /// made, and at least one offer was made.
+    pub(crate) fn expect_no_loop_stood_at_the_offers(self) -> Self {
+        let tripwire = self.fx.app.state::<crate::graduation::driver::drive::SpawnTripwire>();
+        let offers = tripwire.take_loop_free();
+        assert!(!offers.is_empty(), "[{}] the queue made an offer", self.name);
+        assert!(
+            offers.iter().all(|(_, free)| *free),
+            "[{}] no loop stood at an offer: {offers:?}",
             self.name
         );
         self

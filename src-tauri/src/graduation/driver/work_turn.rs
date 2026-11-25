@@ -159,11 +159,10 @@ fn prepare<'a, R: tauri::Runtime>(
     kind: TurnKind,
     first: bool,
 ) -> Option<TurnRequest<'a>> {
-    if !first {
-        if let Some(reason) = cancellation_reason(app, &run.id, cancellation) {
-            abandon(app, run, worktree, Stop::of_reason(reason));
-            return None;
-        }
+    // GRL-FR-WCZE: a cancelled loop composes no turn, the first one included.
+    if let Some(reason) = cancellation_reason(app, &run.id, cancellation) {
+        abandon(app, run, worktree, Stop::of_reason(reason));
+        return None;
     }
     // GRD-FR-XHSE: a merge run checks its pinned tips before every dispatch.
     if merge_drive::moved(app, run) {

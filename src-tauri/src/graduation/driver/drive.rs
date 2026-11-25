@@ -5,8 +5,8 @@ use super::dispatch::TurnRequest;
 use super::stops::Stop;
 use super::turns::*;
 use super::*;
-use crate::graduation::is_streamless_queue_key;
 use crate::graduation::logs::{self, GraduationLogLevel, GraduationLogProducer, StructuredEvent};
+#[cfg(test)]
 use crate::project_scope::ProjectStores;
 use std::path::PathBuf;
 
@@ -47,7 +47,7 @@ fn intercepted<R: tauri::Runtime>(
         let unclaimed = app
             .try_project_store::<GraduationState>()
             .is_some_and(|state| state.holder_of(stream_id).is_none());
-        let unmarked = is_streamless_queue_key(stream_id)
+        let unmarked = crate::graduation::is_streamless_queue_key(stream_id)
             || crate::streams::stream_of(app, stream_id)
                 .is_some_and(|stream| stream.busy_run_id.is_none());
         let unreconciled =
@@ -57,6 +57,11 @@ fn intercepted<R: tauri::Runtime>(
                     || state.is_updating(stream_id))
             });
         tripwire.record(run_id, unclaimed && unmarked && unreconciled);
+        // GRD-FR-QWLP: whether a loop still stood in the run or its queue.
+        let loop_free = app
+            .try_project_store::<GraduationState>()
+            .is_some_and(|state| !state.is_looping(run_id) && !state.is_loop_in_queue(stream_id));
+        tripwire.record_loop_free(run_id, loop_free);
     }
     true
 }
@@ -76,6 +81,9 @@ fn intercepted<R: tauri::Runtime>(
 #[derive(Default)]
 pub struct SpawnTripwire {
     attempts: std::sync::Mutex<Vec<(String, bool)>>,
+    /// GRD-FR-QWLP: each attempt, with whether no loop stood in the run or its
+    /// queue at that moment.
+    loop_free: std::sync::Mutex<Vec<(String, bool)>>,
 }
 
 #[cfg(test)]
@@ -83,6 +91,18 @@ impl SpawnTripwire {
     fn record(&self, run_id: &str, stream_free: bool) {
         let mut attempts = self.attempts.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         attempts.push((run_id.to_string(), stream_free));
+    }
+
+    fn record_loop_free(&self, run_id: &str, loop_free: bool) {
+        let mut attempts = self.loop_free.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        attempts.push((run_id.to_string(), loop_free));
+    }
+
+    /// GRD-FR-QWLP: every attempt with its loop flag so far, and none of them
+    /// afterwards.
+    pub(crate) fn take_loop_free(&self) -> Vec<(String, bool)> {
+        let mut attempts = self.loop_free.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        std::mem::take(&mut *attempts)
     }
 
     /// Every attempt recorded so far, and none of them afterwards.
@@ -103,101 +123,16 @@ pub fn spawn_with<R: tauri::Runtime>(
     stream_id: &str,
     dispatch: Arc<dyn seams::GraduationDispatch<R>>,
 ) -> bool {
-    let Some(cancellation) = claim(app, run_id, stream_id) else {
+    let Some(ticket) = super::claim::claim(app, run_id, stream_id) else {
         return false;
     };
     let app = app.clone();
     let run_id = run_id.to_string();
     let stream_id = stream_id.to_string();
     crate::project_scope::context::thread_spawn(move || {
-        drive_blocking(&app, &run_id, &stream_id, cancellation, dispatch.as_ref());
+        drive_blocking(&app, &run_id, &stream_id, ticket, dispatch.as_ref());
     });
     true
-}
-
-/// GRD-FR-BNTC: take the stream for this run, or answer that it is not free.
-///
-/// The claim is the check. A queue already holding a run, and a project with
-/// no free slot under its limit, both refuse here (GRD-FR-KKKN).
-fn claim<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    run_id: &str,
-    stream_id: &str,
-) -> Option<CancellationToken> {
-    let state = app.try_project_store::<GraduationState>()?;
-    if !state.loop_enabled() {
-        return None;
-    }
-    let limit = crate::graduation::scheduler::concurrency_limit(app);
-    let direct =
-        crate::graduation::load_run(app, run_id).map(|run| run.is_direct()).unwrap_or(false);
-    // GRD-FR-BNTC, GRD-FR-KKKN: the stored runs say which run holds this queue
-    // and which runs hold a slot. A run at rest holds both as a run at work does.
-    let (holders, other_holder) = stored_holds(app, run_id, stream_id);
-    if let Some(holder) = other_holder {
-        logging::log_debug(
-            app,
-            &crate::logging::BUFFER,
-            &[Domain::Backend],
-            "graduation refused a claim: another run holds the queue",
-            log_fields! { "run_id" => run_id.to_string(), "holder" => holder },
-        );
-        return None;
-    }
-    let cancellation = CancellationToken::new();
-    if !state.claim_with_holders(stream_id, run_id, direct, limit, &holders, cancellation.clone()) {
-        return None;
-    }
-    // GRD-FR-ZVNO: an ordinary worktree has no stream record to mark busy; its
-    // lock is the claim above and the index entry of a dispatched direct run.
-    // GRD-FR-KAKU: a PR summary run has no stream either.
-    let marked = if is_streamless_queue_key(stream_id) {
-        Ok(())
-    } else {
-        crate::streams::claim_stream(app, stream_id, run_id)
-    };
-    if let Err(reason) = marked {
-        state.release(stream_id);
-        logging::log_warn(
-            app,
-            &crate::logging::BUFFER,
-            &[Domain::Backend],
-            "graduation could not mark a stream busy",
-            log_fields! { "run_id" => run_id.to_string(), "reason" => reason },
-        );
-        return None;
-    }
-    state.begin_loop(run_id);
-    Some(cancellation)
-}
-
-/// GRD-FR-BNTC, GRD-FR-KKKN: from the run order's index, the runs that hold a
-/// project slot and the run, other than this one, that holds this queue.
-fn stored_holds<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    run_id: &str,
-    queue_key: &str,
-) -> (std::collections::BTreeSet<String>, Option<String>) {
-    let project_key = crate::graduation::queue::project_key(app);
-    let (Ok(fs), Ok(base)) = (crate::graduation::store_fs(app), crate::graduation::store_base(app))
-    else {
-        return (std::collections::BTreeSet::new(), None);
-    };
-    let index = crate::graduation::read_queue_index(&fs, &base, &project_key);
-    let holders = index
-        .runs
-        .iter()
-        .filter(|entry| entry.holds_slot())
-        .map(|entry| entry.run_id.clone())
-        .collect();
-    let other = index
-        .runs
-        .iter()
-        .find(|entry| {
-            entry.holds_queue() && entry.run_id != run_id && entry.queue_key() == queue_key
-        })
-        .map(|entry| entry.run_id.clone());
-    (holders, other)
 }
 
 /// Drive one claimed run to rest, on a runtime of this thread's own.
@@ -205,26 +140,23 @@ fn drive_blocking<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     run_id: &str,
     stream_id: &str,
-    cancellation: CancellationToken,
+    ticket: super::claim::LoopTicket,
     dispatch: &dyn seams::GraduationDispatch<R>,
 ) {
+    let super::claim::LoopTicket { cancellation, loop_id } = ticket;
+    // GRD-FR-QWLP: the loop ends also where the drive panics, so no loop entry
+    // is left to hold the run and its queue for the rest of the process.
+    let end = super::claim::LoopEnd { app, run_id, stream_id, loop_id };
     if let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() {
         runtime.block_on(async {
             drive(app, run_id, cancellation, dispatch).await;
         });
         release_logs(app, run_id);
-        release_and_advance(app, run_id, stream_id);
-    } else {
-        release_and_advance(app, run_id, stream_id);
     }
     // GRD-FR-KZPT: what an ended merge run owns goes once nothing stands in it.
     // The loop is marked finished first, because a run this process still drives
     // is not reclaimed (GRD-FR-PFMD).
-    if let Some(state) = app.try_project_store::<GraduationState>() {
-        state.end_loop(run_id);
-    }
-    // GRD-FR-ZHNV: no operation of a run outlives its loop.
-    crate::graduation::end_run_progress(app, run_id);
+    drop(end);
     if let Ok(run) = crate::graduation::load_run(app, run_id) {
         crate::graduation::reclaim_ended_merge_run(app, &run);
         // GRD-FR-TYVT: the same for the checkout of an ended PR summary run.
@@ -234,45 +166,17 @@ fn drive_blocking<R: tauri::Runtime>(
         // OPU-FR-FSCV: and the plan base of an ended apply run.
         crate::graduation::plan_updates::reclaim_plan_base(app, &run);
     }
+    // GRD-FR-QWLP / GRD-FR-TNVD: the slots are offered again only once this
+    // loop no longer stands in its run and its queue, so a run continued while
+    // this loop stopped is dispatched now. A `failed` run frees its project
+    // slot, and a finished run frees its queue too, so the oldest eligible run
+    // of the project may start, whichever queue it waits in (GRD-FR-NYSH).
+    crate::graduation::advance_all_queues(app);
 }
 
 /// Forget the shared log indexes of a run this process has stopped driving.
 fn release_logs<R: tauri::Runtime>(app: &tauri::AppHandle<R>, run_id: &str) {
     logs::release(app, run_id);
-}
-
-/// End the claim of this loop, and offer the project's slots again.
-///
-/// GRD-FR-BNTC: a run at rest still holds its queue and its project slot, in
-/// `blocked`, `awaiting_author`, `interrupted` and `failed` alike. The work it
-/// left standing in the working copy is what the author clears the stop against,
-/// so the queue waits rather than starting the run behind it on top of that
-/// work. Only a run that is `completed` or `discarded` gives the stream back.
-fn release_and_advance<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    run_id: &str,
-    stream_id: &str,
-) {
-    let holds =
-        crate::graduation::load_run(app, run_id).map(|run| run.holds_queue()).unwrap_or(false);
-    if let Some(state) = app.try_project_store::<GraduationState>() {
-        state.release_run(stream_id, run_id);
-    }
-    if holds {
-        logging::log_info(
-            app,
-            &crate::logging::BUFFER,
-            &[Domain::Backend],
-            "graduation left a queue held by a run at rest",
-            log_fields! { "run_id" => run_id.to_string(), "stream_id" => stream_id.to_string() },
-        );
-    } else if !is_streamless_queue_key(stream_id) {
-        let _ = crate::streams::release_stream(app, stream_id, run_id);
-    }
-    // A `failed` run frees its project slot, and a finished run frees its queue
-    // too, so the oldest eligible run of the project may start, whichever queue
-    // it waits in (GRD-FR-NYSH).
-    crate::graduation::advance_all_queues(app);
 }
 
 /// Drive one run to rest on the calling thread, with the dispatch seam supplied.
@@ -287,10 +191,10 @@ pub(crate) fn drive_for_test<R: tauri::Runtime>(
     stream_id: &str,
     dispatch: Arc<dyn seams::GraduationDispatch<R>>,
 ) -> bool {
-    let Some(cancellation) = claim(app, run_id, stream_id) else {
+    let Some(ticket) = super::claim::claim(app, run_id, stream_id) else {
         return false;
     };
-    drive_blocking(app, run_id, stream_id, cancellation, dispatch.as_ref());
+    drive_blocking(app, run_id, stream_id, ticket, dispatch.as_ref());
     true
 }
 
@@ -560,6 +464,11 @@ async fn review_turn<R: tauri::Runtime>(
     // GRL-FR-WOBK: a run with no total time left does not enter the review.
     let bounds = settings::LoopSettings::read(app);
     if time_budget::rest_if_spent(app, run, &bounds, phases::PART_REVIEW) {
+        return Step::Stop;
+    }
+    // GRL-FR-WCZE: a cancelled loop does not move the run into the review.
+    if let Some(reason) = cancellation_reason(app, &run.id, cancellation) {
+        abandon(app, run, worktree, Stop::of_reason(reason));
         return Step::Stop;
     }
     let _ = transitions::enter_stage(

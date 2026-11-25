@@ -783,6 +783,26 @@ export const Icon = {
       <path d="M12 4v16" />
     </I>
   ),
+  /**
+   * EDT-FR-JFGN: the legend toggles of the diagram overlays. A frame with the
+   * place of the legend marked — a column at the right for the CALM details
+   * panel (CAD-FR-RLDM), a row at the bottom for the syntax hints
+   * (EDT-FR-UOXS) — so each glyph says which part of the overlay it hides.
+   */
+  PanelRight: (p: IconProps) => (
+    <I {...p}>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M14 4v16" />
+      <path d="M16.5 8h1M16.5 11h1" />
+    </I>
+  ),
+  PanelBottom: (p: IconProps) => (
+    <I {...p}>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M4 14h16" />
+      <path d="M8 17h8" />
+    </I>
+  ),
   Final: (p: IconProps) => (
     <I {...p}>
       <path d="M14 3v5h5" />

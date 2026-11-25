@@ -62,6 +62,9 @@ pub(super) struct Turn {
     /// Whether the turn answers as scripted even where the run was stopped
     /// while it ran, as an agent that finished at the same moment does.
     pub(super) ignores_cancellation: bool,
+    /// GRD-FR-PDNY: whether the executor could not confirm the turn's
+    /// container removed once the turn was stopped.
+    pub(super) leaves_container: bool,
     /// GRD-FR-UTTX: the execution time the executor reports for a turn that
     /// completed, so a scenario can spend the run's total time.
     pub(super) duration_ms: u64,
@@ -79,8 +82,14 @@ impl Turn {
             after_verdict: None,
             session: None,
             ignores_cancellation: false,
+            leaves_container: false,
             duration_ms: 0,
         }
+    }
+
+    pub(super) fn leaving_the_container(mut self) -> Self {
+        self.leaves_container = true;
+        self
     }
 
     pub(super) fn ignoring_cancellation(mut self) -> Self {

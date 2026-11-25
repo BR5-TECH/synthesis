@@ -517,7 +517,22 @@ impl SandboxPool {
                 *booted = Some(fresh);
             }
         }
-        let outcome = self.runtime.run(launch.vm, process).await;
+        let mut outcome = self.runtime.run(launch.vm, process).await;
+        // EAC-FR-KWXB: a killed process whose end the VM did not report can
+        // still write in the mounted working copy, so its VM is stopped. The
+        // next launch of the scope boots a new one.
+        if let Some(ran) = outcome.as_mut().ok().filter(|ran| ran.stop_unconfirmed) {
+            logging::log_warn(
+                sink,
+                &BUFFER,
+                &DOMAINS,
+                "sandbox process did not report its end after the kill, so its VM is stopped",
+                log_fields! { "vm" => launch.vm },
+            );
+            *booted = None;
+            self.runtime.stop(launch.vm).await;
+            ran.stop_unconfirmed = false;
+        }
         if matches!(outcome, Err(RuntimeError::LaunchFailed(_) | RuntimeError::Unavailable)) {
             // The process could not start in the VM, so the VM is not trusted
             // again: the next launch of this scope boots a new one.
@@ -955,6 +970,7 @@ pub(super) async fn until_cancelled(cancel: &CancellationToken) {
 /// It carries no output, so its `response` is null (EAC-FR-25).
 pub(super) fn cancelled_outcome() -> RuntimeOutcome {
     RuntimeOutcome {
+        stop_unconfirmed: false,
         end: RunEnd::Cancelled,
         exit_code: None,
         stdout: Default::default(),

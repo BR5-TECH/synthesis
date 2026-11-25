@@ -15,6 +15,7 @@ import {
 } from "../CalmDiagram/CalmInteractive";
 import { useCalmRead, type RenderedCalm } from "../CalmDiagram/useCalmRead";
 import type { CalmLayout } from "../../calm/types";
+import { LegendToggle } from "./LegendToggle";
 import { OverlayFrame } from "./OverlayFrame";
 import type { DiagramEditorRequest } from "./store";
 import { useFence } from "./useFence";
@@ -84,6 +85,8 @@ function CalmViewerBody({
         <>
           <CalmFlowSelect ix={ix} />
           <CalmZoomControls ix={ix} />
+          {/* CAD-FR-RLDM: after the Fit control, before the Close control. */}
+          <LegendToggle legend="details" />
         </>
       }
     >

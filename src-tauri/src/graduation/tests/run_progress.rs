@@ -156,6 +156,8 @@ fn an_interrupted_or_discarded_run_leaves_the_in_flight_set() {
     transition(&fx.app, &mut run, GraduationRunState::Interrupted).unwrap();
     assert!(graduation_operations(&fx).is_empty());
 
+    // GRD-FR-KSMB: a continued run goes through the queue again.
+    transition(&fx.app, &mut run, GraduationRunState::Queued).unwrap();
     transition(&fx.app, &mut run, GraduationRunState::Working).unwrap();
     assert_eq!(graduation_operations(&fx).len(), 1, "a continued run is reported again");
     transition(&fx.app, &mut run, GraduationRunState::Discarded).unwrap();

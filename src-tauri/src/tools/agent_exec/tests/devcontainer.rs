@@ -14,6 +14,8 @@ struct Recording {
     calls: StdMutex<Vec<String>>,
     starts: StdMutex<Vec<DevcontainerStart>>,
     fail_up: StdMutex<Option<String>>,
+    /// DVC-FR-TQHM: a process of the turn is left after the end of the turn.
+    turn_left: std::sync::atomic::AtomicBool,
 }
 
 impl DevcontainerRuntime for Recording {
@@ -45,9 +47,10 @@ impl DevcontainerRuntime for Recording {
         _: &'a str,
         container: &'a str,
         _turn: &'a str,
-    ) -> runtime::BoxFuture<'a, ()> {
+    ) -> runtime::BoxFuture<'a, bool> {
         self.calls.lock().unwrap().push(format!("end_turn {container}"));
-        Box::pin(async {})
+        let ended = !self.turn_left.load(std::sync::atomic::Ordering::SeqCst);
+        Box::pin(async move { ended })
     }
     fn remove<'a>(
         &'a self,
@@ -378,6 +381,8 @@ fn a_timed_out_turn_ends_its_processes_and_keeps_the_container() {
     let execution = run.result.expect("a timed out run");
     assert_eq!(execution.process_outcome, ProcessOutcome::Timeout);
     assert!(run.calls.contains(&"end_turn cid".to_string()), "{:?}", run.calls);
+    // DVC-FR-TQHM: the end of the turn confirmed no process is left.
+    assert!(execution.container_removed);
     assert_eq!(
         run.calls.iter().filter(|c| c.starts_with("remove")).count(),
         1,
@@ -446,4 +451,33 @@ fn two_turns_of_a_scope_start_one_container() {
     }
     let ups = recording.calls.lock().unwrap().iter().filter(|c| c.starts_with("up ")).count();
     assert_eq!(ups, 1);
+}
+
+// DVC-FR-TQHM, EAC-FR-26: a stopped turn whose processes the end of the turn
+// cannot confirm ended reports its container as not removed.
+#[test]
+fn a_turn_whose_processes_are_left_reports_its_container_not_removed() {
+    let harness = harness_for("claude_code");
+    let dir = tempfile::tempdir().unwrap();
+    let docker = fake_docker(dir.path(), &valid_claude_stdout(), 0);
+    std::fs::write(dir.path().join("sleep"), "").unwrap();
+    let recording = Arc::new(Recording::default());
+    recording.turn_left.store(true, std::sync::atomic::Ordering::SeqCst);
+    let options = Options {
+        timeout_ms: Some(super::protocol::MIN_TIMEOUT_MS),
+        recording: Some(recording),
+        ..Default::default()
+    };
+    let run = run_dev_with(
+        &harness,
+        Some(Ok(launch(docker))),
+        scope(),
+        None,
+        CancellationToken::new(),
+        options,
+    );
+    let execution = run.result.expect("a timed out run");
+    assert_eq!(execution.process_outcome, ProcessOutcome::Timeout);
+    assert!(run.calls.contains(&"end_turn cid".to_string()), "{:?}", run.calls);
+    assert!(!execution.container_removed, "the turn's processes may still run");
 }

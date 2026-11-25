@@ -190,6 +190,13 @@ pub fn sweep_abandoned_runs<R: tauri::Runtime>(app: &tauri::AppHandle<R>, queue:
     let Some(state) = app.try_project_store::<GraduationState>() else {
         return;
     };
+    reclaim_ended_runs(app, queue);
+    sweep_abandoned_only(app, &state, queue);
+}
+
+/// What ended runs own, and review checkouts nothing finished, are reclaimed on
+/// every read of the queue.
+pub fn reclaim_ended_runs<R: tauri::Runtime>(app: &tauri::AppHandle<R>, queue: &GraduationQueue) {
     // GRL-FR-YKRI: a review checkout the application never finished is reclaimed
     // here too, for the same reason and at the same moment.
     driver::review_checkout::sweep_stranded(app, queue);
@@ -205,12 +212,23 @@ pub fn sweep_abandoned_runs<R: tauri::Runtime>(app: &tauri::AppHandle<R>, queue:
         // OCR-FR-FJFI: and what an ended rework run owns.
         reclaim_ended_rework_run(app, run);
     }
+}
+
+/// GRD-FR-XVUD: the runs no loop stands behind are moved to `interrupted`.
+fn sweep_abandoned_only<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    state: &GraduationState,
+    queue: &GraduationQueue,
+) {
     for summary in &queue.runs {
         // GRD-FR-XVUD: `working` and `reviewing` alone. A `blocked` run also
         // holds its stream, but it is resting on a condition the author clears
         // rather than on a loop that has gone, so a relaunch leaves it blocked.
+        // GRD-FR-XVUD / GRD-FR-QWLP: a run that a loop of this process is
+        // still inside is not abandoned, also where a command released its claim.
         if !matches!(summary.state, GraduationRunState::Working | GraduationRunState::Reviewing)
             || state.is_driving(&summary.id)
+            || state.is_looping(&summary.id)
         {
             continue;
         }

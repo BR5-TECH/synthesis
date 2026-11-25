@@ -37,6 +37,7 @@ use super::{
 pub mod change_review;
 pub mod check_gate;
 pub mod checks_folder;
+mod claim;
 pub mod corrections;
 mod dispatch;
 pub mod drive;
@@ -44,6 +45,7 @@ pub mod image_probe;
 pub mod merge_drive;
 pub mod merge_specs_review;
 pub mod merge_workspace;
+mod moved_on;
 pub mod openspec_block;
 pub mod openspec_review;
 pub mod phases;

@@ -159,12 +159,94 @@ export class FakeTerminal {
 
 export { FakeTerminal as Terminal };
 
+/** Test hook: while true, `open()` makes a renderer with no `render` and no `resize`. */
+export const fakeNoRenderHook = { on: false };
+
+/**
+ * A stand-in for the 2D context of the canvas. Setting the size of its
+ * `FakeCanvas` resets its transform; `scale()` multiplies it.
+ */
+export class FakeContext {
+  a = 1;
+  d = 1;
+  scale(x: number, y: number) {
+    this.a *= x;
+    this.d *= y;
+  }
+  getTransform() {
+    return { a: this.a, d: this.d };
+  }
+  /** Test hook: the WebView lost the drawing surface and made it again. */
+  resetTransform() {
+    this.a = 1;
+    this.d = 1;
+  }
+}
+
+/** A stand-in for the canvas. As in a real canvas, setting a size resets the context. */
+export class FakeCanvas {
+  private w = 0;
+  private h = 0;
+  constructor(private readonly ctx: FakeContext) {}
+  get width() {
+    return this.w;
+  }
+  set width(value: number) {
+    this.w = value;
+    this.ctx.resetTransform();
+  }
+  get height() {
+    return this.h;
+  }
+  set height(value: number) {
+    this.h = value;
+    this.ctx.resetTransform();
+  }
+  toJSON() {
+    return { width: this.w, height: this.h };
+  }
+}
+
 /** The parts of the ghostty-web 0.4.0 `CanvasRenderer` that the app reaches into. */
 export class FakeRenderer {
   theme: { background: string };
   drawn: Record<string, number>[] = [];
+  devicePixelRatio = window.devicePixelRatio || 1;
+  metrics = { width: 8, height: 16 };
+  ctx = new FakeContext();
+  canvas = new FakeCanvas(this.ctx);
+  /** Each `resize()`, in order. */
+  resized: { cols: number; rows: number }[] = [];
+  /** The `forceAll` of each `render()`, in order. */
+  rendered: boolean[] = [];
+  declare render: ((buffer: FakeBuffer, forceAll?: boolean) => void) | undefined;
+  declare resize: ((cols: number, rows: number) => void) | undefined;
   constructor(background: string) {
     this.theme = { background };
+    if (!fakeNoRenderHook.on) {
+      this.render = FakeRenderer.prototype.renderFrame;
+      this.resize = FakeRenderer.prototype.resizeCanvas;
+    }
+  }
+  /** As the library: the canvas size alone decides a resize; the transform is not checked. */
+  renderFrame(buffer: FakeBuffer, forceAll = false) {
+    const { cols, rows } = buffer.getDimensions();
+    const ratio = this.devicePixelRatio;
+    if (this.canvas.width !== cols * this.metrics.width * ratio || this.canvas.height !== rows * this.metrics.height * ratio) {
+      this.resizeCanvas(cols, rows);
+      forceAll = true;
+    }
+    this.rendered.push(forceAll);
+  }
+  resizeCanvas(cols: number, rows: number) {
+    this.resized.push({ cols, rows });
+    this.canvas.width = cols * this.metrics.width * this.devicePixelRatio;
+    this.canvas.height = rows * this.metrics.height * this.devicePixelRatio;
+    this.ctx.scale(this.devicePixelRatio, this.devicePixelRatio);
+  }
+  /** Test hook: one frame of the render loop of `term`. */
+  frame(term: { cols: number; rows: number }) {
+    this.render?.({ getDimensions: () => ({ cols: term.cols, rows: term.rows }) });
   }
   renderCellText(cell: Record<string, number>, _col: number, _row: number) {
     this.drawn.push({ ...cell });
@@ -182,3 +264,8 @@ export class FitAddon {
 }
 
 export type ITheme = Record<string, string>;
+
+/** The part of the frame buffer that the renderer reads. */
+export interface FakeBuffer {
+  getDimensions(): { cols: number; rows: number };
+}

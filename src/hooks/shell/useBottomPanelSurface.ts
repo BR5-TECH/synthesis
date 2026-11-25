@@ -19,6 +19,7 @@ import {
   setActiveLayoutProject,
 } from "../../state/layoutPreferences";
 import { nextPanelToggleState } from "../../state/panelToggle";
+import { restoreDiagramLegend } from "../../state/diagramLegend";
 import { restoreDiscussionColumns } from "../../state/discussionColumn";
 import type { BottomSurface } from "../../types";
 
@@ -61,13 +62,19 @@ export function useBottomPanelSurface(
     // outgoing project and still in flight across a switch is dropped rather
     // than written into the incoming project's slot.
     setActiveLayoutProject(projectPath);
-    if (screen !== "ide" || !projectPath) return;
+    if (screen !== "ide" || !projectPath) {
+      // EDT-FR-NGCW: with no project, the legend state stores and reads nothing.
+      void restoreDiagramLegend("");
+      return;
+    }
     let cancelled = false;
     // DDS-FR-PNXR: how each draft's tab is split, restored per draft. It goes
     // through its own store rather than being read out here, because that store
     // is also what writes it — and a ratio the author sets is written against
     // the same record this read returns.
     void restoreDiscussionColumns(projectPath);
+    // EDT-FR-NGCW: the legend state of the diagram overlays, per project.
+    void restoreDiagramLegend(projectPath);
     loadLayoutPreferences(projectPath)
       .then((prefs) => {
         if (cancelled) return;

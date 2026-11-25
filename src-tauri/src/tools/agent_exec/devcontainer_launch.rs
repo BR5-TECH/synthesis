@@ -321,12 +321,27 @@ impl AgentCliExecutor {
                     })
                     .await;
                 let _ = context.fs.delete_path(&env_file, false);
-                if let Ok(outcome) = &outcome {
+                let mut outcome = outcome;
+                if let Ok(outcome) = &mut outcome {
                     if matches!(
                         outcome.end,
                         RunEnd::TimedOut | RunEnd::Cancelled | RunEnd::EndedAfterFinalEvent
                     ) {
-                        runtime.end_turn(&docker, &running.container_id, &turn_id).await;
+                        // DVC-FR-TQHM: a turn whose processes are not confirmed
+                        // ended is reported as a container not removed.
+                        outcome.stop_unconfirmed =
+                            !runtime.end_turn(&docker, &running.container_id, &turn_id).await;
+                        if outcome.stop_unconfirmed {
+                            // The container id, which is not sensitive, is what
+                            // makes the leftover findable by hand.
+                            logging::log_error(
+                                sink,
+                                &BUFFER,
+                                &[Domain::Ai, Domain::Backend],
+                                "dev container turn processes could not be confirmed ended",
+                                log_fields! { "container" => running.container_id.as_str() },
+                            );
+                        }
                     }
                 }
                 outcome
@@ -345,6 +360,7 @@ impl AgentCliExecutor {
             // as the cancellation of a Docker launch is.
             Err(_) if run.cancel.is_cancelled() => {
                 return Ok(RuntimeOutcome {
+                    stop_unconfirmed: false,
                     end: RunEnd::Cancelled,
                     exit_code: None,
                     stdout: Default::default(),

@@ -403,6 +403,18 @@ function seededTree(): any {
                 artifactType: "spec",
                 typeSource: "inferred",
               },
+              // CAD-FR-RLDM / EDT-FR-JFGN: a file with one CALM fence (the
+              // "Business flow" template), so the CALM viewer and the CALM
+              // diagram editor are answerable in a browser. See
+              // `MD_BODY_CALM_FENCE`.
+              {
+                id: "specifications/ui/CLM-calm-fence.md",
+                name: "CLM-calm-fence.md",
+                path: "specifications/ui/CLM-calm-fence.md",
+                nodeKind: "file",
+                artifactType: "spec",
+                typeSource: "inferred",
+              },
               // EDT-FR-UPNB / EDT-FR-IRNA / EDT-FR-CSKH: a file with spacer,
               // alignment and comment markers. See `MD_BODY_MARKUP`.
               {
@@ -1069,6 +1081,18 @@ graph TD
 \`\`\`
 
 A paragraph between the two diagrams.
+`;
+
+/** CAD-FR-RLDM / EDT-FR-JFGN: one CALM fence in a Markdown file. */
+const MD_BODY_CALM_FENCE = `# CALM fence fixture
+
+A paragraph before the architecture.
+
+\`\`\`calm
+${CALM_ARCHITECTURE_BODY}
+\`\`\`
+
+A paragraph after the architecture.
 `;
 
 /** EDT-FR-UPNB / EDT-FR-IRNA / EDT-FR-CSKH: HTML-comment markup fixture. */
@@ -9100,6 +9124,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
             ? source
             : String(a.id).endsWith("EDT-editor.md")
               ? MD_BODY_FM
+              : String(a.id).endsWith("CLM-calm-fence.md")
+                ? MD_BODY_CALM_FENCE
               : String(a.id).endsWith("DIA-diagrams.md")
                 ? MD_BODY_DIAGRAMS
                 : String(a.id).endsWith("MKP-markup.md")

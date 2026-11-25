@@ -26,6 +26,18 @@ pub(super) async fn execute<R: tauri::Runtime>(
     cancellation: &CancellationToken,
     dispatch: &dyn seams::GraduationDispatch<R>,
 ) -> Result<AgentExecution, AgentExecutionError> {
+    // GRL-FR-WCZE: a cancelled loop dispatches nothing. The turn reads as a
+    // cancelled one, so it settles on the stop the command recorded.
+    if cancellation.is_cancelled() {
+        logging::log_info(
+            app,
+            &crate::logging::BUFFER,
+            &[Domain::Ai, Domain::Backend],
+            "graduation dispatched no turn: the loop was stopped",
+            log_fields! { "run_id" => run.id.clone(), "part" => turn.part.to_string() },
+        );
+        return Ok(not_dispatched());
+    }
     let TurnRequest { execution_directory, part, input, bound, resume } = turn;
     let task = AgentTaskRequest {
         protocol_version: PROTOCOL_VERSION,
@@ -104,6 +116,22 @@ pub(super) async fn execute<R: tauri::Runtime>(
         return outcome;
     }
     outcome.map(crate::graduation::plan_updates::refuse_plan_update)
+}
+
+/// GRL-FR-WCZE: the answer for a turn that a stopped loop did not dispatch.
+fn not_dispatched() -> AgentExecution {
+    AgentExecution {
+        process_outcome: ProcessOutcome::Cancelled,
+        exit_code: None,
+        response: None,
+        stdout: Default::default(),
+        stderr: Default::default(),
+        duration_ms: 0,
+        resume_unavailable: false,
+        session: None,
+        refusal: None,
+        container_removed: true,
+    }
 }
 
 /// GXD-FR-IOZU: the live activity sink one turn of this run reports through.

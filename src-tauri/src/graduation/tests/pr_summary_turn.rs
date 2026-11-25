@@ -578,6 +578,7 @@ fn the_other_typed_causes_fail_the_run() {
     let failure = crate::tools::agent_exec::DurableOutputFailure {
         code: "disk_full".into(),
         message: "no space".into(),
+        container_removed: true,
     };
     let done = fx.drive(
         &run,
@@ -588,6 +589,25 @@ fn the_other_typed_causes_fail_the_run() {
     assert_eq!(done.state, GraduationRunState::Failed);
     assert_eq!(done.failure.as_ref().unwrap().code, "log_persistence_failed");
     assert!(!done.failure.unwrap().retryable);
+
+    // GRD-FR-PDNY, EAC-FR-ZVRP: the same failure with a container that may
+    // still run rests the run on that container, with the log failure kept.
+    let fx = Fixture::new();
+    let (run, _, _) = summary_run(&fx, PrSummaryMode::Diff);
+    let failure = crate::tools::agent_exec::DurableOutputFailure {
+        code: "disk_full".into(),
+        message: "no space".into(),
+        container_removed: false,
+    };
+    let done = fx.drive(
+        &run,
+        ScriptedDispatch::new(vec![Turn::answering(Answer::Unlaunchable(
+            AgentExecutionError::DurableOutputFailed(failure),
+        ))]),
+    );
+    assert_eq!(done.state, GraduationRunState::Blocked);
+    assert_eq!(done.blocker.as_ref().unwrap().code, "agent_container_running");
+    assert!(!done.logs.persistence.is_healthy(), "the log failure is kept");
 }
 
 // GRD-FR-WJLO, GRD-FR-KAKU: a PR summary run commits nothing, so neither its

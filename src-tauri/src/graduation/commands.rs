@@ -90,6 +90,12 @@ pub fn list_graduation_queue<R: tauri::Runtime>(
     // stopped without stopping is found. The queue is loaded once and handed to
     // the sweep, which would otherwise load every run record a second time.
     let queue = queue::project_queue(&app).ok_or_else(|| ERR_NO_PROJECT_OPEN.to_string())?;
+    let first_read =
+        app.try_project_store::<GraduationState>().is_some_and(|state| state.take_first_read());
+    if !first_read {
+        reclaim_ended_runs(&app, &queue);
+        return Ok(queue);
+    }
     sweep_abandoned_runs(&app, &queue);
     // A sweep that moved a run changed the answer, so it is read again only
     // where something actually moved.

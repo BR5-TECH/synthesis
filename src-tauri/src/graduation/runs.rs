@@ -27,10 +27,30 @@ pub fn save_run<R: tauri::Runtime>(
     run.updated_at = crate::notes::now_rfc3339();
     let fs = store::store_fs(app)?;
     let base = store::store_base(app)?;
-    store::write_run_record(&fs, &base, run)?;
     // The order's index carries a summary of each run, so a reader that needs
     // the order or a draft's lock opens one file rather than every record.
     let mut index = store::read_queue_index(&fs, &base, &run.project_key);
+    // GRD-FR-KSMB: a write is a move too. A loop that a command stopped saves
+    // a copy that still reads `working`, and that copy must not bring back a
+    // run the command rested or ended.
+    let stored = index.runs.iter().find(|e| e.run_id == run.id).map(|e| e.state);
+    if let Some(stored) =
+        stored.filter(|stored| transitions::agent_work_refused(app, *stored, run.state, &run.id))
+    {
+        logging::log_warn(
+            app,
+            &BUFFER,
+            &[Domain::Backend],
+            "graduation refused to save a run at rest as agent work",
+            log_fields! {
+                "run_id" => run.id.clone(),
+                "stored_state" => stored.as_str().to_string(),
+                "state" => run.state.as_str().to_string(),
+            },
+        );
+        return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: {}", stored.as_str()));
+    }
+    store::write_run_record(&fs, &base, run)?;
     index.project_key = run.project_key.clone();
     let entry = store::QueueIndexEntry {
         run_id: run.id.clone(),

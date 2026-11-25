@@ -63,6 +63,14 @@ impl Outcome {
         self
     }
 
+    /// GRD-FR-TNVD: a run that already waits in the queue is driven again under
+    /// a script of its own, with no Continue before it.
+    pub(crate) fn driven_again(mut self, scripts: Vec<TurnScript>) -> Self {
+        self.dispatch = bind(&self.ctx, scripts);
+        self.run = self.fx.drive(&self.run, self.dispatch.clone());
+        self
+    }
+
     /// GXD-FR-BJYT: the author answers every question, and the run is driven
     /// again under a script of its own.
     pub(crate) fn answered(mut self, answers: &[&str], scripts: Vec<TurnScript>) -> Self {

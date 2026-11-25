@@ -227,7 +227,7 @@ describe("the diagram editor overlay", () => {
     expect(dialog()).toBeInTheDocument();
   });
 
-  it("EDT-FR-HGAZ: focus moves into the source pane with the caret, and Tab stays inside", async () => {
+  it("EDT-FR-HGAZ, EDT-FR-UOXS: focus moves into the source pane with the caret, and Tab stays inside", async () => {
     await mount();
     await openOverlay();
     const pane = sourcePane();
@@ -235,14 +235,15 @@ describe("the diagram editor overlay", () => {
     expect(pane.selectionStart).toBe(0);
     expect(pane.value).toBe("graph TD\nA-->B");
 
-    const close = within(dialog()).getByRole("button", { name: "Close" });
+    const legend = within(dialog()).getByRole("button", { name: "Hide syntax hints" });
     const hints = within(dialog()).getByRole("region", { name: HINTS_LABEL });
-    // The order of focus: Close, the source pane, the divider, the hints area.
+    // The order of focus: the legend toggle and Close (EDT-FR-UOXS), the source
+    // pane, the divider, the hints area.
     expect(hints).toHaveAttribute("tabindex", "0");
     hints.focus();
     fireEvent.keyDown(hints, { key: "Tab" });
-    expect(document.activeElement).toBe(close);
-    fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(legend);
+    fireEvent.keyDown(legend, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(hints);
   });
 

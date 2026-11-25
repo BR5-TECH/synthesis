@@ -10,11 +10,17 @@ struct Kept {
     kept: StdMutex<Vec<DurableActivity>>,
     calls: StdMutex<usize>,
     fail_first: bool,
+    /// EAC-FR-ZVRP: fail at the `finished` activity alone.
+    fail_finished: bool,
 }
 
 impl Kept {
     fn failing() -> Arc<Self> {
         Arc::new(Self { fail_first: true, ..Self::default() })
+    }
+
+    fn failing_at_finished() -> Arc<Self> {
+        Arc::new(Self { fail_finished: true, ..Self::default() })
     }
 
     fn kept(&self) -> Vec<DurableActivity> {
@@ -29,10 +35,11 @@ impl Kept {
 impl DurableOutputSink for Kept {
     fn record(&self, activity: DurableActivity) -> Result<(), DurableOutputFailure> {
         *self.calls.lock().unwrap() += 1;
-        if self.fail_first {
+        if self.fail_first || (self.fail_finished && activity.kind == "finished") {
             return Err(DurableOutputFailure {
                 code: "log_append_failed".to_string(),
                 message: "The record could not be stored.".to_string(),
+                container_removed: true,
             });
         }
         self.kept.lock().unwrap().push(activity);
@@ -205,6 +212,61 @@ fn a_durable_failure_ends_delivery_and_is_returned_after_the_container_is_remove
         1,
         "the container was removed before the failure was returned"
     );
+}
+
+/// EAC-FR-ZVRP, EAC-FR-26 — the durable failure says whether the container
+/// removal was confirmed, so a caller can tell a container that may still run.
+#[test]
+fn a_durable_failure_says_whether_the_container_was_removed() {
+    let harness = harness_for("claude_code");
+    let replying = RecordingRuntime::replying(&valid_claude_stdout());
+    let runtime = Arc::new(RecordingRuntime {
+        remove_fails: true,
+        ..Arc::try_unwrap(replying).ok().expect("one owner")
+    });
+    let error =
+        run_keeping(&harness, runtime, task("go"), Kept::failing(), CancellationToken::new())
+            .expect_err("the sink failed");
+    match error {
+        AgentExecutionError::DurableOutputFailed(failure) => {
+            assert!(!failure.container_removed, "the removal was refused");
+        }
+        other => panic!("expected DurableOutputFailed, got {other:?}"),
+    }
+
+    // The same at the `finished` activity, the last one the sink is given.
+    let replying = RecordingRuntime::replying(&valid_claude_stdout());
+    let runtime = Arc::new(RecordingRuntime {
+        remove_fails: true,
+        ..Arc::try_unwrap(replying).ok().expect("one owner")
+    });
+    let error = run_keeping(
+        &harness,
+        runtime,
+        task("go"),
+        Kept::failing_at_finished(),
+        CancellationToken::new(),
+    )
+    .expect_err("the sink failed at the end");
+    match error {
+        AgentExecutionError::DurableOutputFailed(failure) => {
+            assert!(!failure.container_removed, "the removal was refused");
+        }
+        other => panic!("expected DurableOutputFailed, got {other:?}"),
+    }
+
+    let error = run_keeping(
+        &harness,
+        RecordingRuntime::replying(&valid_claude_stdout()),
+        task("go"),
+        Kept::failing(),
+        CancellationToken::new(),
+    )
+    .expect_err("the sink failed");
+    match error {
+        AgentExecutionError::DurableOutputFailed(failure) => assert!(failure.container_removed),
+        other => panic!("expected DurableOutputFailed, got {other:?}"),
+    }
 }
 
 /// EAC-FR-CPEP — a token linked to the caller's follows it and never sets it.

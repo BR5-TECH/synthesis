@@ -84,6 +84,26 @@ pub(super) fn settle_execution_with<R: tauri::Runtime>(
     if discarded_meanwhile(app, run) {
         return None;
     }
+    // GRD-FR-PDNY: a container that may still run rests the run, whatever the
+    // turn answered and whatever a later command wrote.
+    if super::moved_on::container_left(&outcome) {
+        if let Err(AgentExecutionError::DurableOutputFailed(failure)) = &outcome {
+            logs::note_durable_failure(app, run, failure);
+        }
+        super::moved_on::rest_on_running_container(app, run);
+        return None;
+    }
+    // GRD-FR-HRXA: a run a later command moved on takes nothing of what the
+    // turn answered either. Only the turn's commit is recorded.
+    if super::moved_on::moved_on(app, run).is_some() {
+        abandon(
+            app,
+            run,
+            worktree,
+            Stop::of_reason(GraduationInterruptionReason::RetryableFailure),
+        );
+        return None;
+    }
     // GRD-FR-MDQZ / GRD-FR-TWMA: a stop the author or the application made
     // while the turn ran stands, whatever the turn answered.
     if let Some(reason) = stored_stop_reason(app, &run.id) {
@@ -375,6 +395,12 @@ pub(super) fn abandon<R: tauri::Runtime>(
         run.checkpoint.resume_part = Some(phases::PART_REVIEW.to_string());
     }
     let committed = commit_stopped_turn(app, run, worktree);
+    // GRD-FR-HRXA: a run a later command moved on keeps the state that command
+    // wrote. The loop adds the commit and writes no state.
+    if super::moved_on::moved_on(app, run).is_some() {
+        super::moved_on::record_commit_only(app, run, committed);
+        return;
+    }
     let stop = Stop { detail: stops::settled_detail(&stop, committed), ..stop };
     // GLG-FR-RLQZ: the stop is in the run's own log before the run rests. A
     // record that could not be stored has already rested the run on

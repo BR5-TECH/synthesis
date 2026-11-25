@@ -137,6 +137,9 @@ pub struct RuntimeOutcome {
     pub exit_code: Option<i32>,
     pub stdout: CapturedStream,
     pub stderr: CapturedStream,
+    /// EAC-FR-KWXB / DVC-FR-TQHM: the process was killed, and its end, or the
+    /// end of every process it started, could not be confirmed.
+    pub stop_unconfirmed: bool,
 }
 
 /// EAC-FR-17: three distinct ways the runtime itself can fail a launch.
@@ -522,7 +525,7 @@ impl DockerRuntime for HostDockerCli {
 
             let ((stdout, stderr), (end, exit_code)) = tokio::join!(pump, waiter);
 
-            Ok(RuntimeOutcome { end, exit_code, stdout, stderr })
+            Ok(RuntimeOutcome { end, exit_code, stdout, stderr, stop_unconfirmed: false })
         })
     }
 
@@ -531,10 +534,24 @@ impl DockerRuntime for HostDockerCli {
             // `--force` because the container may still be running, and
             // removing one that is already gone is a success rather than a
             // failure to report — `--rm` may well have got there first.
-            let _ = self.control(&["rm", "--force", name]).await?;
-            Ok(())
+            let output = self.control(&["rm", "--force", name]).await?;
+            removal_outcome(output.status.success(), &output.stderr)
+                .map_err(RuntimeError::LaunchFailed)
         })
     }
+}
+
+/// EAC-FR-26: what one `docker rm --force` answered. A container that is
+/// already gone is removed. Every other refusal is a removal that is not
+/// confirmed, because the container can still run with its mounts.
+pub(crate) fn removal_outcome(success: bool, stderr: &[u8]) -> Result<(), String> {
+    let text = String::from_utf8_lossy(stderr);
+    let lower = text.to_lowercase();
+    // Docker says "No such container"; Podman says "no container with name or ID".
+    if success || lower.contains("no such container") || lower.contains("no container with") {
+        return Ok(());
+    }
+    Err(text.trim().to_string())
 }
 
 /// Kill the child and, on Unix, everything it forked.
@@ -864,6 +881,7 @@ impl DockerRuntime for BollardDocker {
                     )
                     .await;
                 return Ok(RuntimeOutcome {
+                    stop_unconfirmed: false,
                     end,
                     exit_code: None,
                     stdout: stdout.finish(observer),
@@ -892,6 +910,7 @@ impl DockerRuntime for BollardDocker {
             }
 
             Ok(RuntimeOutcome {
+                stop_unconfirmed: false,
                 end,
                 exit_code,
                 stdout: stdout.finish(observer),

@@ -191,6 +191,10 @@ beforeEach(async () => {
   // a pinch, or a settle timer from one test must not reach the next one.
   const { resetEditorZoomForTest } = await import("../state/editorZoom");
   resetEditorZoomForTest();
+  // EDT-FR-MSCV: the legend state of the diagram overlays is one store for the
+  // window, so a legend hidden in one test must not stay hidden in the next.
+  const { resetDiagramLegendForTest } = await import("../state/diagramLegend");
+  resetDiagramLegendForTest();
   // PWN-FR-WRAP: the window project id is module state. Each test starts with no
   // project in its window, and with the payload field off, so a test of one
   // feature compares the arguments of that feature alone. The tests of the
@@ -215,6 +219,7 @@ beforeEach(async () => {
   ghostty.fakeLoadGate.promise = null;
   ghostty.fakeLoadGate.waiting = 0;
   ghostty.fakeNoRenderer.on = false;
+  ghostty.fakeNoRenderHook.on = false;
   ghostty.fakeInitCalls.count = 0;
   const { resetInvokeOrderForTest, setPayloadProjectIdEnabled, setWindowProjectId } =
     await import("../api/invoke");

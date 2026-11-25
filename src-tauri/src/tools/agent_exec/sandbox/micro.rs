@@ -559,10 +559,13 @@ impl SandboxRuntime for MicrosandboxRuntime {
                     },
                 }
             }
+            let mut stop_unconfirmed = false;
             if matches!(end, RunEnd::TimedOut | RunEnd::Cancelled | RunEnd::EndedAfterFinalEvent) {
                 // EAC-FR-ZIYG: the process is killed, and its end is waited for.
                 let _ = handle.kill().await;
-                let _ = tokio::time::timeout(KILL_GRACE, async {
+                // EAC-FR-KWXB: an end the VM does not report within the grace is
+                // not confirmed. A closed event stream is an end.
+                let ended = tokio::time::timeout(KILL_GRACE, async {
                     while let Some(event) = handle.recv().await {
                         if matches!(event, ExecEvent::Exited { .. } | ExecEvent::Failed(_)) {
                             break;
@@ -570,8 +573,10 @@ impl SandboxRuntime for MicrosandboxRuntime {
                     }
                 })
                 .await;
+                stop_unconfirmed = ended.is_err();
             }
             Ok(RuntimeOutcome {
+                stop_unconfirmed,
                 end,
                 exit_code,
                 stdout: stdout.finish(observer),

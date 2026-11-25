@@ -304,6 +304,7 @@ mod tests {
 
     fn ended(end: RunEnd, exit_code: Option<i32>, stdout: &str, stderr: &str) -> RuntimeOutcome {
         RuntimeOutcome {
+            stop_unconfirmed: false,
             end,
             exit_code,
             stdout: CapturedStream { bytes: stdout.as_bytes().to_vec(), truncated: false },

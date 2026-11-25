@@ -140,10 +140,17 @@ pub fn parse_probed_env(stdout: &str) -> Vec<(String, String)> {
 
 /// DVC-FR-SFWW: the script that ends every process of one turn. Each process
 /// that a turn starts inherits its marker variable.
+///
+/// DVC-FR-TQHM: it exits 0 only where a scan finds no process of the turn
+/// left, and it scans once more after the last kill. A container without the
+/// tools of the scan cannot confirm anything, so the script then exits 1.
 pub fn end_turn_script() -> &'static str {
-    "for p in /proc/[0-9]*; do \
-     if tr '\\0' '\\n' < \"$p/environ\" 2>/dev/null | grep -qx \"SYNTHESIS_TURN=$1\"; then \
-     kill -KILL \"${p#/proc/}\" 2>/dev/null; fi; done; exit 0"
+    "command -v tr >/dev/null 2>&1 && command -v grep >/dev/null 2>&1 || exit 1; \
+     scan() { left=0; for p in /proc/[0-9]*; do \
+     if tr '\\0' '\\n' 2>/dev/null < \"$p/environ\" | grep -qx \"SYNTHESIS_TURN=$1\"; then \
+     left=1; kill -KILL \"${p#/proc/}\" 2>/dev/null; fi; done; }; \
+     for i in 1 2 3 4 5; do scan \"$1\"; [ \"$left\" = 0 ] && exit 0; sleep 1; done; \
+     scan \"$1\"; [ \"$left\" = 0 ] && exit 0; exit 1"
 }
 
 /// The seam a launch uses (DVC contract surface, "Internal").
@@ -156,12 +163,13 @@ pub trait DevcontainerRuntime: Send + Sync {
     ) -> BoxFuture<'a, Result<RunningDevcontainer, String>>;
 
     /// DVC-FR-SFWW: end every process of the turn `turn` in `container`.
+    /// DVC-FR-TQHM: answers whether no process of the turn is left.
     fn end_turn<'a>(
         &'a self,
         docker: &'a str,
         container: &'a str,
         turn: &'a str,
-    ) -> BoxFuture<'a, ()>;
+    ) -> BoxFuture<'a, bool>;
 
     /// DVC-FR-JXEA: remove every container that has the scope's id label. An
     /// error names the step that failed and why, in words with no output of
@@ -257,10 +265,10 @@ impl DevcontainerRuntime for CliDevcontainerRuntime {
         docker: &'a str,
         container: &'a str,
         turn: &'a str,
-    ) -> BoxFuture<'a, ()> {
+    ) -> BoxFuture<'a, bool> {
         Box::pin(async move {
             let args = ["exec", "-u", "root", container, "sh", "-c", end_turn_script(), "sh", turn];
-            let _ = docker_output(docker, &args).await;
+            docker_output(docker, &args).await.is_ok()
         })
     }
 
@@ -319,8 +327,8 @@ impl DevcontainerRuntime for NoDevcontainers {
     ) -> BoxFuture<'a, Result<RunningDevcontainer, String>> {
         Box::pin(async { Err("no dev container runtime in tests".to_string()) })
     }
-    fn end_turn<'a>(&'a self, _: &'a str, _: &'a str, _: &'a str) -> BoxFuture<'a, ()> {
-        Box::pin(async {})
+    fn end_turn<'a>(&'a self, _: &'a str, _: &'a str, _: &'a str) -> BoxFuture<'a, bool> {
+        Box::pin(async { true })
     }
     fn remove<'a>(&'a self, _: &'a str, _: &'a str, _: bool) -> BoxFuture<'a, Result<(), String>> {
         Box::pin(async { Ok(()) })

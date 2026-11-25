@@ -130,6 +130,7 @@ impl SandboxRuntime for RecordingSandbox {
                 final_event: process.final_event,
             });
             Ok(RuntimeOutcome {
+                stop_unconfirmed: false,
                 end: RunEnd::Exited,
                 exit_code: Some(0),
                 stdout: CapturedStream {

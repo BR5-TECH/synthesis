@@ -98,6 +98,16 @@ pub(super) fn record_commit_only<R: tauri::Runtime>(
     }
 }
 
+/// GRD-FR-PDNY: whether the executor could not confirm the turn's container
+/// removed, also where the turn ended on a log stream failure (EAC-FR-ZVRP).
+pub(super) fn container_left(outcome: &Result<AgentExecution, AgentExecutionError>) -> bool {
+    match outcome {
+        Ok(execution) => !execution.container_removed,
+        Err(AgentExecutionError::DurableOutputFailed(failure)) => !failure.container_removed,
+        Err(_) => false,
+    }
+}
+
 /// GRD-FR-PDNY: the blocker code of a run whose stopped turn left its
 /// container running.
 pub(super) const AGENT_CONTAINER_RUNNING: &str = "agent_container_running";
@@ -147,6 +157,11 @@ pub(super) fn rest_on_running_container<R: tauri::Runtime>(
     fresh.turn_time_used_ms = fresh.turn_time_used_ms.max(run.turn_time_used_ms);
     fresh.work_turns = fresh.work_turns.max(run.work_turns);
     fresh.review_turns = fresh.review_turns.max(run.review_turns);
+    // GRD-FR-IKVE: a log failure the turn ended on stays on the record, so
+    // Continue retries the pending writes first.
+    if !run.logs.persistence.is_healthy() {
+        fresh.logs.persistence = run.logs.persistence.clone();
+    }
     super::turns::note_blocked(app, &mut fresh, AGENT_CONTAINER_RUNNING);
     let _ = transitions::block(
         app,

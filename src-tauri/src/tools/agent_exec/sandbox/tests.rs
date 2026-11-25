@@ -41,6 +41,9 @@ struct RecordingSandbox {
     reopens: StdMutex<Vec<Result<(), String>>>,
     /// Answers for successive runs; `Ok` once the list is empty.
     runs: StdMutex<Vec<RuntimeError>>,
+    /// EAC-FR-KWXB: whether the next run's killed process does not report its
+    /// end. Taken by that run.
+    unconfirmed_stop: std::sync::atomic::AtomicBool,
     /// Whether a boot never ends, as a boot that pulls or exports for a long
     /// time does not.
     hangs: bool,
@@ -154,7 +157,10 @@ impl SandboxRuntime for RecordingSandbox {
             if !runs.is_empty() {
                 return Err(runs.remove(0));
             }
+            let stop_unconfirmed =
+                self.unconfirmed_stop.swap(false, std::sync::atomic::Ordering::SeqCst);
             Ok(RuntimeOutcome {
+                stop_unconfirmed,
                 end: super::super::runtime::RunEnd::Exited,
                 exit_code: Some(0),
                 stdout: Default::default(),
@@ -785,3 +791,4 @@ mod gateway;
 mod idle;
 mod project_stop;
 mod reuse;
+mod unconfirmed;

@@ -746,7 +746,12 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                 }
             }
             if let Some(failure) = durable_failure {
-                return Err(AgentExecutionError::DurableOutputFailed(failure));
+                return Err(AgentExecutionError::DurableOutputFailed(
+                    crate::tools::agent_exec::DurableOutputFailure {
+                        container_removed: !turn.leaves_container,
+                        ..failure
+                    },
+                ));
             }
             // EAC-FR-25: the executor honours the cancellation token, so a turn
             // stopped while it ran reports that rather than an answer.

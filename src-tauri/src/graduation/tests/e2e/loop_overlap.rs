@@ -10,7 +10,8 @@ use tauri::Manager;
 
 use super::scenario::{Scenario, TurnScript as Script};
 use crate::graduation::{
-    GraduationInterruptionReason, GraduationRunState, GraduationState, ReviewSeverity,
+    GraduationInterruptionReason, GraduationLogStream, GraduationRunState, GraduationState,
+    ReviewSeverity,
 };
 use crate::tools::agent_exec::protocol::EnvelopeInvalid;
 
@@ -319,5 +320,24 @@ fn a_refused_answer_with_its_container_left_running_is_not_corrected() {
         .expect_state(GraduationRunState::Blocked)
         .expect_blocker("agent_container_running")
         .expect_dispatch_count(1)
+        .expect_commits(0);
+}
+
+// GRD-FR-PDNY, EAC-FR-ZVRP, GRD-FR-IKVE: a turn that ends on a log stream
+// failure and whose container the executor could not confirm removed rests the
+// run on the container, and the log failure stays on the record for Continue.
+#[test]
+fn a_log_failure_with_its_container_left_running_blocks_the_run() {
+    Scenario::named("log failure, container left running")
+        .work_turn(
+            Script::reports_success()
+                .writes("src/panel.ts", "1\n")
+                .losing_the_log(GraduationLogStream::Activity)
+                .leaving_its_container_running(),
+        )
+        .run()
+        .expect_state(GraduationRunState::Blocked)
+        .expect_blocker("agent_container_running")
+        .expect_logs_failed(GraduationLogStream::Activity)
         .expect_commits(0);
 }

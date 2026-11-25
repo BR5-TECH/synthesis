@@ -137,6 +137,9 @@ pub struct RuntimeOutcome {
     pub exit_code: Option<i32>,
     pub stdout: CapturedStream,
     pub stderr: CapturedStream,
+    /// EAC-FR-KWXB / DVC-FR-TQHM: the process was killed, and its end, or the
+    /// end of every process it started, could not be confirmed.
+    pub stop_unconfirmed: bool,
 }
 
 /// EAC-FR-17: three distinct ways the runtime itself can fail a launch.
@@ -522,7 +525,7 @@ impl DockerRuntime for HostDockerCli {
 
             let ((stdout, stderr), (end, exit_code)) = tokio::join!(pump, waiter);
 
-            Ok(RuntimeOutcome { end, exit_code, stdout, stderr })
+            Ok(RuntimeOutcome { end, exit_code, stdout, stderr, stop_unconfirmed: false })
         })
     }
 
@@ -878,6 +881,7 @@ impl DockerRuntime for BollardDocker {
                     )
                     .await;
                 return Ok(RuntimeOutcome {
+                    stop_unconfirmed: false,
                     end,
                     exit_code: None,
                     stdout: stdout.finish(observer),
@@ -906,6 +910,7 @@ impl DockerRuntime for BollardDocker {
             }
 
             Ok(RuntimeOutcome {
+                stop_unconfirmed: false,
                 end,
                 exit_code,
                 stdout: stdout.finish(observer),

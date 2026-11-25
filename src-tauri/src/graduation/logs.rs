@@ -618,6 +618,7 @@ impl<R: tauri::Runtime> crate::tools::agent_exec::DurableOutputSink for Graduati
             |failure| crate::tools::agent_exec::DurableOutputFailure {
                 code: failure.code,
                 message: failure.message,
+                container_removed: true,
             },
         )
     }
@@ -645,6 +646,11 @@ pub fn note_durable_failure<R: tauri::Runtime>(
             ),
             0,
         );
+        // GRD-FR-IKVE: the live index is what every later read of the run
+        // overlays, so the failure is kept there too and Continue retries it.
+        if let Some(handle) = held_handle(app, &run.id) {
+            *locked(&handle) = run.logs.clone();
+        }
     }
 }
 

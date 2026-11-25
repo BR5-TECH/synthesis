@@ -695,7 +695,10 @@ impl AgentCliExecutor {
                     observer: &observer,
                     final_event,
                 };
-                (self.run_in_devcontainer(sink, context, run).await?, true)
+                let outcome = self.run_in_devcontainer(sink, context, run).await?;
+                // DVC-FR-TQHM: the turn's processes are the container here.
+                let ended = !outcome.stop_unconfirmed;
+                (outcome, ended)
             }
             (None, Some(settings), Some(vm), Some(scope)) => {
                 // EAC-FR-PZNB: the VM outlives the call, and the end of the
@@ -781,7 +784,11 @@ impl AgentCliExecutor {
         // failure, whatever the process outcome was. It is returned after the
         // container removal above, so nothing is left running behind it.
         if let Some(failure) = observer.take_durable_failure() {
-            return Err(AgentExecutionError::DurableOutputFailed(failure));
+            // EAC-FR-ZVRP: the failure says what the removal established.
+            return Err(AgentExecutionError::DurableOutputFailed(DurableOutputFailure {
+                container_removed,
+                ..failure
+            }));
         }
 
         // --- 8. What the run means --------------------------------------------
@@ -857,7 +864,11 @@ impl AgentCliExecutor {
         // EAC-FR-DWGS: the `finished` activity is the last one a durable sink
         // is given, and its failure is the call's failure (EAC-FR-ZVRP).
         if let Some(failure) = observer.take_durable_failure() {
-            return Err(AgentExecutionError::DurableOutputFailed(failure));
+            // EAC-FR-ZVRP: the failure says what the removal established.
+            return Err(AgentExecutionError::DurableOutputFailed(DurableOutputFailure {
+                container_removed,
+                ..failure
+            }));
         }
         if execution.process_outcome != ProcessOutcome::Completed {
             // EAC-FR-29: the excerpt is masked against everything this launch

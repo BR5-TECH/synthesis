@@ -54,9 +54,14 @@ impl DevcontainerRuntime for FakeRuntime {
             .unwrap_or_else(|| Ok(running(&format!("c{n}"))));
         Box::pin(async move { answer })
     }
-    fn end_turn<'a>(&'a self, _: &'a str, container: &'a str, turn: &'a str) -> BoxFuture<'a, ()> {
+    fn end_turn<'a>(
+        &'a self,
+        _: &'a str,
+        container: &'a str,
+        turn: &'a str,
+    ) -> BoxFuture<'a, bool> {
         self.calls.lock().unwrap().push(Call::EndTurn(container.to_string(), turn.to_string()));
-        Box::pin(async {})
+        Box::pin(async { true })
     }
     fn remove<'a>(
         &'a self,
@@ -182,7 +187,11 @@ fn the_probed_environment_is_parsed() {
 #[test]
 fn the_end_turn_script_finds_the_marker() {
     assert!(end_turn_script().contains("SYNTHESIS_TURN=$1"));
-    assert!(end_turn_script().ends_with("exit 0"));
+    // DVC-FR-TQHM: a process of the turn that is still left after the passes
+    // is reported by a failed exit.
+    assert!(end_turn_script().contains("exit 0"));
+    assert!(end_turn_script().starts_with("command -v tr"), "no tools, no confirmation");
+    assert!(end_turn_script().ends_with("exit 1"));
 }
 
 // DVC-FR-OJEH / DVC-FR-LKRY: the first launch removes what the labels name and
@@ -506,4 +515,25 @@ async fn a_failed_listing_names_its_step() {
         CliDevcontainerRuntime.remove(&docker, "S", false).await,
         Err("docker ps exited with code 3".to_string())
     );
+}
+
+// DVC-FR-SFWW, DVC-FR-TQHM: the script ends every process that carries the
+// turn's marker, a child of one included, leaves the processes of another
+// turn, and exits 0 once a scan finds none of the turn left.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_end_turn_script_ends_the_turns_processes_and_no_other() {
+    use std::process::Command;
+    let spawn = |turn: &str, script: &str| {
+        Command::new("sh").args(["-c", script]).env("SYNTHESIS_TURN", turn).spawn().unwrap()
+    };
+    let mut own = spawn("t1", "sleep 300");
+    let mut parent = spawn("t1", "sh -c 'sleep 300'");
+    let mut other = spawn("t2", "sleep 300");
+    let status = Command::new("sh").args(["-c", end_turn_script(), "sh", "t1"]).status().unwrap();
+    assert!(status.success(), "no process of the turn is left: {status:?}");
+    assert!(own.wait().is_ok() && parent.wait().is_ok(), "the turn's processes ended");
+    assert!(other.try_wait().unwrap().is_none(), "the other turn's process still runs");
+    let _ = other.kill();
+    let _ = other.wait();
 }

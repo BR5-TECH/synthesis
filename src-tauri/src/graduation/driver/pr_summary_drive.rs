@@ -305,7 +305,10 @@ fn settle<R: tauri::Runtime>(
         return;
     }
     // GRD-FR-PDNY: a container that may still run rests the run.
-    if outcome.as_ref().is_ok_and(|execution| !execution.container_removed) {
+    if super::moved_on::container_left(&outcome) {
+        if let Err(AgentExecutionError::DurableOutputFailed(failure)) = &outcome {
+            logs::note_durable_failure(app, run, failure);
+        }
         super::moved_on::rest_on_running_container(app, run);
         return;
     }

@@ -386,6 +386,7 @@ impl DockerRuntime for RecordingRuntime {
 
             let outcome = match &self.script {
                 Script::Reply { stdout, stderr, exit_code } => RuntimeOutcome {
+                    stop_unconfirmed: false,
                     end: RunEnd::Exited,
                     exit_code: Some(*exit_code),
                     stdout: CapturedStream {
@@ -395,6 +396,7 @@ impl DockerRuntime for RecordingRuntime {
                     stderr: CapturedStream { bytes: stderr.as_bytes().to_vec(), truncated: false },
                 },
                 Script::ReplyRaw { stdout, exit_code } => RuntimeOutcome {
+                    stop_unconfirmed: false,
                     end: RunEnd::Exited,
                     exit_code: Some(*exit_code),
                     stdout: CapturedStream { bytes: stdout.clone(), truncated: false },
@@ -403,6 +405,7 @@ impl DockerRuntime for RecordingRuntime {
                 Script::Flood { stream } => {
                     let full = CapturedStream { bytes: vec![b'x'; 64], truncated: true };
                     RuntimeOutcome {
+                        stop_unconfirmed: false,
                         end: RunEnd::Exited,
                         exit_code: Some(0),
                         stdout: if *stream == "stdout" {
@@ -414,6 +417,7 @@ impl DockerRuntime for RecordingRuntime {
                     }
                 }
                 Script::TimeOut => RuntimeOutcome {
+                    stop_unconfirmed: false,
                     end: RunEnd::TimedOut,
                     exit_code: None,
                     // A turn that wrote a whole envelope and then hung still
@@ -425,6 +429,7 @@ impl DockerRuntime for RecordingRuntime {
                     stderr: CapturedStream::default(),
                 },
                 Script::AnswerThenLinger { stdout } => RuntimeOutcome {
+                    stop_unconfirmed: false,
                     end: RunEnd::EndedAfterFinalEvent,
                     exit_code: None,
                     stdout: CapturedStream {
@@ -434,6 +439,7 @@ impl DockerRuntime for RecordingRuntime {
                     stderr: CapturedStream::default(),
                 },
                 Script::Cancel => RuntimeOutcome {
+                    stop_unconfirmed: false,
                     end: RunEnd::Cancelled,
                     exit_code: None,
                     stdout: CapturedStream::default(),
@@ -447,6 +453,7 @@ impl DockerRuntime for RecordingRuntime {
                         valid_claude_stdout()
                     };
                     RuntimeOutcome {
+                        stop_unconfirmed: false,
                         end: RunEnd::Exited,
                         exit_code: Some(0),
                         stdout: CapturedStream {
@@ -457,6 +464,7 @@ impl DockerRuntime for RecordingRuntime {
                     }
                 }
                 Script::Terminate => RuntimeOutcome {
+                    stop_unconfirmed: false,
                     end: RunEnd::Terminated,
                     exit_code: None,
                     stdout: CapturedStream::default(),

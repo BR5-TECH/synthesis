@@ -149,6 +149,9 @@ pub struct DurableOutputFailure {
     /// One sentence. It names the act that clears the failure and carries no
     /// activity text.
     pub message: String,
+    /// EAC-FR-ZVRP / EAC-FR-26: whether the container's removal was confirmed.
+    /// A sink sets `true`; the executor sets what its removal established.
+    pub container_removed: bool,
 }
 
 /// Who must keep a run (EAC-FR-VSNM).

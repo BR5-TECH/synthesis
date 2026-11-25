@@ -212,7 +212,24 @@ fn a_failed_removal_after_the_stop_is_reported() {
     let execution = run(&harness, runtime.clone(), task("go")).expect("ran");
     assert!(!execution.container_removed);
     let container = container_name(&runtime.only_run().argv);
+    // EAC-FR-26, GRD-FR-PDNY: a refused removal is asked for again before it
+    // is reported as not confirmed.
+    assert_eq!(*runtime.removed.lock().unwrap(), vec![container.clone(); 3]);
     assert!(records_of(&container).iter().any(|record| {
         record.level == LogLevel::Error && record.message == "agent container could not be removed"
     }));
+}
+
+// EAC-FR-26, GRD-FR-PDNY: `docker rm --force` confirms a removal on success
+// and where the container is already gone. Any other refusal is not a
+// confirmed removal, because the container can still run with its mounts.
+#[test]
+fn a_removal_is_confirmed_only_where_the_container_is_gone() {
+    use crate::tools::agent_exec::runtime::removal_outcome;
+    assert_eq!(removal_outcome(true, b""), Ok(()));
+    assert_eq!(removal_outcome(false, b"Error: No such container: synthesis-x\n"), Ok(()));
+    assert_eq!(
+        removal_outcome(false, b"Error response from daemon: removal already in progress\n"),
+        Err("Error response from daemon: removal already in progress".to_string())
+    );
 }

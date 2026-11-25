@@ -22,8 +22,28 @@ pub fn transition<R: tauri::Runtime>(
     if has_ended(run.state, next) {
         return Ok(());
     }
-    if runs::load_run(app, &run.id).is_ok_and(|stored| has_ended(stored.state, next)) {
+    let stored = runs::load_run(app, &run.id).ok();
+    if stored.as_ref().is_some_and(|stored| has_ended(stored.state, next)) {
         return Ok(());
+    }
+    // GRD-FR-KSMB: agent work is entered from the queue or from agent work
+    // alone. A loop that a command stopped holds a copy that still reads
+    // `working`, and it must not bring back a run the command rested.
+    if let Some(stored) =
+        stored.as_ref().filter(|stored| agent_work_refused(app, stored.state, next, &run.id))
+    {
+        logging::log_warn(
+            app,
+            &BUFFER,
+            &[Domain::Backend],
+            "graduation refused to move a run at rest into agent work",
+            log_fields! {
+                "run_id" => run.id.clone(),
+                "stored_state" => stored.state.as_str().to_string(),
+                "next" => next.as_str().to_string(),
+            },
+        );
+        return Err(format!("{ERR_RUN_STATE_NOT_PERMITTED}: {}", stored.state.as_str()));
     }
     let held_queue = run.holds_queue();
     let paused = matches!(
@@ -109,6 +129,40 @@ fn has_ended(state: GraduationRunState, next: GraduationRunState) -> bool {
         GraduationRunState::Failed => next != GraduationRunState::Discarded,
         _ => false,
     }
+}
+
+/// GRD-FR-KSMB: whether a run stored in `state` may move to `next`, where
+/// `next` is agent work. A move that is not into agent work is not checked here.
+pub(super) fn enters_agent_work_from(state: GraduationRunState, next: GraduationRunState) -> bool {
+    !next.is_agent_work()
+        || matches!(
+            state,
+            GraduationRunState::Queued
+                | GraduationRunState::Working
+                | GraduationRunState::Reviewing
+        )
+}
+
+/// GRD-FR-KSMB / GRL-FR-WCZE: whether a write that puts the run stored in
+/// `stored` into `next` is refused.
+///
+/// A run at rest or ended is never put into agent work. A `queued` run is not
+/// put into agent work by a loop that a command stopped: that loop's copy can
+/// still read `working` after the author continued the run.
+pub(super) fn agent_work_refused<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    stored: GraduationRunState,
+    next: GraduationRunState,
+    run_id: &str,
+) -> bool {
+    if !enters_agent_work_from(stored, next) {
+        return true;
+    }
+    next.is_agent_work()
+        && stored == GraduationRunState::Queued
+        && app
+            .try_project_store::<GraduationState>()
+            .is_some_and(|state| state.loop_stopped(run_id))
 }
 
 /// GOB-FR-VVNI: move the run to a stage and record why.

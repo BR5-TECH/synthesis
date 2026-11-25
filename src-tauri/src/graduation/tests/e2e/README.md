@@ -166,6 +166,7 @@ and what it does to the application while it runs (GTE-FR-HWQM):
 | --- | --- |
 | `then(\|context\| …)` | Any act on the `TurnContext`. |
 | `pausing_the_run()` | The author's pause (GRD-FR-MDQZ). |
+| `leaving_its_container_running()` | Once stopped, the executor cannot confirm the turn's container removed (GRD-FR-PDNY). |
 | `discarding_the_run()` | The author's discard (GRD-FR-EWTN). |
 | `stopping_the_application(reason)` | A shutdown or a project change (GRD-FR-TWMA). |
 | `holding_the_index()` | Another write takes the stream's index (GTC-FR-19). |
@@ -180,6 +181,8 @@ and what it does to the application while it runs (GTE-FR-HWQM):
 `run()` drives the run to rest. These act on the same run afterwards:
 
 - `continued(scripts)` — the author's Continue, then the run driven again.
+- `driven_again(scripts)` — a run that already waits in the queue is driven
+  again, with no Continue before it (GRD-FR-TNVD).
 - `answered(answers, scripts)` — the author answers every question the run
   asked, then the run driven again.
 - `discarded()`, `reverted()` — the author's discard and revert.
@@ -317,7 +320,7 @@ The record: `expect_state`, `expect_pass`, `expect_turns`,
 `expect_base_is_last_commit_of_previous`, `expect_restarted_from_previous`,
 `expect_previous_state`, `expect_previous_holds_its_stream`,
 `expect_state_of`, `expect_other_claimed`,
-`expect_cannot_start`, `expect_queue_offered_dispatch`, `expect_logs_failed`, `expect_logs_healthy`,
+`expect_cannot_start`, `expect_queue_offered_dispatch`, `expect_queue_offered_the_run_with_no_loop_standing`, `expect_no_loop_stood_at_the_offers`, `expect_interruption_detail_is`, `expect_logs_failed`, `expect_logs_healthy`,
 `expect_draft_locked`, and `expect_rest_reason`, which reads the run's own
 durable log.
 
@@ -462,6 +465,8 @@ control is the thing to add.
 | 50 | An archive refused for a repair cause refuses the merge with one notice and one repair run, the same change files give no second notice, and new change files give a new one; another content cause gives a notice with no run, and a transient failure gives none | `an_archive_refused_for_a_repair_cause_gives_one_notice_and_one_repair_run`, `an_archive_refused_for_another_content_cause_gives_a_notice_and_no_repair_run`, `an_archive_that_times_out_twice_refuses_the_merge_with_no_notice` |
 | 51 | A CLI step runs once more after one recorded wait of 2000 ms, and two timeouts block the run with its diagnostics | `a_cli_step_that_times_out_once_runs_again_after_one_recorded_wait`, `a_cli_step_that_times_out_twice_blocks_the_run_with_its_diagnostics` |
 | 52 | A passing image probe is kept in the checkpoint and not run again, and a missing CLI blocks the run before the first turn | `a_passing_image_probe_is_kept_in_the_checkpoint_and_not_run_again`, `an_image_with_no_cli_blocks_the_run_before_the_first_turn` |
+| 53 | A Continue made while the stopped turn still stops starts no second loop: the run waits in the queue, the stopped loop records its commit and no state, and its end offers the run a dispatch | `a_resume_while_the_paused_turn_still_stops_starts_no_second_loop`, `a_continue_after_a_shutdown_waits_for_the_stopped_loop`, `a_turn_that_finishes_after_pause_and_continue_takes_nothing_of_its_answer`, `a_stopped_turn_that_wrote_nothing_changes_nothing_of_the_continued_run`, `a_stopped_loop_does_not_start_the_next_pass_of_a_continued_run`, `a_resume_while_the_paused_review_still_stops_resumes_at_the_review`, `the_next_run_of_a_queue_waits_for_the_discarded_runs_loop` |
+| 54 | A stopped turn whose container the executor could not confirm removed rests the run blocked on the agent container code, also after a Resume, and commits nothing | `a_container_left_running_after_pause_and_resume_blocks_the_run`, `a_container_left_running_after_a_pause_blocks_the_run`, `a_container_left_running_after_a_discard_keeps_the_run_discarded`, `a_refused_answer_with_its_container_left_running_is_not_corrected` |
 
 The settings journeys stand beside 11 in `budget.rs`, because they are the same
 contract read from the other end: `a_setting_changed_between_two_turns_reaches_the_second_of_them`,

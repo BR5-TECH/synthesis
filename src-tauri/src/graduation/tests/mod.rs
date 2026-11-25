@@ -58,6 +58,7 @@ mod log_read_command;
 mod log_reads;
 mod logs;
 mod loop_account;
+mod loop_claims;
 mod loop_driven;
 mod merge_handoff;
 mod merge_input;
@@ -750,7 +751,10 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
             // EAC-FR-25: the executor honours the cancellation token, so a turn
             // stopped while it ran reports that rather than an answer.
             if cancellation.is_cancelled() && !turn.ignores_cancellation {
-                return Ok(execution(ProcessOutcome::Cancelled, None, None));
+                return Ok(AgentExecution {
+                    container_removed: !turn.leaves_container,
+                    ..execution(ProcessOutcome::Cancelled, None, None)
+                });
             }
 
             let mut summary = "scripted".to_string();
@@ -772,6 +776,7 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                 Answer::Refused(reason) => {
                     return Ok(AgentExecution {
                         refusal: Some(reason),
+                        container_removed: !turn.leaves_container,
                         ..execution(ProcessOutcome::InvalidStructuredOutput, None, turn.session)
                     })
                 }

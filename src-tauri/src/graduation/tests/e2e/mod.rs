@@ -34,6 +34,7 @@ mod hooks;
 mod interruptions;
 mod journeys;
 mod lifecycle;
+mod loop_overlap;
 mod merge_acts;
 mod merge_apply;
 mod merge_arrange;

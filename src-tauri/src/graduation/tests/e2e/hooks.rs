@@ -174,9 +174,37 @@ impl TurnContext {
     /// that launches next reads the queue. A process that ended holds no claim,
     /// so the claim goes first.
     pub(crate) fn relaunch(&self) {
-        self.app.state::<GraduationState>().release(&self.stream_id);
+        self.app.state::<GraduationState>().relaunch_for_test();
         crate::graduation::list_graduation_queue(self.app.clone(), Default::default())
             .unwrap_or_else(|reason| panic!("the queue was not readable: {reason}"));
+    }
+
+    /// GRD-FR-CYIB: the author's Continue, with the queue's own dispatch off.
+    pub(crate) fn continue_run(&self) {
+        without_loop(&self.app, || {
+            crate::graduation::continue_graduation_run(
+                self.app.clone(),
+                self.run_id.clone(),
+                Default::default(),
+            )
+        })
+        .unwrap_or_else(|reason| panic!("the Continue was refused: {reason:?}"));
+    }
+
+    /// The state the store holds for this run now.
+    pub(crate) fn stored_state(&self) -> crate::graduation::GraduationRunState {
+        crate::graduation::load_run(&self.app, &self.run_id).expect("the run record").state
+    }
+
+    /// GRD-FR-QWLP: try to drive this same run a second time, on a thread of
+    /// its own, and say whether its claim was taken.
+    pub(crate) fn drive_self(&self, scripts: Vec<TurnScript>) -> bool {
+        let dispatch = super::scenario::bind(self, scripts);
+        let app = self.app.clone();
+        let (run_id, stream_id) = (self.run_id.clone(), self.stream_id.clone());
+        std::thread::spawn(move || drive_on(&app, &run_id, &stream_id, dispatch))
+            .join()
+            .expect("the second loop's thread ended")
     }
 
     /// GRD-FR-BNTC: drive a run the scenario enqueued, and record whether its

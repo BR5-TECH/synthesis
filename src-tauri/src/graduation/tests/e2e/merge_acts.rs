@@ -498,7 +498,7 @@ impl Outcome {
     /// disk, so nothing but what is durable reaches what follows.
     pub(crate) fn relaunching(mut self) -> Self {
         let state = self.fx.app.state::<GraduationState>();
-        state.release(&self.stream_id);
+        state.relaunch_for_test();
         without_loop(&self.fx.app, || {
             crate::graduation::list_graduation_queue(self.fx.app.clone(), Default::default())
                 .unwrap_or_else(|reason| {

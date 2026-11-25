@@ -88,6 +88,11 @@ fn answers_are_refused_unless_the_run_waits_on_the_author() {
     ] {
         let fx = Fixture::new();
         let mut run = escalated(&fx);
+        // GRD-FR-KSMB: agent work is entered from the queue.
+        if state.is_agent_work() {
+            run.state = GraduationRunState::Queued;
+            crate::graduation::save_run(&fx.app, &mut run).expect("saved");
+        }
         run.state = state;
         crate::graduation::save_run(&fx.app, &mut run).expect("saved");
 
@@ -138,6 +143,9 @@ fn an_accepted_answer_gives_the_next_turn_the_whole_total_time() {
 fn a_refused_answer_keeps_the_used_total_time() {
     let fx = Fixture::new();
     let mut run = escalated(&fx);
+    // GRD-FR-KSMB: agent work is entered from the queue.
+    run.state = GraduationRunState::Queued;
+    crate::graduation::save_run(&fx.app, &mut run).expect("saved");
     run.state = GraduationRunState::Working;
     run.turn_time_used_ms = 1_234;
     crate::graduation::save_run(&fx.app, &mut run).expect("saved");
@@ -163,4 +171,36 @@ fn continue_drops_questions_a_run_outside_awaiting_author_still_holds() {
         assert!(stored.escalation.is_none(), "{state:?}: the drop is saved");
         assert!(stored.checkpoint.decisions.is_empty(), "{state:?}: no decision is recorded");
     }
+}
+
+// GRD-FR-TNVD, GRD-FR-QWLP: an answer accepted while the loop of the stopped
+// turn has not returned moves the run to `queued`, and no loop claims the run
+// until that loop returns.
+#[test]
+fn an_answer_while_the_stopped_loop_stands_queues_the_run_until_the_loop_ends() {
+    use crate::tools::agent_exec::runtime::CancellationToken;
+    let fx = Fixture::new();
+    let run = escalated(&fx);
+    let state = fx.app.state::<GraduationState>();
+    let limit = crate::project_settings::GraduationConcurrency::limited(4);
+    let holders = std::collections::BTreeSet::new();
+    let claim = || {
+        state.claim_loop(
+            &run.queue_key(),
+            &run.id,
+            false,
+            limit,
+            &holders,
+            CancellationToken::new(),
+        )
+    };
+    // A loop of this run that has not returned, whose claim the rest released.
+    let id = claim().expect("the old loop's claim");
+    state.release_loop_claim(&run.queue_key(), &run.id, id);
+
+    let answered = answer(&fx, &run).expect("the answer is accepted");
+    assert_eq!(answered.state, GraduationRunState::Queued);
+    assert_eq!(claim(), None, "no loop claims the run while the old one stands");
+    state.end_loop(&run.id, id);
+    assert!(claim().is_some(), "the run is claimed once the old loop returned");
 }

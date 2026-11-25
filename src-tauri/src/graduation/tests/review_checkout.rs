@@ -343,6 +343,53 @@ fn a_stranded_review_checkout_is_reclaimed_at_the_next_queue_read() {
     assert!(repo.find_branch(&stream.branch, git2::BranchType::Local).is_ok());
 }
 
+/// GRL-FR-YKRI, GRD-FR-XVUD: a later read of the queue, which sweeps no run,
+/// still reclaims what nothing finished.
+#[test]
+fn a_later_queue_read_still_reclaims_a_stranded_review_checkout() {
+    let fx = Fixture::new();
+    let stream = fx.stream("editor");
+    let mut run = fx.enqueue(&stream, "Write the panel.");
+    // GRD-FR-XVUD: the first read after the launch has already been made.
+    crate::graduation::list_graduation_queue(fx.app.clone(), Default::default()).expect("read");
+
+    // What a process killed mid-review leaves: a base commit, a checkout, a
+    // registration and a branch, with no loop behind the run.
+    run.base_commit = Some(
+        git2::Repository::open(stream.worktree())
+            .unwrap()
+            .head()
+            .unwrap()
+            .peel_to_commit()
+            .unwrap()
+            .id()
+            .to_string(),
+    );
+    crate::graduation::save_run(&fx.app, &mut run).expect("saved");
+    let checkout =
+        crate::graduation::driver::review_checkout::create(&fx.app, &run, &stream.worktree())
+            .expect("a checkout");
+    assert!(checkout.is_dir());
+
+    crate::graduation::list_graduation_queue(fx.app.clone(), Default::default())
+        .expect("a later read");
+
+    assert!(!checkout.exists(), "the stranded checkout is gone");
+    let repo = fx.repo();
+    assert_eq!(
+        checkout_paths::registrations_left(&repo, &run.id, "rv"),
+        Vec::<String>::new(),
+        "and so is its registration"
+    );
+    assert!(
+        repo.find_branch(&format!("synthesis/review/{}", run.id), git2::BranchType::Local).is_err(),
+        "and its branch"
+    );
+    // The stream itself is untouched.
+    assert!(stream.worktree().is_dir());
+    assert!(repo.find_branch(&stream.branch, git2::BranchType::Local).is_ok());
+}
+
 /// GRL-FR-YKRI: a checkout of a run that is being reviewed is not stranded.
 ///
 /// `is_driving` knows only about this process, so a second window reading the

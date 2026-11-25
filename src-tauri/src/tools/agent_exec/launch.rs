@@ -748,7 +748,8 @@ impl AgentCliExecutor {
                 // environment. Nothing here can clean that up on the caller's behalf,
                 // but it is exactly the kind of handled failure that is invisible
                 // unless it is reported (EAC-FR-29), so it is logged and returned.
-                let container_removed = runtime.remove_container(&container_name).await.is_ok();
+                let container_removed =
+                    remove_confirmed(sink, runtime.as_ref(), &container_name).await;
                 if !container_removed {
                     logging::log_error(
                         sink,
@@ -928,4 +929,45 @@ impl AgentCliExecutor {
         execution.duration_ms = started.elapsed().as_millis() as u64;
         Ok(execution)
     }
+}
+
+/// EAC-FR-26: how many times a removal is asked for before it is reported as
+/// not confirmed, and the pause between two attempts.
+const REMOVE_ATTEMPTS: usize = 3;
+const REMOVE_RETRY_PAUSE: Duration = Duration::from_millis(500);
+
+/// EAC-FR-26: remove the container, and ask again where the runtime refused.
+/// A refusal can be short-lived, such as a removal that is already in progress.
+async fn remove_confirmed<S: LogSink + Clone + Send + Sync + 'static>(
+    sink: &S,
+    runtime: &dyn DockerRuntime,
+    name: &str,
+) -> bool {
+    for attempt in 1..=REMOVE_ATTEMPTS {
+        let refusal = match runtime.remove_container(name).await {
+            Ok(()) => return true,
+            Err(error) => error,
+        };
+        // The kind of refusal and no text of it: the runtime's own words stay
+        // out of the log.
+        logging::log_warn(
+            sink,
+            &BUFFER,
+            &[Domain::Ai, Domain::Backend],
+            "agent container removal was refused",
+            log_fields! {
+                "container" => name,
+                "attempt" => attempt as i64,
+                "kind" => match refusal {
+                    RuntimeError::Unavailable => "runtime_unavailable",
+                    RuntimeError::ImageUnavailable => "image_unavailable",
+                    RuntimeError::LaunchFailed(_) => "refused",
+                },
+            },
+        );
+        if attempt < REMOVE_ATTEMPTS {
+            tokio::time::sleep(REMOVE_RETRY_PAUSE).await;
+        }
+    }
+    false
 }

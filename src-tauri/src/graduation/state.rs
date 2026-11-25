@@ -19,6 +19,22 @@ pub(super) struct RunningRun {
     /// WTC-FR-FBJQ: whether the run works directly in a worktree, so a switch
     /// guard sees it from the claim, before its record is saved as dispatched.
     pub(super) direct: bool,
+    /// GRD-FR-QWLP: the loop this claim was taken for, or [`NO_LOOP`] for a
+    /// claim that drives no loop.
+    pub(super) loop_id: u64,
+}
+
+/// GRD-FR-QWLP: the loop id of a claim that drives no loop.
+pub const NO_LOOP: u64 = 0;
+
+/// GRD-FR-QWLP: one loop of this process, from its claim until it returns.
+struct LoopEntry {
+    queue_key: String,
+    loop_id: u64,
+    /// GRD-FR-HRXA: why a command stopped the loop. Kept here as well as on the
+    /// claim, because the command's rest releases the claim before the loop
+    /// returns, and the loop must still know who stopped it.
+    stopped_because: Option<GraduationInterruptionReason>,
 }
 
 /// EAC-FR-LQRI: the check an idle stop runs again once it holds the VM.
@@ -53,7 +69,15 @@ pub struct GraduationState {
     /// Wider than the claim map above. A discard or a pause releases the claim
     /// while the turn it cancelled is still stopping, and what a run owns must not
     /// be reclaimed under that turn (GRD-FR-KZPT).
-    loops: Mutex<std::collections::BTreeSet<String>>,
+    ///
+    /// GRD-FR-QWLP: keyed by run id, and naming the queue the loop stands in, so
+    /// that no claim is taken in that run or that queue until the loop returns.
+    loops: Mutex<BTreeMap<String, LoopEntry>>,
+    /// GRD-FR-XVUD: whether the first read of the queue has swept the runs
+    /// that no loop stands behind. Later reads sweep nothing.
+    swept: std::sync::atomic::AtomicBool,
+    /// GRD-FR-QWLP: the id the next loop takes. Never [`NO_LOOP`].
+    next_loop_id: std::sync::atomic::AtomicU64,
     /// GRD-FR-ZHNV: the progress operation of each run that is executing, keyed
     /// by run id. At most one for a run.
     operations: Mutex<BTreeMap<String, crate::progress::OperationId>>,
@@ -75,7 +99,9 @@ impl Default for GraduationState {
             running: Mutex::new(BTreeMap::new()),
             lock: Mutex::new(()),
             dispatch_lock: Mutex::new(()),
-            loops: Mutex::new(std::collections::BTreeSet::new()),
+            loops: Mutex::new(BTreeMap::new()),
+            next_loop_id: std::sync::atomic::AtomicU64::new(NO_LOOP + 1),
+            swept: std::sync::atomic::AtomicBool::new(false),
             operations: Mutex::new(BTreeMap::new()),
             root: Mutex::new(None),
             loop_enabled: std::sync::atomic::AtomicBool::new(true),
@@ -205,24 +231,77 @@ impl GraduationState {
         holders: &std::collections::BTreeSet<String>,
         cancellation: CancellationToken,
     ) -> bool {
-        let Ok(mut running) = self.running.lock() else {
-            return false;
-        };
+        self.claim_inner(stream_id, run_id, direct, limit, holders, cancellation, false).is_some()
+    }
+
+    /// GRD-FR-BNTC, GRD-FR-QWLP: claim a queue and a project slot for a loop
+    /// that drives the run, and register that loop, in one step.
+    ///
+    /// Answers the id of the loop, or `None` where the claim is refused. A loop
+    /// that has not returned holds its run and its queue, so a second loop
+    /// cannot start in the same working copy while the first one stops.
+    pub fn claim_loop(
+        &self,
+        stream_id: &str,
+        run_id: &str,
+        direct: bool,
+        limit: crate::project_settings::GraduationConcurrency,
+        holders: &std::collections::BTreeSet<String>,
+        cancellation: CancellationToken,
+    ) -> Option<u64> {
+        self.claim_inner(stream_id, run_id, direct, limit, holders, cancellation, true)
+    }
+
+    #[allow(clippy::too_many_arguments)] // The claim's inputs, plus whether a loop is registered.
+    fn claim_inner(
+        &self,
+        stream_id: &str,
+        run_id: &str,
+        direct: bool,
+        limit: crate::project_settings::GraduationConcurrency,
+        holders: &std::collections::BTreeSet<String>,
+        cancellation: CancellationToken,
+        register_loop: bool,
+    ) -> Option<u64> {
+        // The lock order is `running`, then `loops`, everywhere both are held.
+        let mut running = self.running.lock().ok()?;
         if running.contains_key(stream_id) {
-            return false;
+            return None;
         }
         if running.values().any(|held| held.run_id == run_id) {
-            return false;
+            return None;
         }
         let holds_already = holders.contains(run_id);
         if !holds_already && !limit.permits(Self::slots_among(&running, holders)) {
-            return false;
+            return None;
         }
+        let mut loops = self.loops.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        // GRD-FR-QWLP: a loop that a command stopped still stands in its run and
+        // its queue until it returns.
+        if loops.contains_key(run_id) || loops.values().any(|entry| entry.queue_key == stream_id) {
+            return None;
+        }
+        let loop_id = if register_loop {
+            let loop_id = self.next_loop_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            loops.insert(
+                run_id.to_string(),
+                LoopEntry { queue_key: stream_id.to_string(), loop_id, stopped_because: None },
+            );
+            loop_id
+        } else {
+            NO_LOOP
+        };
         running.insert(
             stream_id.to_string(),
-            RunningRun { run_id: run_id.to_string(), cancellation, stopped_because: None, direct },
+            RunningRun {
+                run_id: run_id.to_string(),
+                cancellation,
+                stopped_because: None,
+                direct,
+                loop_id,
+            },
         );
-        true
+        Some(loop_id)
     }
 
     /// WTC-FR-FBJQ: the run of a direct claim held right now, if any.
@@ -252,6 +331,19 @@ impl GraduationState {
         }
     }
 
+    /// GRD-FR-QWLP: release the claim one loop took, and no other claim, also
+    /// not a later claim of the same run.
+    pub(super) fn release_loop_claim(&self, stream_id: &str, run_id: &str, loop_id: u64) {
+        if let Ok(mut running) = self.running.lock() {
+            if running
+                .get(stream_id)
+                .is_some_and(|held| held.run_id == run_id && held.loop_id == loop_id)
+            {
+                running.remove(stream_id);
+            }
+        }
+    }
+
     /// The run holding a stream right now.
     pub fn holder_of(&self, stream_id: &str) -> Option<String> {
         self.running.lock().ok().and_then(|r| r.get(stream_id).map(|held| held.run_id.clone()))
@@ -263,13 +355,6 @@ impl GraduationState {
     /// when the application stopped.
     pub fn is_driving(&self, run_id: &str) -> bool {
         self.running.lock().map(|r| r.values().any(|held| held.run_id == run_id)).unwrap_or(false)
-    }
-
-    /// A loop of this process begins driving a run.
-    pub(super) fn begin_loop(&self, run_id: &str) {
-        if let Ok(mut loops) = self.loops.lock() {
-            loops.insert(run_id.to_string());
-        }
     }
 
     /// GRD-FR-ZHNV: register the run's operation unless it has one. Answers
@@ -299,17 +384,56 @@ impl GraduationState {
         self.operations.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).remove(run_id)
     }
 
-    /// The loop of this process has returned from a run.
-    pub(super) fn end_loop(&self, run_id: &str) {
+    /// The loop of this process has returned from a run. Only the entry of
+    /// that loop is removed (GRD-FR-QWLP).
+    pub(super) fn end_loop(&self, run_id: &str, loop_id: u64) {
         if let Ok(mut loops) = self.loops.lock() {
-            loops.remove(run_id);
+            if loops.get(run_id).is_some_and(|entry| entry.loop_id == loop_id) {
+                loops.remove(run_id);
+            }
         }
     }
 
     /// Whether a loop of this process is still inside the named run, whether or
     /// not it still holds the run's claim.
     pub fn is_looping(&self, run_id: &str) -> bool {
-        self.loops.lock().map(|loops| loops.contains(run_id)).unwrap_or(false)
+        self.loops.lock().map(|loops| loops.contains_key(run_id)).unwrap_or(false)
+    }
+
+    /// GTE-FR-DQLR: the process stops and starts again. No claim and no loop of
+    /// the old process stands, and the next read of the queue is the first.
+    #[cfg(test)]
+    pub(crate) fn relaunch_for_test(&self) {
+        if let Ok(mut running) = self.running.lock() {
+            running.clear();
+        }
+        if let Ok(mut loops) = self.loops.lock() {
+            loops.clear();
+        }
+        self.swept.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// GRD-FR-XVUD: answers `true` once, for the first read of the queue.
+    pub fn take_first_read(&self) -> bool {
+        !self.swept.swap(true, std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// GRL-FR-WCZE: whether the loop that stands in the named run was stopped by
+    /// a command. No other loop can stand in the run until that one returns.
+    pub fn loop_stopped(&self, run_id: &str) -> bool {
+        self.loops
+            .lock()
+            .map(|loops| loops.get(run_id).is_some_and(|entry| entry.stopped_because.is_some()))
+            .unwrap_or(false)
+    }
+
+    /// GRD-FR-QWLP: whether a loop of this process still stands in the named
+    /// queue, whether or not it still holds the queue's claim.
+    pub fn is_loop_in_queue(&self, queue_key: &str) -> bool {
+        self.loops
+            .lock()
+            .map(|loops| loops.values().any(|entry| entry.queue_key == queue_key))
+            .unwrap_or(false)
     }
 
     /// How many runs of this process hold a claim right now.
@@ -342,10 +466,14 @@ impl GraduationState {
         let Ok(mut running) = self.running.lock() else {
             return false;
         };
+        let mut loops = self.loops.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         for held in running.values_mut() {
             if held.run_id == run_id {
                 held.stopped_because = Some(reason);
                 held.cancellation.cancel();
+                if let Some(entry) = loops.get_mut(run_id).filter(|e| e.loop_id == held.loop_id) {
+                    entry.stopped_because = Some(reason);
+                }
                 return true;
             }
         }
@@ -355,20 +483,33 @@ impl GraduationState {
     /// GRD-FR-TWMA: a project change and a shutdown stop every running turn.
     pub fn cancel_all(&self, reason: GraduationInterruptionReason) {
         if let Ok(mut running) = self.running.lock() {
+            let mut loops = self.loops.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             for held in running.values_mut() {
                 held.stopped_because = Some(reason);
                 held.cancellation.cancel();
+                if let Some(entry) =
+                    loops.get_mut(&held.run_id).filter(|e| e.loop_id == held.loop_id)
+                {
+                    entry.stopped_because = Some(reason);
+                }
             }
         }
     }
 
     /// Why the turn of a run was stopped, where something stopped it.
+    ///
+    /// GRD-FR-HRXA: the claim answers first. Where a command's rest already
+    /// released it, the loop that still stands in the run answers.
     pub fn cancellation_reason(&self, run_id: &str) -> Option<GraduationInterruptionReason> {
-        self.running
+        let claimed = self
+            .running
             .lock()
-            .ok()?
-            .values()
-            .find(|held| held.run_id == run_id)
-            .and_then(|held| held.stopped_because)
+            .ok()
+            .and_then(|running| {
+                running.values().find(|held| held.run_id == run_id).map(|h| h.stopped_because)
+            })
+            .flatten();
+        claimed
+            .or_else(|| self.loops.lock().ok().and_then(|loops| loops.get(run_id)?.stopped_because))
     }
 }

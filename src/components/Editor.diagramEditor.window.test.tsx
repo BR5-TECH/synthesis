@@ -193,13 +193,14 @@ describe("the window rules of the diagram editor overlay", () => {
     }
   });
 
-  it("EDT-FR-HGAZ: Tab and Shift+Tab from the dialog itself stay inside the overlay", async () => {
+  it("EDT-FR-HGAZ, EDT-FR-UOXS: Tab and Shift+Tab from the dialog itself stay inside the overlay", async () => {
     await mount();
     await open();
     const source = screen.getByRole("textbox", { name: "Diagram source" });
     act(() => dialog().focus());
     fireEvent.keyDown(dialog(), { key: "Tab" });
-    expect(within(dialog()).getByRole("button", { name: "Close" })).toHaveFocus();
+    // The legend toggle is the first part that takes focus (EDT-FR-UOXS).
+    expect(within(dialog()).getByRole("button", { name: "Hide syntax hints" })).toHaveFocus();
     act(() => dialog().focus());
     fireEvent.keyDown(dialog(), { key: "Tab", shiftKey: true });
     // The hints area is the last part that takes focus (EDT-FR-YNQF).

@@ -41,12 +41,24 @@ import { resetAppPreferencesCache } from "./state/appPreferences";
 import { resetSettingsSections } from "./state/settingsSweep";
 import { resetMermaidMock } from "./test/mermaidMock";
 import { resetMermaidForTest } from "./components/markdownMermaidRender";
+import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
+import type { LayoutPreferences } from "./types";
 
 const TEMPLATE = "# Draft\n\n```mermaid\ngraph TD\nA-->B\n```\n";
 
+/** EDT-FR-DNVJ: the layout record that this window shares with the main window. */
+let layout: LayoutPreferences | null = null;
+let savedLayouts: LayoutPreferences[] = [];
+
 function backend() {
-  invokeMock.mockImplementation(async (cmd: string) => {
+  invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
     switch (cmd) {
+      case "load_layout_preferences":
+        return layout && { ...layout };
+      case "save_layout_preferences":
+        layout = args?.preferences as LayoutPreferences;
+        savedLayouts.push(layout);
+        return undefined;
       case "get_settings_window_context":
         return { projectName: "acme", projectKey: "~/dev/acme", contentRoot: "~/dev/acme" };
       case "load_app_preferences":
@@ -74,6 +86,9 @@ beforeEach(() => {
   resetMermaidForTest();
   resetMermaidMock();
   resetDiagramEditorForTest();
+  resetLayoutPreferencesCache();
+  layout = null;
+  savedLayouts = [];
   backend();
 });
 
@@ -148,5 +163,36 @@ describe("the diagram editor overlay in the Settings window", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Edit diagram" }));
     expect(dialog()).toBeInTheDocument();
+  });
+});
+
+describe("the legend state in the Settings window", () => {
+  it("EDT-FR-DNVJ, EDT-FR-NGCW: the overlay shows the stored legend state of the project, and a toggle stores it", async () => {
+    layout = { mainWindowMaximized: true, diagramLegendHidden: true };
+    await openOverlay();
+    expect(
+      await within(dialog()).findByRole("button", { name: "Show syntax hints" }),
+    ).toBeInTheDocument();
+    expect(within(dialog()).queryByRole("region", { name: "Mermaid syntax hints" })).toBeNull();
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Show syntax hints" }));
+    expect(within(dialog()).getByRole("region", { name: "Mermaid syntax hints" })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(savedLayouts[savedLayouts.length - 1]).toEqual({ mainWindowMaximized: true, diagramLegendHidden: false }),
+    );
+  });
+
+  it("EDT-FR-NGCW: with no project behind the window, the legend state reads and writes nothing", async () => {
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string, args?: Record<string, unknown>) =>
+      cmd === "get_settings_window_context"
+        ? Promise.resolve({ projectName: "", projectKey: "", contentRoot: "" })
+        : base(cmd, args),
+    );
+    render(<SettingsWindowApp initialSection="global/appearance" />);
+    await waitFor(() =>
+      expect(invokeMock.mock.calls.some(([cmd]) => cmd === "get_settings_window_context")).toBe(true),
+    );
+    await screen.findByRole("navigation");
+    expect(invokeMock.mock.calls.filter(([cmd]) => String(cmd).includes("layout"))).toEqual([]);
   });
 });

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   loadLayoutPreferences,
   patchLayoutPreferences,
+  reloadLayoutPreferences,
   resetLayoutPreferencesCache,
   setActiveLayoutProject,
 } from "./layoutPreferences";
@@ -122,5 +123,104 @@ describe("the live-project guard", () => {
       verticalPanelFraction: 0.25,
       bottomPanelSurface: "runs",
     });
+  });
+});
+
+describe("reloadLayoutPreferences", () => {
+  it("EDT-FR-DNVJ: it reads past the cache, and a later patch builds on what the other window wrote", async () => {
+    stored = { bottomPanelHeight: 200 };
+    await loadLayoutPreferences("/p");
+    // The Settings window writes the record behind this window's cache.
+    stored = { bottomPanelHeight: 200, diagramLegendHidden: true };
+    expect(await loadLayoutPreferences("/p")).toEqual({ bottomPanelHeight: 200 });
+    expect(await reloadLayoutPreferences("/p")).toEqual({
+      bottomPanelHeight: 200,
+      diagramLegendHidden: true,
+    });
+    await patchLayoutPreferences("/p", { bottomPanelHeight: 240 });
+    expect(saved[saved.length - 1]).toEqual({ bottomPanelHeight: 240, diagramLegendHidden: true });
+  });
+
+  it("EDT-FR-DNVJ: it waits for a patch in flight, so it reads the record that the patch wrote", async () => {
+    let releaseSave: () => void = () => {};
+    invokeMock.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "load_layout_preferences") return Promise.resolve(stored && { ...stored });
+      if (cmd === "save_layout_preferences") {
+        return new Promise<void>((resolve) => {
+          releaseSave = () => {
+            stored = args?.preferences as LayoutPreferences;
+            resolve();
+          };
+        });
+      }
+      return Promise.reject(new Error(`unexpected invoke ${cmd}`));
+    });
+    const loads = () =>
+      invokeMock.mock.calls.filter(([cmd]) => cmd === "load_layout_preferences").length;
+    const patch = patchLayoutPreferences("/p", { verticalPanelHidden: true });
+    await vi.waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("save_layout_preferences", expect.anything()),
+    );
+    const reload = reloadLayoutPreferences("/p");
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    expect(loads()).toBe(1);
+    releaseSave();
+    await patch;
+    expect(await reload).toEqual({ verticalPanelHidden: true });
+    expect(loads()).toBe(2);
+  });
+
+  it("EDT-FR-DNVJ: a failed read answers an empty record and does not stop later patches", async () => {
+    invokeMock.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "load_layout_preferences") return Promise.reject(new Error("no slot"));
+      if (cmd === "save_layout_preferences") {
+        saved.push(args?.preferences as LayoutPreferences);
+        return Promise.resolve(undefined);
+      }
+      return Promise.reject(new Error(`unexpected invoke ${cmd}`));
+    });
+    expect(await reloadLayoutPreferences("/p")).toEqual({});
+    await patchLayoutPreferences("/p", { bottomPanelHeight: 1 });
+    expect(saved).toEqual([{ bottomPanelHeight: 1 }]);
+  });
+});
+
+describe("reloadLayoutPreferences and the live-project guard", () => {
+  it("EDT-FR-DNVJ: a reload for a project that is no longer open reads nothing and leaves the cache as it was", async () => {
+    stored = { bottomPanelSurface: "git" };
+    setActiveLayoutProject("/a");
+    await loadLayoutPreferences("/a");
+    setActiveLayoutProject("/b");
+    const loadsBefore = invokeMock.mock.calls.filter(([c]) => c === "load_layout_preferences").length;
+    expect(await reloadLayoutPreferences("/a")).toEqual({});
+    expect(invokeMock.mock.calls.filter(([c]) => c === "load_layout_preferences")).toHaveLength(
+      loadsBefore,
+    );
+  });
+
+  it("EDT-FR-DNVJ: a reload whose project closes while it reads does not cache the answer", async () => {
+    let answer: (value: LayoutPreferences | null) => void = () => {};
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "load_layout_preferences") {
+        return new Promise((resolve) => {
+          answer = resolve;
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+    setActiveLayoutProject("/a");
+    const reload = reloadLayoutPreferences("/a");
+    await vi.waitFor(() =>
+      expect(invokeMock.mock.calls.some(([c]) => c === "load_layout_preferences")).toBe(true),
+    );
+    setActiveLayoutProject("/b");
+    answer({ bottomPanelSurface: "history" });
+    expect(await reload).toEqual({});
+    // The next read of A goes to the backend again.
+    setActiveLayoutProject("/a");
+    invokeMock.mockImplementation((cmd: string) =>
+      Promise.resolve(cmd === "load_layout_preferences" ? { bottomPanelSurface: "git" } : undefined),
+    );
+    expect(await loadLayoutPreferences("/a")).toEqual({ bottomPanelSurface: "git" });
   });
 });

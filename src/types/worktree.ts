@@ -259,6 +259,13 @@ export interface LayoutPreferences {
    * keyed by the file's project-relative path. A file with no entry shows it.
    */
   fileDiscussionHidden?: Record<string, boolean>;
+
+  /**
+   * SNV-FR-08 / EDT-FR-NGCW: whether the legend of the diagram overlays is
+   * hidden — the syntax hints of the diagram editor overlay and the CALM
+   * details panel share it (EDT-FR-MSCV). Absent means shown.
+   */
+  diagramLegendHidden?: boolean;
 }
 
 /**

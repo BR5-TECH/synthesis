@@ -48,6 +48,10 @@ let queue: Promise<unknown> = Promise.resolve();
  * once the shell has said which project is open.
  */
 let activeKey: string | null = null;
+// The Settings window never declares a project, so this guard is off there.
+// That is correct: the backend scopes each call of that window by its own
+// project id (`src/api/invoke.ts`), and that project cannot change while the
+// window is open.
 
 /**
  * Name the project the shell has open. Called whenever that changes, including
@@ -135,6 +139,38 @@ export async function patchLayoutPreferences(
     cached = next;
     cachedKey = projectKey;
     return next;
+  });
+}
+
+/**
+ * Read the project's layout record from the backend again, and cache it.
+ *
+ * EDT-FR-DNVJ: another window (the Settings window) can write the record, so
+ * a reader that must see that write cannot trust the cache. The read is a step
+ * of the same queue as the patches, so it never reads under a patch that is
+ * still in flight. After it, every later patch of this window builds on the
+ * record that the other window wrote, and does not write back an old value.
+ */
+export async function reloadLayoutPreferences(
+  projectKey: string,
+): Promise<LayoutPreferences> {
+  return enqueue(async () => {
+    // The backend answers for the project that is open now. A reload for a
+    // project that is no longer open would cache another slot under its key.
+    if (activeKey !== null && activeKey !== projectKey) return {};
+    if (cachedKey === projectKey) {
+      cached = null;
+      cachedKey = null;
+    }
+    const prefs = await loadLayoutPreferences(projectKey);
+    if (activeKey !== null && activeKey !== projectKey) {
+      if (cachedKey === projectKey) {
+        cached = null;
+        cachedKey = null;
+      }
+      return {};
+    }
+    return prefs;
   });
 }
 

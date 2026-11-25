@@ -254,7 +254,7 @@ fn require_store<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<fsa::Ro
 
 /// CST-FR-WPHC / CST-FR-BLIF: `"read change statistics"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn read_change_statistics<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,
@@ -281,7 +281,7 @@ where
 
 /// CST-FR-TSOU: `"record change working interval"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn record_change_working_interval<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,

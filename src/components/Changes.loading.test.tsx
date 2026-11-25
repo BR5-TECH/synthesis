@@ -569,3 +569,36 @@ describe("renamed entries open a paired diff (CHG-FR-12)", () => {
     });
   });
 });
+
+describe("a burst of changes updated (CHG-FR-RUAG)", () => {
+  it("CHG-FR-RUAG: events during a change set read start exactly one more read, and its answer shows", async () => {
+    const releases: Array<(set: ChangeSet) => void> = [];
+    let gated = false;
+    backend({
+      uncommitted: () =>
+        gated
+          ? new Promise<ChangeSet>((resolve) => releases.push(resolve))
+          : changeSet([LIB]),
+    });
+    renderPanel();
+    await showAllFiles();
+    await screen.findByText("Library.tsx");
+    await waitFor(() => expect(listeners[CHANGES_UPDATED]).toBeDefined());
+
+    gated = true;
+    const before = calls("list_uncommitted_changes").length;
+    act(() => {
+      for (let i = 0; i < 20; i += 1) {
+        listeners[CHANGES_UPDATED]?.({ payload: { changeCount: 1 } });
+      }
+    });
+    await waitFor(() => expect(releases).toHaveLength(1));
+    expect(calls("list_uncommitted_changes")).toHaveLength(before + 1);
+
+    await act(async () => releases[0](changeSet([LIB])));
+    await waitFor(() => expect(releases).toHaveLength(2));
+    await act(async () => releases[1](changeSet([LIB, HOOK])));
+    expect(await screen.findByText("useEditHistory.ts")).toBeInTheDocument();
+    expect(calls("list_uncommitted_changes")).toHaveLength(before + 2);
+  });
+});

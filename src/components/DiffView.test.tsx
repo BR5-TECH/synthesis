@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   render,
   screen,
@@ -458,6 +459,35 @@ describe("Backend reads (DFV-FR-25 / DFV-FR-26)", () => {
 
     await waitFor(() => expect(diffLine("older original")).toBeUndefined());
     expect(diffLine("newer original")).toBeTruthy();
+  });
+
+  it("DFV-FR-HTXT: events during a re-fetch start exactly one more re-fetch, and its original shows", async () => {
+    const settlers: Array<(r: FileRevisions) => void> = [];
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "get_file_revisions")
+        return new Promise<FileRevisions>((resolve) => settlers.push(resolve));
+      if (cmd === "load_artifact_contents_by_id")
+        return { body: "target\n", checksum: "sum" };
+      return undefined;
+    });
+    renderDiff(target());
+    await waitFor(() => expect(settlers).toHaveLength(1));
+    settlers[0](revs("first original\n", "target\n"));
+    expect(await findDiffLine("first original")).toBeInTheDocument();
+
+    act(() => {
+      for (let i = 0; i < 20; i += 1) {
+        listeners[CHANGES_UPDATED]?.({ payload: { changeCount: 1 } });
+      }
+    });
+    await waitFor(() => expect(settlers).toHaveLength(2));
+    expect(callsTo("get_file_revisions")).toHaveLength(2);
+
+    await act(async () => settlers[1](revs("middle original\n", "target\n")));
+    await waitFor(() => expect(settlers).toHaveLength(3));
+    await act(async () => settlers[2](revs("last original\n", "target\n")));
+    expect(await findDiffLine("last original")).toBeInTheDocument();
+    expect(callsTo("get_file_revisions")).toHaveLength(3);
   });
 
   it("asks the backend for the file's own scope, rename halves included", async () => {

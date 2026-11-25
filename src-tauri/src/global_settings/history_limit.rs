@@ -36,14 +36,14 @@ impl GlobalSettingsStore {
 
 /// GSS contract: `"load history limit percent"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_history_limit_percent(store: State<'_, GlobalSettingsStore>) -> Result<u8, String> {
     store.load_history_limit_percent()
 }
 
 /// GSS contract: `"save history limit percent"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_history_limit_percent(
     percent: i64,
     app: tauri::AppHandle,

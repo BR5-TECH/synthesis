@@ -157,7 +157,7 @@ pub fn graduation_capacity_of<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> G
 /// GRD-FR-GRHC: what the project's slots hold now, and which queued runs wait
 /// for a slot alone.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_graduation_capacity<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<GraduationCapacity, String> {

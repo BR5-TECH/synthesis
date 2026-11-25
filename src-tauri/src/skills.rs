@@ -622,7 +622,7 @@ pub fn list_project_skills_impl(indexer: &Bm25Indexer) -> Result<Vec<ProjectSkil
 /// DSL-FR-PEHR: the synthesis skills and project skills the persona editor
 /// offers (`../ui/AGT-agents.md` AGT-FR-KVDA).
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_project_skills<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     indexer: crate::project_scope::Scoped<'_, Bm25Indexer>,

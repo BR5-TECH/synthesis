@@ -588,7 +588,7 @@ fn log_recovery<R: tauri::Runtime>(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_draft_history<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,
@@ -606,7 +606,7 @@ where
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_draft_history_entry<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     entry_id: String,

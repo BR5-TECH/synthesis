@@ -7,7 +7,7 @@ use crate::project_scope::events::EmitToProject;
 use crate::project_scope::ProjectStores;
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_drafts(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -284,7 +284,7 @@ where
 /// DRS-FR-17: the panel's text filter, which is the one operation it makes that
 /// reads a draft's files.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn search_drafts(
     text: String,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -294,7 +294,7 @@ pub fn search_drafts(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn open_draft(
     id: String,
     app: tauri::AppHandle,
@@ -626,7 +626,7 @@ where
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_draft_file_contents(
     id: String,
     path: String,

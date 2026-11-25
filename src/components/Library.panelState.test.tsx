@@ -455,7 +455,7 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
   // what the store holds, so an older write settling afterwards must not be
   // recorded as the persisted value — a later change back to it would then be
   // suppressed and never written at all.
-  it("does not let an out-of-order write claim the persisted value", async () => {
+  it("CEX-FR-QZPN: a write made while one is in flight goes out after it, so the newest state is stored last", async () => {
     const resolvers: Array<() => void> = [];
     invokeMock.mockImplementation(async (cmd: string, args?: unknown) => {
       const read = treeCommand(cmd, args, baseTree());
@@ -475,13 +475,15 @@ describe("persisted panel state (LIB-FR-14 … LIB-FR-17)", () => {
     fireEvent.click(screen.getByText("specifications"));
     await waitFor(() => expect(resolvers).toHaveLength(1), SAVE_TIMEOUT);
 
-    // Write #2: also expand `.claude`, dispatched while #1 is still in flight.
+    // Write #2: also expand `.claude`, made while #1 is still in flight. It
+    // waits for #1, so the backend can never store #1 last.
     fireEvent.click(screen.getByText(".claude"));
-    await waitFor(() => expect(resolvers).toHaveLength(2), SAVE_TIMEOUT);
-
-    // They settle out of order: the newer one first, the stale one after.
-    resolvers[1]();
+    await settleDebounce();
+    expect(resolvers).toHaveLength(1);
     resolvers[0]();
+    await waitFor(() => expect(resolvers).toHaveLength(2), SAVE_TIMEOUT);
+    expect(lastSave()?.expandedPaths).toEqual(expect.arrayContaining(["specifications", ".claude"]));
+    resolvers[1]();
     await settleDebounce();
 
     // Returning to write #1's exact state must still issue a write, because

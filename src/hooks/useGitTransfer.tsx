@@ -25,6 +25,7 @@ import {
 } from "react";
 
 import * as api from "../api";
+import { coalescedRun } from "../coalescedRun";
 import {
   ensureMainBranchWrite,
   runMainBranchWrite,
@@ -178,43 +179,53 @@ export function useGitTransferState({
   }, [enabled, resetKey, refreshSync]);
 
   // CHG-FR-38 / GTC-FR-21: read from local refs alone, so this reaches no remote.
+  // CHG-FR-RUAG: every read takes a ticket, and only the newest read started
+  // may commit, so a slow older read never replaces a newer answer.
+  const syncSeq = useRef(0);
+  const readSync = useCallback(async () => {
+    const ticket = ++syncSeq.current;
+    try {
+      const s = await Promise.resolve().then(() => api.getUpstreamSyncState());
+      if (ticket === syncSeq.current) setSync(s ?? null);
+    } catch {
+      // No branch, or not a repository. Push stays unavailable rather than
+      // being offered on a state no control can describe.
+      logDebug(["frontend"], "upstream sync state unavailable");
+      if (ticket === syncSeq.current) setSync(null);
+    }
+  }, [setSync]);
+
   useEffect(() => {
     if (!enabled) return;
     if (!inRepository) {
+      syncSeq.current += 1;
       setSync(null);
       return;
     }
-    let cancelled = false;
-    void Promise.resolve()
-      .then(() => api.getUpstreamSyncState())
-      .then((s) => {
-        if (!cancelled) setSync(s ?? null);
-      })
-      .catch(() => {
-        // No branch, or not a repository. Push stays unavailable rather than
-        // being offered on a state no control can describe.
-        logDebug(["frontend"], "upstream sync state unavailable");
-        if (!cancelled) setSync(null);
-      });
+    void readSync();
     return () => {
-      cancelled = true;
+      syncSeq.current += 1;
     };
-  }, [enabled, inRepository, syncEpoch, setSync]);
+  }, [enabled, inRepository, syncEpoch, setSync, readSync]);
 
   // CHG-FR-38: a commit landing makes the branch pushable.
+  // CHG-FR-RUAG: one event-driven read in flight at a time, and one more after
+  // it for any burst of events.
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !inRepository) return;
+    const runner = coalescedRun(readSync);
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    void onChangesUpdated(refreshSync).then((fn) => {
+    void onChangesUpdated(() => runner.run()).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
     });
     return () => {
       cancelled = true;
+      runner.dispose();
       unlisten?.();
     };
-  }, [enabled, refreshSync]);
+  }, [enabled, inRepository, readSync]);
 
   // GTC-FR-04 / GTC-FR-22: both channels are surface-agnostic, so a push begun
   // by any control — or by the graduation driver — arrives here the same way.

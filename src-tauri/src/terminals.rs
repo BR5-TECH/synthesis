@@ -12,6 +12,7 @@ pub mod flow;
 pub mod gather;
 pub mod history;
 pub mod host;
+pub mod input;
 pub mod model;
 pub mod persistent;
 pub mod process;

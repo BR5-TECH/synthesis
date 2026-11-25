@@ -13,7 +13,7 @@ use crate::global_settings::{
 };
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_app_preferences(
     store: State<'_, GlobalSettingsStore>,
 ) -> Result<AppPreferences, String> {
@@ -21,7 +21,7 @@ pub fn load_app_preferences(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_app_preferences(
     preferences: AppPreferences,
     store: State<'_, GlobalSettingsStore>,
@@ -30,7 +30,7 @@ pub fn save_app_preferences(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_recent_projects(
     store: State<'_, GlobalSettingsStore>,
 ) -> Result<Vec<RecentProjectEntry>, String> {
@@ -38,7 +38,7 @@ pub fn list_recent_projects(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn remove_recent_project(
     path: String,
     store: State<'_, GlobalSettingsStore>,
@@ -47,13 +47,13 @@ pub fn remove_recent_project(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn clear_recent_projects(store: State<'_, GlobalSettingsStore>) -> Result<(), String> {
     store.clear_recent_projects()
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn pin_recent_project(
     path: String,
     store: State<'_, GlobalSettingsStore>,
@@ -62,7 +62,7 @@ pub fn pin_recent_project(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn unpin_recent_project(
     path: String,
     store: State<'_, GlobalSettingsStore>,
@@ -71,7 +71,7 @@ pub fn unpin_recent_project(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_installed_plugins(
     store: State<'_, GlobalSettingsStore>,
 ) -> Result<Vec<InstalledPlugin>, String> {
@@ -79,7 +79,7 @@ pub fn list_installed_plugins(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn install_plugin(
     source: String,
     store: State<'_, GlobalSettingsStore>,
@@ -88,13 +88,13 @@ pub fn install_plugin(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn uninstall_plugin(id: String, store: State<'_, GlobalSettingsStore>) -> Result<(), String> {
     store.uninstall_plugin(&id)
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_agent_adapters(
     store: State<'_, GlobalSettingsStore>,
 ) -> Result<Vec<InstalledAdapter>, String> {
@@ -102,7 +102,7 @@ pub fn list_agent_adapters(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn install_adapter(
     source: String,
     store: State<'_, GlobalSettingsStore>,

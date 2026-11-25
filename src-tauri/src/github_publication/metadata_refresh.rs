@@ -570,7 +570,7 @@ pub(super) fn cached_metadata_for<R: Runtime>(
 
 /// GHP-FR-JTYL: the cached lists of `remote_name`. Contacts no network.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_publication_metadata_cache(
     remote_name: String,
     app: AppHandle,
@@ -593,7 +593,7 @@ pub fn get_publication_metadata_cache(
 /// GHP-FR-KPXF: the kept startup failure, which this call discards. Contacts
 /// no network.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn take_publication_metadata_startup_failure(
     app: AppHandle,
 ) -> Option<PublicationMetadataStartupFailed> {

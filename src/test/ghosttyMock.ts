@@ -26,6 +26,9 @@ export async function init(): Promise<void> {
   fakeInitCalls.count += 1;
 }
 
+/** Test hook: while true, `open()` makes no renderer, as a library without the contrast hook. */
+export const fakeNoRenderer = { on: false };
+
 /** Each `Ghostty.load()` in order, so a test can check that no two terminals share one. */
 export const fakeInstances: FakeGhostty[] = [];
 
@@ -78,6 +81,11 @@ export class FakeTerminal {
   modes = new Set<number>();
   /** The pages `scrollPages` moved, in order. */
   scrolled: number[] = [];
+  /**
+   * A stand-in for the canvas renderer that `open()` makes. `drawn` holds the
+   * cells that its `renderCellText` got, so a test can read the colours drawn.
+   */
+  renderer: FakeRenderer | undefined = undefined;
   private data = emitter<string>();
   private resizes = emitter<{ cols: number; rows: number }>();
   readonly onData = this.data.event;
@@ -90,6 +98,7 @@ export class FakeTerminal {
     fakeTerminals.push(this);
   }
   open(parent: HTMLElement) {
+    if (!fakeNoRenderer.on) this.renderer = new FakeRenderer(String((this.options.theme as ITheme | undefined)?.background ?? "#1e1e1e"));
     this.opened = parent;
     this.openedConnected = parent.isConnected;
     const canvas = document.createElement("canvas");
@@ -149,6 +158,18 @@ export class FakeTerminal {
 }
 
 export { FakeTerminal as Terminal };
+
+/** The parts of the ghostty-web 0.4.0 `CanvasRenderer` that the app reaches into. */
+export class FakeRenderer {
+  theme: { background: string };
+  drawn: Record<string, number>[] = [];
+  constructor(background: string) {
+    this.theme = { background };
+  }
+  renderCellText(cell: Record<string, number>, _col: number, _row: number) {
+    this.drawn.push({ ...cell });
+  }
+}
 
 export class FitAddon {
   term: FakeTerminal | null = null;

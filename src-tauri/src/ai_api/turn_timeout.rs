@@ -44,7 +44,7 @@ pub fn set_turn_timeout_impl(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_ai_api_turn_timeout(
     provider: String,
     timeout_ms: Option<u64>,

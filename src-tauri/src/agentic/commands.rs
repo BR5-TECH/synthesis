@@ -8,7 +8,7 @@ use super::*;
 // ---------------------------------------------------------------------------
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_agentic_integrations(
     store: State<'_, GlobalSettingsStore>,
     ai: State<'_, AgenticIntegrations>,
@@ -17,7 +17,7 @@ pub fn list_agentic_integrations(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn detect_agentic_cli_binary(
     vendor: String,
     ai: State<'_, AgenticIntegrations>,
@@ -26,7 +26,7 @@ pub fn detect_agentic_cli_binary(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn verify_agentic_integration(
     vendor: String,
     config: VerifyConfig,
@@ -51,7 +51,7 @@ pub fn verify_agentic_integration(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_agentic_integration_model(
     vendor: String,
     turn_kind: Option<String>,
@@ -75,7 +75,7 @@ pub fn set_agentic_integration_model(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_agentic_integration_effort(
     vendor: String,
     turn_kind: Option<String>,
@@ -99,7 +99,7 @@ pub fn set_agentic_integration_effort(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_active_agentic_integration(
     vendor: String,
     store: State<'_, GlobalSettingsStore>,
@@ -109,7 +109,7 @@ pub fn set_active_agentic_integration(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn clear_agentic_integration(
     vendor: String,
     app: tauri::AppHandle,
@@ -143,7 +143,7 @@ pub fn resolve_project_vendor<R: tauri::Runtime>(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_project_agentic_integration(
     store: State<'_, GlobalSettingsStore>,
     ai: State<'_, AgenticIntegrations>,
@@ -153,7 +153,7 @@ pub fn get_project_agentic_integration(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_project_agentic_integration(
     vendor: Option<String>,
     store: State<'_, GlobalSettingsStore>,

@@ -64,7 +64,7 @@ pub use sweeper::*;
 /// DAS-FR-02 / DAS-FR-03 / DAS-FR-05: store a pasted or dropped image and answer
 /// with the destination the surface inserts.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn store_draft_image<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,
@@ -141,7 +141,7 @@ pub fn store_draft_image<R: tauri::Runtime>(
 /// DAS-FR-08: the stored bytes of an image the prompt references, for a surface
 /// to draw.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn read_draft_image<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,
@@ -167,7 +167,7 @@ pub fn read_draft_image<R: tauri::Runtime>(
 
 /// DAS-FR-09: take back a store whose reference never reached the saved prompt.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn discard_draft_image<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,
@@ -212,7 +212,7 @@ pub fn discard_draft_image<R: tauri::Runtime>(
 /// command return value, no event, and no payload anywhere carries a
 /// [`DraftAssetSweep`], which reaches the internal caller and the log alone.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn sweep_draft_assets<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,

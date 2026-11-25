@@ -27,7 +27,7 @@ pub fn proposals_in(store: &crate::fs::RootFs, discussion_id: &str) -> Vec<MapPl
 
 /// `"list map plan proposals (discussion id)"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_map_plan_proposals(
     app: tauri::AppHandle,
     discussion_id: String,

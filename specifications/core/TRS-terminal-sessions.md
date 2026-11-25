@@ -41,6 +41,8 @@ The backend module that runs the author's own interactive terminals. A terminal 
 25. **TRS-FR-KENG** While no channel is attached, the module keeps reading the session's output into the history, so a process never stops on a hidden or closed tab.
 26. **TRS-FR-AVNH** `write_terminal_input` writes its bytes to the session's pseudo-terminal unchanged. One call carries at most 64 KiB. A session that is not `running` returns `terminal_not_running` and receives nothing.
 27. **TRS-FR-UNIL** `resize_terminal` sets the window size of the pseudo-terminal, and of the terminal in the container or VM for those kinds. It accepts 2 to 1000 columns and 1 to 500 rows, and returns `invalid_size` for any other value.
+27. **TRS-FR-GSYR** `write_terminal_input` puts its bytes last in an input queue of the session and returns. One writer thread of the session writes the queue to the pseudo-terminal in order, so a process that does not read its input never blocks the command (per `CEX-command-execution.md` CEX-FR-VWRP).
+27. **TRS-FR-DUME** While the input queue of a session holds more than 1 MiB, `write_terminal_input` returns `input_backlog_full` and queues nothing. `resize_terminal` and `acknowledge_terminal_output` return without waiting for the process, the container, or the VM.
 28. **TRS-FR-NULR** `detach_terminal` ends the attached channel and changes nothing about the process. A detach of a session that is not `running` or `starting` also drops its history.
 
 ### Lifetime
@@ -159,7 +161,7 @@ TerminalAttachment {
 
 Each message on the `output` channel is one binary frame of raw output bytes (TRS-FR-PACY).
 
-Typed errors: `platform_unsupported`, `terminal_limit_reached`, `unknown_target`, `unknown_terminal`, `target_gone`, `kind_unavailable` (with its reason), `terminal_not_running`, `invalid_size`, `invalid_label`, `invalid_theme`, `input_too_large`, `start_failed`.
+Typed errors: `platform_unsupported`, `terminal_limit_reached`, `unknown_target`, `unknown_terminal`, `target_gone`, `kind_unavailable` (with its reason), `terminal_not_running`, `invalid_size`, `invalid_label`, `invalid_theme`, `input_too_large`, `input_backlog_full`, `start_failed`.
 
 ### Internal (Rust API, not registered as Tauri commands)
 - `end_terminals_for_target(project_id, target)` — called by `WTC-worktree-context.md` and `WKS-work-streams.md` when a target is gone (TRS-FR-RKAW).

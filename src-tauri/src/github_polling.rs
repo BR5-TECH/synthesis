@@ -346,7 +346,7 @@ pub(crate) fn list_statuses_impl<R: Runtime>(
 
 /// "get github polling state": contacts no network.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn get_github_polling_state(app: tauri::AppHandle) -> Result<GithubPollingView, String> {
     current_view(&app)
 }

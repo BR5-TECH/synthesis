@@ -169,7 +169,7 @@ pub async fn feed_voice_activity(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn set_voice_activity_gate(
     activity_id: String,
     seq: u64,

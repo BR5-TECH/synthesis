@@ -39,7 +39,7 @@ pub struct DirectGraduationPreflight {
 /// Read-only. It creates nothing, and the start uses the same reading, so the
 /// dialog and the refusal cannot disagree about what is dirty.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn preflight_direct_graduation<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<DirectGraduationPreflight, String> {
@@ -57,7 +57,7 @@ pub fn preflight_direct_graduation<R: tauri::Runtime>(
 /// GSU-FR-PVFP: start a direct run, or start nothing.
 // GRD-FR-WJLO: the guard read can reach GitHub, so not on the main thread.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn start_direct_graduation<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     draft_id: String,

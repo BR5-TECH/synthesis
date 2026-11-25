@@ -312,8 +312,10 @@ fn recenter_on_resize<R: tauri::Runtime>(
 /// PPK-FR-WCMN: it centres the window that shows the picker, which is the window
 /// that makes the call, and no other window.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn center_picker(app: tauri::AppHandle, window: tauri::Window) {
+    // CEX-FR-RWTW: the size, cursor, and position reads below wait for the
+    // main thread, so this command holds no lock while it runs.
     let Some(window) = app.get_webview_window(window.label()) else {
         return;
     };

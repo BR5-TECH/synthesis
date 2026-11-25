@@ -59,6 +59,7 @@ import type {
 } from "../../types";
 import { useSettledText } from "./settle";
 import { diagramEditorRequest, subscribeDiagramEditor } from "../DiagramEditor/store";
+import { coalescedRun } from "../../coalescedRun";
 import { DiffComparisonBody, DiffModeToolbar } from "./comparison";
 import { holdEdit, runMainBranchWrite, WRITE_CANCELLED } from "../../state/mainBranchWrite";
 
@@ -176,14 +177,16 @@ export function DiffView({ target, sessions }: DiffViewProps) {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    void onChangesUpdated(() => {
-      void loadRevisions();
-    }).then((fn) => {
+    // DFV-FR-HTXT: one re-fetch in flight at a time, and one more after it
+    // for any burst of events.
+    const runner = coalescedRun(loadRevisions);
+    void onChangesUpdated(() => runner.run()).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
     });
     return () => {
       cancelled = true;
+      runner.dispose();
       unlisten?.();
     };
   }, [loadRevisions]);

@@ -371,7 +371,10 @@ fn the_first_size_starts_the_client_after_the_scrollback() {
         assert_eq!(fx.f.clients.all()[0].sizes.lock().unwrap().last(), Some(&(120, 40)));
         assert_eq!(fx.f.runner.calls_of("capture-pane").len(), 1);
         assert!(service::write_input(&handle, "t1", b"ls\n").is_ok());
-        assert_eq!(fx.f.clients.all()[0].writes.lock().unwrap().as_slice(), &[b"ls\n".to_vec()]);
+        // TRS-FR-GSYR: the writer thread of the session writes the input.
+        wait_until("the input is written", || {
+            fx.f.clients.all()[0].writes.lock().unwrap().as_slice() == [b"ls\n".to_vec()]
+        });
     });
 }
 

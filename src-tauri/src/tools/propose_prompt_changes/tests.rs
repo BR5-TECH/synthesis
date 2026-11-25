@@ -218,7 +218,7 @@ fn it_is_a_portable_tool_with_no_command_or_event_of_its_own() {
     const LIB: &str = include_str!("../../lib.rs");
     assert!(!LIB.contains(NAME), "no Tauri command and no event belongs to this tool",);
     const MODULE: &str = include_str!("../propose_prompt_changes.rs");
-    assert!(!MODULE.contains("#[tauri::command]"));
+    assert!(!MODULE.contains("#[tauri::command") && !MODULE.contains("blocking_command"));
     assert!(!MODULE.contains("app.emit"));
 }
 

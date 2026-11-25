@@ -98,7 +98,7 @@ pub fn overlaps(doc: &FlowDocument) -> Vec<Overlap> {
 
 /// FOA-FR-LBTE: `"analyze flow overlap"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn analyze_flow_overlap(
     app: tauri::AppHandle,
     body: String,

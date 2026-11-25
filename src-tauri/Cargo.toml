@@ -84,7 +84,7 @@ openrouter-rs = "0.25"
 # one asynchronous lock, so they run in the scope's VM one at a time.
 # MCS-FR-RBCD additionally needs `net`: the OAuth sign-in of an MCP server
 # listens for its redirect on a loopback TCP port.
-tokio = { version = "1", features = ["rt", "time", "process", "io-util", "macros", "sync", "net"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "process", "io-util", "macros", "sync", "net"] }
 # MCS-mcp-server-connections.md: the MCP client. It speaks MCP to a local
 # process (stdio) and to a remote server (Streamable HTTP), and its `auth`
 # module does the OAuth 2 discovery, registration, PKCE, and refresh of

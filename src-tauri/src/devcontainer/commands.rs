@@ -32,7 +32,7 @@ fn store_error(message: String) -> AgentEnvironmentError {
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_agent_environment(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<AgentEnvironmentState, AgentEnvironmentError> {
@@ -41,7 +41,7 @@ pub fn load_agent_environment(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_agent_environment(
     environment: AgentEnvironment,
     app: tauri::AppHandle,
@@ -73,7 +73,7 @@ pub fn save_agent_environment(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn list_devcontainer_configs(
     project: crate::project_scope::Scoped<'_, ProjectState>,
 ) -> Result<Vec<String>, String> {
@@ -82,7 +82,7 @@ pub fn list_devcontainer_configs(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn create_devcontainer_config(
     app: tauri::AppHandle,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -104,7 +104,7 @@ pub fn create_devcontainer_config(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn add_devcontainer_agent_feature(
     vendor: String,
     app: tauri::AppHandle,
@@ -146,7 +146,7 @@ impl BuildEvents for AppBuildEvents {
 /// happens before anything starts, and the project's build slot is claimed
 /// last.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn build_devcontainer(
     no_cache: bool,
     app: tauri::AppHandle,
@@ -203,7 +203,7 @@ pub fn build_devcontainer(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn cancel_devcontainer_build(
     operation_id: String,
     registry: State<'_, DevcontainerBuildRegistry>,
@@ -213,7 +213,7 @@ pub fn cancel_devcontainer_build(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_devcontainer_build_in_flight(
     project: crate::project_scope::Scoped<'_, ProjectState>,
     registry: State<'_, DevcontainerBuildRegistry>,
@@ -225,7 +225,7 @@ pub fn load_devcontainer_build_in_flight(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn load_devcontainer_cli(
     store: State<'_, GlobalSettingsStore>,
 ) -> Result<DevcontainerCli, String> {
@@ -233,7 +233,7 @@ pub fn load_devcontainer_cli(
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn save_devcontainer_cli(
     path: String,
     store: State<'_, GlobalSettingsStore>,
@@ -261,7 +261,7 @@ fn detected_path() -> Option<String> {
 }
 
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn detect_devcontainer_cli() -> Result<DetectedDevcontainerCli, String> {
     Ok(DetectedDevcontainerCli { path: detected_path() })
 }

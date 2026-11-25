@@ -106,8 +106,8 @@ Typed errors returned by these commands: `"not a git repository"`, `"unknown bra
 23. **CHC-FR-QKHR** The change set and the repository watch are held per open project. Every command takes `project_id`. The `"changes updated"` event carries `project_id` and goes to the window of that project only. A project tab that is not in front keeps its watch running (`PWN-project-windows.md` PWN-FR-XBSI).
 
 ## Non-functional requirements
-- Change-set computation must not block the Tauri invoke for a large branch comparison; the panel's incremental-render requirement (`../ui/CHG-changes.md`) assumes results can be produced without a long stall.
+- Change-set computation runs off the main thread (per `CEX-command-execution.md` CEX-FR-JBTB), so a slow read of a large branch comparison or of a submodule that is being cloned never stops the interface.
 - Classification of change entries reuses the scan state `ASC-artifact-scanning.md` already maintains rather than triggering a fresh full-project walk per change-set request.
-- The debounce window is an implementation choice (order of a few hundred milliseconds); the contract is only that bursts coalesce and the UI is not flooded.
+- The debounce window is an implementation choice (order of a few hundred milliseconds); the contract is only that bursts coalesce. A long continuous write, such as a submodule clone, still emits about one event per window, so each consumer coalesces the reads that the events start (`../ui/STB-status-bar.md` STB-FR-GAYM, `../ui/CHG-changes.md` CHG-FR-RUAG, `../ui/DFV-diff-viewer.md` DFV-FR-HTXT).
 - The Git engine choice is shared with `GTC-git.md` and is not constrained here beyond the contract surface.
 - Both comparisons resolve without network access; neither fetches from a remote before computing a merge-base.

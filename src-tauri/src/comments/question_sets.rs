@@ -267,7 +267,7 @@ pub fn read_question_set_checked(
 
 /// CMS-FR-JWVH: `"read discussion question set"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command]
+#[project_scope_macros::blocking_command]
 pub fn read_discussion_question_set<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     discussion_id: String,

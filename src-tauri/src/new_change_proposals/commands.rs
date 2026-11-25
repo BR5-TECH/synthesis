@@ -110,7 +110,7 @@ fn require_store(project: &ProjectState) -> Result<fs::RootFs, String> {
 /// NCP contract surface: every proposal of the change, newest first, and
 /// its confirmed split.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn list_new_change_proposals(
     stream_id: String,
     change: String,
@@ -131,7 +131,7 @@ pub struct NewChangeFiles {
 
 /// NCP contract surface: `"load new change proposal files"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn load_new_change_proposal_files(
     proposal_id: String,
     project: crate::project_scope::Scoped<'_, ProjectState>,
@@ -163,7 +163,7 @@ where
 
 /// NCP-FR-UWOR: `"accept new change proposal"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn accept_new_change_proposal<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -179,7 +179,7 @@ where
 
 /// NCP-FR-TWDN: `"reject new change proposal"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn reject_new_change_proposal<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -195,7 +195,7 @@ where
 
 /// NCP-FR-KRSA: `"complete new change decision"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn complete_new_change_decision<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     proposal_id: String,
@@ -210,7 +210,7 @@ where
 
 /// NCP-FR-MQCS: `"confirm change split"`.
 #[project_scope_macros::project_scoped]
-#[tauri::command(async)]
+#[project_scope_macros::blocking_command]
 pub fn confirm_change_split<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     stream_id: String,

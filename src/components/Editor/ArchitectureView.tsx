@@ -16,6 +16,7 @@ import {
 import { useCalmRead } from "../CalmDiagram/useCalmRead";
 import type { CalmLayout } from "../../calm/types";
 import { NO_DIAGRAM } from "../DiagramEditor/DiagramPreview";
+import { LegendToggle } from "../DiagramEditor/LegendToggle";
 
 export type ArchitectureMode = "diagram" | "source";
 
@@ -171,6 +172,8 @@ function ArchitectureCanvas({ layout }: { layout: CalmLayout }) {
       <div className="architecture-view__bar">
         <CalmFlowSelect ix={ix} />
         <CalmZoomControls ix={ix} />
+        {/* CAD-FR-RLDM: at the trailing end of the bar. */}
+        <LegendToggle legend="details" />
       </div>
       <CalmStage ix={ix} />
     </div>

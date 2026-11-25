@@ -35,9 +35,11 @@ import {
   MIN_SPLIT,
 } from "./geometry";
 import { HintsArea } from "./HintsArea";
+import { LegendToggle } from "./LegendToggle";
 import { indentSource, outdentSource } from "./indent";
 import { OverlayFrame, TAB_INPUT_ATTR } from "./OverlayFrame";
 import { diagramEditorRequest, subscribeDiagramEditor, type DiagramEditorRequest } from "./store";
+import { refreshDiagramLegend, useDiagramLegendHidden } from "../../state/diagramLegend";
 import { useFence } from "./useFence";
 
 /** EDT-FR-HVGG: the accessible names of the overlay and its parts. */
@@ -52,6 +54,12 @@ export { DiagramComparisonHost } from "./DiagramComparison";
 /** Each window mounts one host: the main window and the Settings window. */
 export function DiagramEditorHost() {
   const request = useSyncExternalStore(subscribeDiagramEditor, diagramEditorRequest);
+  // EDT-FR-DNVJ: the other window can have changed the legend state, so each
+  // opening reads it again.
+  const openingId = request?.id ?? null;
+  useEffect(() => {
+    if (openingId !== null) void refreshDiagramLegend();
+  }, [openingId]);
   if (!request) return null;
   // EDT-FR-TQWB: the kind of the fence chooses the drawing, the labels, and
   // the hints. It is read once, when the overlay opens.
@@ -73,6 +81,7 @@ function DiagramEditorOverlay({
   request: DiagramEditorRequest;
   diagram: DiagramKind;
 }) {
+  const legendHidden = useDiagramLegendHidden();
   const { view } = request;
   const sourceRef = useRef<HTMLTextAreaElement>(null);
   const { place, source, setSource, finish } = useFence(
@@ -224,9 +233,12 @@ function DiagramEditorOverlay({
       // its default, so the author can select and copy the text there.
       selectable=".diagram-editor__preview, .diagram-hints"
       onClose={finish}
+      // EDT-FR-UOXS: directly before the Close control.
+      controls={<LegendToggle legend="hints" />}
     >
       {/* EDT-FR-NKGX: the hints area takes the bottom 20% of the whole overlay,
-          and the title bar and the panes the rest. */}
+          and the title bar and the panes the rest. EDT-FR-UOXS: while the
+          legend is hidden, the panes take the full height. */}
       <div
         ref={panesRef}
         className="diagram-editor__panes"
@@ -273,7 +285,7 @@ function DiagramEditorOverlay({
         </div>
         {diagram === "calm" ? <CalmPreview source={source} /> : <DiagramPreview source={source} />}
       </div>
-      <HintsArea source={source} diagram={diagram} />
+      {!legendHidden && <HintsArea source={source} diagram={diagram} />}
     </OverlayFrame>
   );
 }

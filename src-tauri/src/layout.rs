@@ -105,6 +105,11 @@ pub struct LayoutPreferences {
     /// keyed by the file's project-relative path. A file with no entry shows
     /// its column.
     pub file_discussion_hidden: std::collections::BTreeMap<String, bool>,
+    /// SNV-FR-08 / EDT-FR-NGCW: whether the legend of the diagram overlays is
+    /// hidden. One value serves the syntax hints of the diagram editor overlay
+    /// and the CALM details panel (EDT-FR-MSCV). `false` (the default) shows
+    /// the legend, so a record written before this field existed shows it.
+    pub diagram_legend_hidden: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -184,6 +189,7 @@ mod tests {
                 "src/main.rs".to_string(),
                 true,
             )]),
+            diagram_legend_hidden: true,
         }
     }
 
@@ -479,6 +485,26 @@ mod tests {
         assert_eq!(p.main_window_outer_width, 0.0);
         assert_eq!(p.main_window_outer_height, 0.0);
         assert!(!p.main_window_maximized);
+    }
+
+    // SNV-FR-08, GSS-FR-17, EDT-FR-NGCW, EDT-FR-MSCV: the legend state goes
+    // through the per-project slot, and a record that does not hold it reads
+    // as "shown".
+    #[test]
+    fn diagram_legend_state_round_trips_and_defaults_to_shown() {
+        let store = GlobalSettingsStore::in_memory();
+        let prefs =
+            LayoutPreferences { diagram_legend_hidden: true, ..LayoutPreferences::default() };
+        store.save_project_layout("/dev/acme", prefs).unwrap();
+        let got = store.load_project_layout("/dev/acme").unwrap().unwrap();
+        assert!(got.diagram_legend_hidden);
+
+        let wire = serde_json::to_value(&got).unwrap();
+        assert_eq!(wire["diagramLegendHidden"], serde_json::json!(true));
+
+        let old: LayoutPreferences =
+            serde_json::from_str(r#"{ "bottomPanelHeight": 180 }"#).unwrap();
+        assert!(!old.diagram_legend_hidden, "an old record shows the legend");
     }
 
     #[test]

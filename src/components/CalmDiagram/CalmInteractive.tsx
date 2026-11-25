@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import { logDebug } from "../../logging";
+import { useDiagramLegendHidden } from "../../state/diagramLegend";
 import type { CalmLayout } from "../../calm/types";
 import { NO_NODES_STATEMENT } from "../../calm/types";
 import { Icon } from "../icons";
@@ -136,8 +137,14 @@ export function CalmZoomControls({ ix }: { ix: CalmInteraction }) {
   );
 }
 
-/** CAD-FR-LLNQ, CAD-FR-KUBU: the diagram area and the details panel. */
+/**
+ * CAD-FR-LLNQ, CAD-FR-KUBU: the diagram area and the details panel.
+ * CAD-FR-XHZP: while the legend is hidden, the area takes the full width. The
+ * flow, the selection, the zoom, and the pan stay in `ix`, so a hide or a show
+ * keeps them; a fitted diagram fits the new width (EDT-FR-JJDP).
+ */
 export function CalmStage({ ix }: { ix: CalmInteraction }) {
+  const legendHidden = useDiagramLegendHidden();
   const { layout, view } = ix;
   const flow = layout.graph.flows.find((item) => item.id === ix.flowId) ?? null;
   const highlight = useMemo(() => (flow ? flowHighlight(flow) : null), [flow]);
@@ -173,12 +180,14 @@ export function CalmStage({ ix }: { ix: CalmInteraction }) {
           </div>
         )}
       </div>
-      <CalmDetails
-        graph={layout.graph}
-        selected={ix.selected}
-        flow={flow}
-        onSelect={ix.reveal}
-      />
+      {!legendHidden && (
+        <CalmDetails
+          graph={layout.graph}
+          selected={ix.selected}
+          flow={flow}
+          onSelect={ix.reveal}
+        />
+      )}
     </div>
   );
 }

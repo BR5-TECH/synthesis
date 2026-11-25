@@ -90,8 +90,9 @@ describe("the panes (EDT-FR-NZLC, DCR-FR-ESIY)", () => {
     expect(within(dialog()).getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 
-  it("EDT-FR-BRVQ: holds no source pane, no syntax hints, and no edit control", () => {
+  it("EDT-FR-BRVQ: holds no source pane, no syntax hints, no legend toggle, and no edit control", () => {
     open(content());
+    expect(within(dialog()).queryByRole("button", { name: /syntax hints|details/i })).toBeNull();
     expect(within(dialog()).queryByRole("textbox")).toBeNull();
     expect(within(dialog()).queryByRole("button", { name: /edit/i })).toBeNull();
     expect(dialog().querySelector(".diagram-hints")).toBeNull();

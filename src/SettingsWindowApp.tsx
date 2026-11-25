@@ -17,6 +17,7 @@ import {
   onSettingsSaveAndClose,
 } from "./events";
 import { logError, logInfo, logWarn } from "./logging";
+import { restoreDiagramLegend } from "./state/diagramLegend";
 import { runSettingsSaveSweep, type SectionRequest } from "./state/settingsSweep";
 import {
   NEW_AGENT_ITEM,
@@ -91,6 +92,17 @@ export function SettingsWindowApp({
    * the main window's state.
    */
   const projectOpen = Boolean(context?.projectKey);
+
+  /**
+   * EDT-FR-DNVJ: the diagram editor overlay of this window (the Draft
+   * template) shares the legend state of the project with the main window.
+   */
+  const contextLoaded = context !== undefined;
+  const contextProjectKey = context?.projectKey ?? "";
+  useEffect(() => {
+    // An empty key stores nothing (no project, or a failed read).
+    if (contextLoaded) void restoreDiagramLegend(contextProjectKey);
+  }, [contextLoaded, contextProjectKey]);
   const scopes = useMemo<SettingsScope[]>(
     () => (projectOpen ? ["global", "project"] : ["global"]),
     [projectOpen],

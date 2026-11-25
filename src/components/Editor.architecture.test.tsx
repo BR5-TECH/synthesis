@@ -22,6 +22,8 @@ import * as logging from "../logging";
 import { resetLogBufferForTest } from "../logging";
 import { readCalm, resetCalmForTest } from "../calm/read";
 import { CALM_TEMPLATES } from "../calm/templates";
+import { HIDE_DETAILS_LABEL, SHOW_DETAILS_LABEL } from "./DiagramEditor/LegendToggle";
+import { setDiagramLegendHidden } from "../state/diagramLegend";
 
 const FILE = "system.calm.json";
 const SOURCE = CALM_TEMPLATES.find((t) => t.key === "flow")!.source + "\n";
@@ -253,6 +255,33 @@ describe("the Architecture tab", () => {
     } finally {
       debug.mockRestore();
     }
+  });
+
+  it("CAD-FR-RLDM, CAD-FR-XHZP: the legend toggle closes the bar and hides and shows the details panel", async () => {
+    mount();
+    await screen.findByRole("group", { name: "CALM architecture diagram" });
+    const bar = document.querySelector(".architecture-view__bar") as HTMLElement;
+    const hide = within(bar).getByRole("button", { name: HIDE_DETAILS_LABEL });
+    expect(bar.lastElementChild).toBe(hide);
+    expect(hide).toHaveAttribute("aria-pressed", "true");
+    expect(hide).toHaveAttribute("title", HIDE_DETAILS_LABEL);
+    fireEvent.click(hide);
+    expect(screen.queryByRole("complementary", { name: "Details" })).toBeNull();
+    const show = within(bar).getByRole("button", { name: SHOW_DETAILS_LABEL });
+    expect(show).toHaveAttribute("aria-pressed", "false");
+    expect(show).toHaveAttribute("title", SHOW_DETAILS_LABEL);
+    fireEvent.click(show);
+    expect(screen.getByRole("complementary", { name: "Details" })).toBeInTheDocument();
+  });
+
+  it("EDT-FR-MSCV, CAD-FR-RLDM: the Diagram view follows the legend state that the overlays share", async () => {
+    mount();
+    await screen.findByRole("group", { name: "CALM architecture diagram" });
+    act(() => setDiagramLegendHidden(true));
+    expect(screen.queryByRole("complementary", { name: "Details" })).toBeNull();
+    expect(screen.getByRole("button", { name: SHOW_DETAILS_LABEL })).toBeInTheDocument();
+    act(() => setDiagramLegendHidden(false));
+    expect(screen.getByRole("complementary", { name: "Details" })).toBeInTheDocument();
   });
 
   it("CAD-FR-PVCT: a proposed change under review shows on the Source view", () => {

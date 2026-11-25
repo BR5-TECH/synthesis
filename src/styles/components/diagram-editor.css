@@ -225,6 +225,12 @@
   color: var(--fg-3);
 }
 .diagram-viewer__fit { gap: var(--sp-1); }
+/* EDT-FR-JFGN: the legend toggle reads as pressed while the legend shows, as
+   the hide control of a discussion column does (DDS-FR-XQMF). */
+.diagram-legend-toggle[aria-pressed="true"] {
+  color: var(--fg-1);
+  background: var(--bg-active);
+}
 
 /* EDT-FR-VWNJ: the diagram alone, on the ground of the page. The drawing is
    placed by its transform, so nothing in the area scrolls. */

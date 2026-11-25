@@ -219,6 +219,7 @@ beforeEach(async () => {
   ghostty.fakeLoadGate.promise = null;
   ghostty.fakeLoadGate.waiting = 0;
   ghostty.fakeNoRenderer.on = false;
+  ghostty.fakeNoRenderHook.on = false;
   ghostty.fakeInitCalls.count = 0;
   const { resetInvokeOrderForTest, setPayloadProjectIdEnabled, setWindowProjectId } =
     await import("../api/invoke");

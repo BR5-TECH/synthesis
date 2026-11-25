@@ -57,6 +57,8 @@ The Terminals panel and the terminal tab let the author open an interactive term
     - *Why:* the terminal library cannot recolor an open terminal, so a theme change makes it again, and a terminal made out of the page cannot measure its size.
 36. **TRM-FR-DUAC** The terminal's own cursor is the only cursor in the tab. The page shows no text caret in the terminal, also while the terminal has the focus.
 37. **TRM-FR-ILRQ** The terminal fills the tab. When the tab's size changes, the terminal fits its columns and rows to the new size and calls `"resize terminal (id, cols, rows)"` once for each new size.
+37. **TRM-FR-KZPU** The text of a terminal keeps its size when the display's pixel ratio changes, and when the WebView loses the terminal's drawing surface and makes it again, for example while the display sleeps. The next frame draws the terminal at the current pixel ratio, with no change of the window's size.
+    - *Why:* `ghostty-web` reads the pixel ratio once, and keeps its drawing scale only in the canvas state, which the WebView can reset.
 38. **TRM-FR-AULS** When the tab opens, it calls `"attach terminal (id, output)"`, writes the history and then the live output into the terminal, and calls `"acknowledge terminal output (id, bytes)"` for each frame it received. A frame that the terminal fails to write is also acknowledged. The first failed write of each terminal emits one `WARN` record.
 39. **TRM-FR-ITAK** A tab that is not the active tab stays attached and keeps writing output, so the tab shows the current output when it becomes active again.
 40. **TRM-FR-JXLA** Closing a tab calls `"detach terminal (id)"` and ends no session. The row stays, with its pinned state.
@@ -92,7 +94,7 @@ The Terminals panel and the terminal tab let the author open an interactive term
 
 ### Platform and logging
 53. **TRM-FR-DQYZ** On Windows, the Terminals toggle, the panel, the New terminal menu, and the terminal tab are not rendered.
-54. **TRM-FR-LNOZ** The panel and the tab emit a `DEBUG` record for each create, close, attach, detach, rename, theme change, and colour query answered (TRM-FR-XBAP), a `WARN` record for each failed call, and one `WARN` record for each terminal where the terminal library gives no way to apply TRM-FR-DLJP. No record carries input, output, or a path.
+54. **TRM-FR-LNOZ** The panel and the tab emit a `DEBUG` record for each create, close, attach, detach, rename, theme change, and colour query answered (TRM-FR-XBAP), a `WARN` record for each failed call, one `INFO` record with the terminal id and the reason when frames start to need the repair of TRM-FR-KZPU for a new reason, and one `WARN` record for each terminal and each of TRM-FR-DLJP and TRM-FR-KZPU that the terminal library gives no way to apply. No record carries input, output, or a path.
 
 ## Wireframes
 The Terminals panel with three sessions in two groups:

@@ -220,6 +220,8 @@ beforeEach(async () => {
   ghostty.fakeLoadGate.waiting = 0;
   ghostty.fakeNoRenderer.on = false;
   ghostty.fakeNoLinkHook.on = false;
+  ghostty.fakeNoLinkProvider.on = false;
+  for (const tip of document.querySelectorAll(".terminal-link-tooltip")) tip.remove();
   ghostty.fakeNoRenderHook.on = false;
   ghostty.fakeInitCalls.count = 0;
   const { resetInvokeOrderForTest, setPayloadProjectIdEnabled, setWindowProjectId } =

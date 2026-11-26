@@ -210,6 +210,7 @@ describe("Terminal tab", () => {
 });
 
 describe("terminal keys and input", () => {
+  afterEach(() => vi.unstubAllGlobals());
   const term = () => ({
     hasSelection: vi.fn(() => true),
     getSelection: vi.fn(() => "sel"),
@@ -229,13 +230,42 @@ describe("terminal keys and input", () => {
     vi.unstubAllGlobals();
   });
 
-  it("TRM-FR-DHEM: Cmd+V and Ctrl+Shift+V paste the clipboard", async () => {
+  it("TRM-FR-DHEM: Ctrl+Shift+V on Linux pastes the text that it reads from the clipboard", async () => {
     const readText = vi.fn(() => Promise.resolve("pasted"));
     vi.stubGlobal("navigator", { ...navigator, clipboard: { readText, writeText: vi.fn() } });
     const t = term();
-    expect(handleTerminalKey(key({ code: "KeyV", metaKey: true }), t, vi.fn(), true)).toBe(true);
     expect(handleTerminalKey(key({ code: "KeyV", ctrlKey: true, shiftKey: true }), t, vi.fn(), false)).toBe(true);
-    await waitFor(() => expect(t.paste).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(t.paste).toHaveBeenCalledWith("pasted"));
+    expect(readText).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
+  it("TRM-FR-DHEM: a clipboard read that fails on Linux pastes nothing", async () => {
+    const readText = vi.fn(() => Promise.reject(new Error("denied")));
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { readText, writeText: vi.fn() } });
+    const t = term();
+    expect(handleTerminalKey(key({ code: "KeyV", ctrlKey: true, shiftKey: true }), t, vi.fn(), false)).toBe(true);
+    await waitFor(() => expect(readText).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    expect(t.paste).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("TRM-FR-DHEM: Cmd+V on macOS goes on to the native paste and reads no clipboard", async () => {
+    const readText = vi.fn(() => Promise.resolve("pasted"));
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { readText, writeText: vi.fn() } });
+    const t = term();
+    const send = vi.fn();
+    const event = key({ code: "KeyV", metaKey: true, cancelable: true });
+    expect(handleTerminalKey(event, t, send, true)).toBe(false);
+    await act(async () => {});
+    expect(readText).not.toHaveBeenCalled();
+    expect(t.paste).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+    // Cmd+Ctrl+V and Ctrl+Shift+V are not a paste on macOS.
+    expect(handleTerminalKey(key({ code: "KeyV", metaKey: true, ctrlKey: true }), t, send, true)).toBe(false);
+    expect(handleTerminalKey(key({ code: "KeyV", ctrlKey: true, shiftKey: true }), t, send, true)).toBe(false);
+    expect(readText).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 

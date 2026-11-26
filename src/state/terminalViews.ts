@@ -19,6 +19,7 @@ import { errorCode, findTerminal, subscribeTerminals } from "./terminals";
 import { handleTerminalWheel, newWheelTravel } from "./terminalWheel";
 import { enforceMinimumContrast } from "./terminalContrast";
 import { keepCanvasScale } from "./terminalCanvas";
+import { openLinksInBrowser } from "./terminalLinks";
 import { newColorQueryReplier, type ColorQueryReplier } from "./terminalColorQueries";
 import { resolveTerminalTheme, subscribeTerminalThemePreference, type ResolvedTerminalTheme } from "./terminalThemes";
 
@@ -66,6 +67,8 @@ interface ViewEntry {
   contrastWarned: boolean;
   /** TRM-FR-LNOZ: the WARN of a missing canvas scale hook was logged for this terminal. */
   canvasWarned: boolean;
+  /** TRM-FR-LNOZ: the WARN of a missing link hook was logged for this terminal. */
+  linksWarned: boolean;
   /** Counts the terminals made for this tab; output of an older one is dropped. */
   generation: number;
   /** TRM-FR-VBOY: the WebAssembly memory of the terminal's own instance, or null. */
@@ -394,6 +397,8 @@ async function start(
   if (!enforceMinimumContrast(term, id, !entry.contrastWarned)) entry.contrastWarned = true;
   // TRM-FR-KZPU: the text keeps its size after a pixel ratio change or a lost canvas state.
   if (!keepCanvasScale(term, id, !entry.canvasWarned)) entry.canvasWarned = true;
+  // TRM-FR-HWKO: a web link opens in the system browser, not in a window of the app.
+  if (!openLinksInBrowser(term, id, !entry.linksWarned)) entry.linksWarned = true;
   // TRM-FR-XBAP: a program that asks for the colours gets the ones of this theme.
   const colorQueries = colorQueriesFor(id, theme.theme.foreground, theme.theme.background);
   term.attachCustomKeyEventHandler((event) => handleTerminalKey(event, term, send));
@@ -566,6 +571,7 @@ export function showTerminalView(id: string, container: HTMLElement): void {
       themeKey: null,
       contrastWarned: false,
       canvasWarned: false,
+      linksWarned: false,
       generation: 0,
       memory: null,
       received: 0,

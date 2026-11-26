@@ -52,6 +52,8 @@ pub fn server_options() -> Vec<Vec<String>> {
         strings(&["set-option", "-s", "escape-time", "0"]),
         strings(&["set-option", "-s", "terminal-overrides[90]", "*:smcup@:rmcup@"]),
         strings(&["set-option", "-s", "terminal-features[90]", "xterm-256color:RGB"]),
+        // TRS-FR-ZEQC: tmux sends OSC 8 hyperlinks to its client only with this feature.
+        strings(&["set-option", "-s", "terminal-features[91]", "xterm-256color:hyperlinks"]),
         strings(&["set-option", "-g", "status", "off"]),
         strings(&["set-option", "-g", "prefix", "None"]),
         strings(&["set-option", "-g", "prefix2", "None"]),
@@ -224,6 +226,15 @@ mod tests {
         for table in ["prefix", "root", "copy-mode", "copy-mode-vi"] {
             assert!(unbinds.contains(&strings(&["unbind-key", "-a", "-T", table])), "{table}");
         }
+    }
+
+    // TRS-FR-ZEQC: the client terminal has the hyperlinks feature, beside RGB.
+    #[test]
+    fn the_client_terminal_has_hyperlinks() {
+        let options = server_options();
+        let has = |words: &[&str]| options.iter().any(|c| c == &strings(words));
+        assert!(has(&["set-option", "-s", "terminal-features[90]", "xterm-256color:RGB"]));
+        assert!(has(&["set-option", "-s", "terminal-features[91]", "xterm-256color:hyperlinks"]));
     }
 
     // TRS-FR-BHCB, TRS-FR-KMWO, TRS-FR-QMZM: one command list sets the options

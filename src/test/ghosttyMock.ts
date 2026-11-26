@@ -32,11 +32,15 @@ export const fakeNoRenderer = { on: false };
 /** Test hook: while true, `open()` makes no link detector, as a library without the link hook. */
 export const fakeNoLinkHook = { on: false };
 
+/** Test hook: while true, `registerLinkProvider` throws, as a library without the provider hook. */
+export const fakeNoLinkProvider = { on: false };
+
 /** A link as the library's link detector gives it (TRM-FR-HWKO). */
 export interface FakeLink {
   text: string;
   range: { start: { x: number; y: number }; end: { x: number; y: number } };
   activate(event: MouseEvent): void;
+  hover?(isHovered: boolean): void;
 }
 
 /**
@@ -46,8 +50,68 @@ export interface FakeLink {
  */
 export class FakeLinkDetector {
   links = new Map<string, FakeLink>();
+  /** The providers that the app registered on the terminal; the detector asks them, as the library does. */
+  constructor(private readonly providers: () => FakeLinkProvider[] = () => []) {}
   async getLinkAt(col: number, row: number): Promise<FakeLink | undefined> {
-    return this.links.get(`${col},${row}`);
+    const known = this.links.get(`${col},${row}`);
+    if (known) return known;
+    for (const provider of this.providers()) {
+      const links = await new Promise<FakeLink[] | undefined>((resolve) => provider.provideLinks(row, resolve));
+      const found = links?.find(({ range: r }) => {
+        if (row < r.start.y || row > r.end.y) return false;
+        if (row === r.start.y && col < r.start.x) return false;
+        return !(row === r.end.y && col > r.end.x);
+      });
+      if (found) {
+        // The library caches a link, so the same object comes back each time.
+        this.links.set(`${col},${row}`, found);
+        return found;
+      }
+    }
+    return undefined;
+  }
+}
+
+/** A link provider as the app registers it (the shape of the library's `ILinkProvider`). */
+export interface FakeLinkProvider {
+  provideLinks(y: number, callback: (links: FakeLink[] | undefined) => void): void;
+}
+
+/** A cell of `FakeCellBuffer`: its code point and its hyperlink id (TRM-FR-QMVZ). */
+export interface FakeCell {
+  code: number;
+  link: number;
+}
+
+/**
+ * A stand-in for `term.buffer.active`. `rows` holds the cells of each row; a
+ * test writes them with `setRow`.
+ */
+export class FakeCellBuffer {
+  rows: FakeCell[][] = [];
+  get length() {
+    return this.rows.length;
+  }
+  /** Test hook: row `y` shows `text`, and its columns `from` to `to` have hyperlink `link`. */
+  setRow(y: number, text: string, cols: number, linked: { from: number; to: number; link: number }[] = []) {
+    const cells: FakeCell[] = [];
+    const chars = [...text];
+    for (let x = 0; x < cols; x++) cells.push({ code: chars[x]?.codePointAt(0) ?? 0, link: 0 });
+    for (const { from, to, link } of linked) for (let x = from; x <= to; x++) cells[x].link = link;
+    while (this.rows.length <= y) this.rows.push([]);
+    this.rows[y] = cells;
+  }
+  getLine(y: number) {
+    const cells = this.rows[y];
+    if (!cells) return undefined;
+    return {
+      length: cells.length,
+      isWrapped: false,
+      getCell: (x: number) => {
+        const cell = cells[x];
+        return cell ? { getHyperlinkId: () => cell.link, getCodepoint: () => cell.code } : undefined;
+      },
+    };
   }
 }
 
@@ -110,6 +174,10 @@ export class FakeTerminal {
   renderer: FakeRenderer | undefined = undefined;
   /** The link detector that `open()` makes (TRM-FR-HWKO). */
   linkDetector: FakeLinkDetector | undefined = undefined;
+  /** The link providers that the app registered (TRM-FR-QMVZ). */
+  linkProviders: FakeLinkProvider[] = [];
+  /** The cells that a link provider reads (TRM-FR-QMVZ). */
+  readonly buffer = { active: new FakeCellBuffer() };
   private data = emitter<string>();
   private resizes = emitter<{ cols: number; rows: number }>();
   readonly onData = this.data.event;
@@ -123,7 +191,7 @@ export class FakeTerminal {
   }
   open(parent: HTMLElement) {
     if (!fakeNoRenderer.on) this.renderer = new FakeRenderer(String((this.options.theme as ITheme | undefined)?.background ?? "#1e1e1e"));
-    if (!fakeNoLinkHook.on) this.linkDetector = new FakeLinkDetector();
+    if (!fakeNoLinkHook.on) this.linkDetector = new FakeLinkDetector(() => this.linkProviders);
     this.opened = parent;
     this.openedConnected = parent.isConnected;
     const canvas = document.createElement("canvas");
@@ -175,6 +243,19 @@ export class FakeTerminal {
   }
   scrollPages(amount: number) {
     this.scrolled.push(amount);
+  }
+  registerLinkProvider(provider: FakeLinkProvider) {
+    if (fakeNoLinkProvider.on || !this.opened) throw new Error("Terminal must be opened before registering link providers");
+    this.linkProviders.push(provider);
+  }
+  /** Test hook: the links that the registered providers give for row `y`, as the library asks. */
+  async providedLinks(y: number): Promise<FakeLink[]> {
+    const out: FakeLink[] = [];
+    for (const provider of this.linkProviders) {
+      const links = await new Promise<FakeLink[] | undefined>((resolve) => provider.provideLinks(y, resolve));
+      if (links) out.push(...links);
+    }
+    return out;
   }
   focus() {}
   dispose() {

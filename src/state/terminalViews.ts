@@ -19,7 +19,9 @@ import { errorCode, findTerminal, subscribeTerminals } from "./terminals";
 import { handleTerminalWheel, newWheelTravel } from "./terminalWheel";
 import { enforceMinimumContrast } from "./terminalContrast";
 import { keepCanvasScale } from "./terminalCanvas";
-import { openLinksInBrowser } from "./terminalLinks";
+import { activateTerminalLink, openLinksInBrowser } from "./terminalLinks";
+import { newHyperlinkTracker, registerOsc8Links, type HyperlinkTracker } from "./terminalHyperlinks";
+import { newLinkTooltip, type LinkTooltip } from "./terminalLinkTooltip";
 import { newColorQueryReplier, type ColorQueryReplier } from "./terminalColorQueries";
 import { resolveTerminalTheme, subscribeTerminalThemePreference, type ResolvedTerminalTheme } from "./terminalThemes";
 
@@ -69,6 +71,8 @@ interface ViewEntry {
   canvasWarned: boolean;
   /** TRM-FR-LNOZ: the WARN of a missing link hook was logged for this terminal. */
   linksWarned: boolean;
+  /** TRM-FR-KIRO: the link tooltip of the current terminal, or null. */
+  tooltip: LinkTooltip | null;
   /** Counts the terminals made for this tab; output of an older one is dropped. */
   generation: number;
   /** TRM-FR-VBOY: the WebAssembly memory of the terminal's own instance, or null. */
@@ -161,9 +165,11 @@ export function handleTerminalKey(
     if (term.hasSelection()) void navigator.clipboard?.writeText(term.getSelection()).catch(() => {});
     return true;
   }
-  const paste = mac
-    ? event.metaKey && !event.ctrlKey && event.code === "KeyV"
-    : event.ctrlKey && event.shiftKey && !event.metaKey && event.code === "KeyV";
+  // TRM-FR-DHEM: on macOS, Cmd+V is not handled here. The key goes on to the
+  // Paste item of the Edit menu, and its paste event (`pasteIntoTerminal`)
+  // gives the text with no prompt. A script read of the clipboard shows one.
+  if (mac && event.metaKey && !event.ctrlKey && event.code === "KeyV") return false;
+  const paste = !mac && event.ctrlKey && event.shiftKey && !event.metaKey && event.code === "KeyV";
   if (paste) {
     void navigator.clipboard
       ?.readText()
@@ -336,6 +342,22 @@ function focusOutside(entry: ViewEntry): HTMLElement | null {
   return entry.host.contains(active) ? null : active;
 }
 
+/**
+ * TRM-FR-DHEM: a native paste into the terminal goes to `term.paste`, which
+ * uses bracketed paste where the session turned it on. It stops the event, so
+ * the library's own paste handlers, one of which sends the text raw, do not
+ * run. Returns whether it pasted.
+ */
+export function pasteIntoTerminal(event: ClipboardEvent, term: Pick<Terminal, "paste"> | null): boolean {
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (!term) return false;
+  const text = event.clipboardData?.getData("text/plain");
+  if (!text) return false;
+  term.paste(text);
+  return true;
+}
+
 async function start(
   entry: ViewEntry,
   size: { cols: number; rows: number } | null = null,
@@ -397,8 +419,17 @@ async function start(
   if (!enforceMinimumContrast(term, id, !entry.contrastWarned)) entry.contrastWarned = true;
   // TRM-FR-KZPU: the text keeps its size after a pixel ratio change or a lost canvas state.
   if (!keepCanvasScale(term, id, !entry.canvasWarned)) entry.canvasWarned = true;
+  // TRM-FR-QMVZ: the OSC 8 hyperlinks of the output get their addresses.
+  // TRM-FR-LNOZ: one WARN for each terminal where a link hook is missing.
+  const warnLinks = !entry.linksWarned;
+  const hyperlinks = newHyperlinkTracker();
+  const osc8 = registerOsc8Links(term, hyperlinks, (url, event) => activateTerminalLink(url, event, id), id, warnLinks);
+  // TRM-FR-KIRO: a link that opens shows a tooltip on hover.
+  const tooltip = newLinkTooltip(entry.host);
+  entry.tooltip = tooltip;
   // TRM-FR-HWKO: a web link opens in the system browser, not in a window of the app.
-  if (!openLinksInBrowser(term, id, !entry.linksWarned)) entry.linksWarned = true;
+  const opened = openLinksInBrowser(term, id, warnLinks && osc8, tooltip);
+  if (!osc8 || !opened) entry.linksWarned = true;
   // TRM-FR-XBAP: a program that asks for the colours gets the ones of this theme.
   const colorQueries = colorQueriesFor(id, theme.theme.foreground, theme.theme.background);
   term.attachCustomKeyEventHandler((event) => handleTerminalKey(event, term, send));
@@ -419,6 +450,10 @@ async function start(
     () => data.dispose(),
     () => resized.dispose(),
     () => entry.host.removeEventListener("keydown", stopKeys),
+    () => {
+      tooltip.dispose();
+      if (entry.tooltip === tooltip) entry.tooltip = null;
+    },
   );
   fit.fit();
   fit.observeResize();
@@ -427,7 +462,7 @@ async function start(
     // The frame handler is made outside this scope, so it holds no reference
     // to the terminal: Tauri keeps the callback of a channel for the life of
     // the page (TRM-FR-HQZN).
-    const attachment = await api.attachTerminal(id, frameHandler(entry, generation, colorQueries));
+    const attachment = await api.attachTerminal(id, frameHandler(entry, generation, colorQueries, hyperlinks));
     logDebug(["frontend"], "terminal attached", { terminalId: id });
     if (generation === entry.generation && !entry.released) colorQueries.historyKnown(attachment?.historyBytes);
   } catch (err) {
@@ -466,11 +501,13 @@ function wasmMemory(instance: GhosttyInstance): WasmMemory | null {
  * whose terminal is gone for its memory (TRM-FR-PLUX) acknowledges the frame
  * and writes nothing. Each frame goes to the colour queries of the attach
  * (TRM-FR-XBAP), also where the terminal is gone, because the program waits.
+ * Each frame that the terminal writes goes to its hyperlinks (TRM-FR-QMVZ).
  */
 function frameHandler(
   entry: ViewEntry,
   generation: number,
   colorQueries: ColorQueryReplier,
+  hyperlinks: HyperlinkTracker,
 ): (frame: Uint8Array) => void {
   const id = entry.id;
   let writeFailed = false;
@@ -482,6 +519,7 @@ function frameHandler(
     // on a later frame. The acknowledgement follows the parse, so a window
     // that paints no frames (hidden or minimized) holds no process back.
     if (term) {
+      hyperlinks.scan(frame);
       try {
         term.write(frame);
       } catch (err) {
@@ -572,11 +610,16 @@ export function showTerminalView(id: string, container: HTMLElement): void {
       contrastWarned: false,
       canvasWarned: false,
       linksWarned: false,
+      tooltip: null,
       generation: 0,
       memory: null,
       received: 0,
       dispose: [],
     };
+    // TRM-FR-DHEM: one paste listener for the life of the host, in the capture
+    // phase and before the library's own: it reads the terminal at the event.
+    const made = entry;
+    host.addEventListener("paste", (event) => pasteIntoTerminal(event, made.term), { capture: true });
     views.set(id, entry);
     followAppearance();
   }
@@ -589,7 +632,11 @@ export function showTerminalView(id: string, container: HTMLElement): void {
 
 /** TRM-FR-ITAK: the tab is hidden. The terminal stays attached. */
 export function hideTerminalView(id: string): void {
-  views.get(id)?.host.remove();
+  const entry = views.get(id);
+  if (!entry) return;
+  // TRM-FR-DCBR: the link tooltip closes with the tab.
+  entry.tooltip?.hide();
+  entry.host.remove();
 }
 
 /**

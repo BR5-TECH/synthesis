@@ -223,3 +223,60 @@ describe("terminal links", () => {
     ]);
   });
 });
+
+describe("the hover of terminal links", () => {
+  const tooltipSpy = () => ({ show: vi.fn(), hide: vi.fn() });
+
+  function hovered(link: FakeLink, tooltip?: ReturnType<typeof tooltipSpy>) {
+    const linkDetector = new FakeLinkDetector();
+    linkDetector.links.set("0,0", link);
+    expect(openLinksInBrowser({ linkDetector }, "t1", true, tooltip)).toBe(true);
+    return linkDetector.getLinkAt(0, 0);
+  }
+
+  it("TRM-FR-KIRO: a web link calls its own hover, then shows the tooltip of its address; leave hides it", async () => {
+    const order: string[] = [];
+    const tooltip = { show: vi.fn(() => order.push("show")), hide: vi.fn(() => order.push("hide")) };
+    const own = vi.fn((on: boolean) => order.push(`own ${on}`));
+    const link = (await hovered({ ...libraryLink(URL_TEXT), hover: own }, tooltip))!;
+    link.hover!(true);
+    expect(tooltip.show).toHaveBeenCalledWith(URL_TEXT);
+    link.hover!(false);
+    expect(tooltip.hide).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(["own true", "show", "own false", "hide"]);
+  });
+
+  it("TRM-FR-KIRO: an http link shows the tooltip too", async () => {
+    const tooltip = tooltipSpy();
+    const link = (await hovered(libraryLink("http://localhost:1420/x"), tooltip))!;
+    link.hover!(true);
+    expect(tooltip.show).toHaveBeenCalledWith("http://localhost:1420/x");
+  });
+
+  it("TRM-FR-KIRO: a link with another scheme keeps its hover and shows no tooltip", async () => {
+    for (const url of ["file:///etc/hosts", "mailto:a@b.test", "ssh://host"]) {
+      const tooltip = tooltipSpy();
+      const own = vi.fn();
+      const link = (await hovered({ ...libraryLink(url), hover: own }, tooltip))!;
+      expect(link.hover).toBe(own);
+      link.hover!(true);
+      expect(tooltip.show).not.toHaveBeenCalled();
+    }
+  });
+
+  it("TRM-FR-KIRO: with no tooltip the hover of a link does not change, and a link changes only once", async () => {
+    const link = (await hovered(libraryLink(URL_TEXT)))!;
+    expect(link.hover).toBeUndefined();
+    const tooltip = tooltipSpy();
+    const linkDetector = new FakeLinkDetector();
+    linkDetector.links.set("0,0", libraryLink(URL_TEXT));
+    openLinksInBrowser({ linkDetector }, "t1", true, tooltip);
+    const first = (await linkDetector.getLinkAt(0, 0))!;
+    const hover = first.hover;
+    const again = (await linkDetector.getLinkAt(0, 0))!;
+    expect(again).toBe(first);
+    expect(again.hover).toBe(hover);
+    again.hover!(true);
+    expect(tooltip.show).toHaveBeenCalledTimes(1);
+  });
+});

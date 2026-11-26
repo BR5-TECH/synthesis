@@ -64,13 +64,20 @@ export function activateTerminalLink(url: string, event: MouseEvent, terminalId:
     });
 }
 
+/** TRM-FR-KIRO: the part of the link tooltip that a link calls on hover. */
+export interface LinkHoverTarget {
+  show(url: string): void;
+  hide(): void;
+}
+
 /**
  * TRM-FR-HWKO: makes each link of `term` open through the application's
  * opener. Call it after `open()`, which makes the link detector. Where the
  * library has no such detector, it changes nothing and, where `warn` is true,
- * logs a `WARN` record (TRM-FR-LNOZ). Returns whether it applied.
+ * logs a `WARN` record (TRM-FR-LNOZ). Returns whether it applied. Where
+ * `tooltip` is given, a link that opens shows it on hover (TRM-FR-KIRO).
  */
-export function openLinksInBrowser(term: object, terminalId: string, warn = true): boolean {
+export function openLinksInBrowser(term: object, terminalId: string, warn = true, tooltip?: LinkHoverTarget): boolean {
   const detector = (term as unknown as TerminalInternals).linkDetector;
   const original = detector?.getLinkAt;
   if (!detector || typeof original !== "function") {
@@ -86,6 +93,15 @@ export function openLinksInBrowser(term: object, terminalId: string, warn = true
       changed.add(link);
       const url = link.text;
       link.activate = (event: MouseEvent) => activateTerminalLink(url, event, terminalId);
+      // TRM-FR-KIRO: a link that opens shows its address and the click that opens it.
+      if (tooltip && isBrowserLink(url)) {
+        const own = link.hover;
+        link.hover = (hovered: boolean) => {
+          own?.call(link, hovered);
+          if (hovered) tooltip.show(url);
+          else tooltip.hide();
+        };
+      }
     }
     return link;
   };

@@ -471,3 +471,28 @@
 .terminal-theme-tile__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .terminal-theme-tile__ansi { display: flex; gap: 3px; }
 .terminal-theme-tile__ansi > span { width: 12px; height: 4px; border-radius: 1px; }
+
+/* TRM-FR-KIRO, TRM-FR-DCBR: the tooltip of a terminal link. It is a child of
+   the body with a fixed position, and it takes no pointer events. */
+.terminal-link-tooltip {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  max-width: min(480px, calc(100vw - 8px));
+  padding: var(--sp-1-5, 6px) var(--sp-2, 8px);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated, var(--bg-chrome));
+  color: var(--fg-1);
+  border: 1px solid var(--border-2);
+  box-shadow: var(--shadow-1, 0 2px 8px rgb(0 0 0 / 0.25));
+  font-family: var(--font-sans);
+  font-size: var(--fs-ui-xs);
+  line-height: 1.4;
+}
+.terminal-link-tooltip__address {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-source-family, var(--font-mono));
+}
+.terminal-link-tooltip__hint { color: var(--fg-2); }

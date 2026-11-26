@@ -337,8 +337,8 @@ fn a_dead_pane_stays_for_the_next_restore() {
     assert!(persistence.capture(false).unwrap().contains("gone"));
 }
 
-// TRS-FR-ANJK, TRS-FR-ZOZO: the server of the socket has no status bar, no
-// prefix key, mouse off, and a history of 10,000 lines.
+// TRS-FR-ANJK, TRS-FR-ZOZO, TRS-FR-ZEQC: the server of the socket has no status
+// bar, no prefix key, mouse off, a history of 10,000 lines, and hyperlinks.
 #[test]
 fn the_server_options() {
     let server = server();
@@ -353,6 +353,10 @@ fn the_server_options() {
     assert_eq!(show(&["show-options", "-sv", "exit-empty"]).trim(), "off");
     assert_eq!(show(&["show-options", "-gv", "mouse"]).trim(), "off");
     assert_eq!(show(&["show-options", "-gv", "history-limit"]).trim(), "10000");
+    // TRS-FR-ZEQC: the server accepts the hyperlinks feature for the client terminal.
+    assert!(
+        show(&["show-options", "-s", "terminal-features"]).contains("xterm-256color:hyperlinks")
+    );
     // The tables that a key reaches with no prefix, and the prefix tables, are
     // empty; another table is reachable only through them.
     for table in ["prefix", "root", "copy-mode", "copy-mode-vi"] {

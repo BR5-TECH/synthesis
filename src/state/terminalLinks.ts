@@ -26,9 +26,18 @@ export function isBrowserLink(url: string): boolean {
   return /^https?:\/\/./i.test(url);
 }
 
-/** TRM-FR-LNOZ: the scheme of `url` for a record, never the address. */
+/** The schemes that a record names. A record names another scheme "other". */
+const KNOWN_SCHEMES = new Set(["http", "https", "mailto", "ftp", "ssh", "git", "tel", "magnet", "gemini", "gopher", "news", "file", "javascript", "data"]);
+
+/**
+ * TRM-FR-LNOZ: the scheme of `url` for a record, never the address. An OSC 8
+ * link can have any text before its colon, so only a known scheme name goes
+ * into the record.
+ */
 function schemeOf(url: string): string {
-  return /^([a-z][a-z0-9+.-]{0,15}):/i.exec(url)?.[1]?.toLowerCase() ?? "none";
+  const scheme = /^([a-z][a-z0-9+.-]{0,15}):/i.exec(url)?.[1]?.toLowerCase();
+  if (!scheme) return "none";
+  return KNOWN_SCHEMES.has(scheme) ? scheme : "other";
 }
 
 /** TRM-FR-HWKO: whether `event` carries the platform's command modifier. */

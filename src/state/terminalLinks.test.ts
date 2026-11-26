@@ -81,9 +81,11 @@ describe("terminal links", () => {
     const detector = terminalWith(libraryLink(URL_TEXT));
     const link = await detector.getLinkAt(0, 0);
     link!.activate(click({ metaKey: true }));
+    await flush();
+    expect(openUrl).not.toHaveBeenCalled();
     link!.activate(click({ ctrlKey: true }));
-    await vi.waitFor(() => expect(openUrl).toHaveBeenCalledTimes(1));
-    expect(openUrl).toHaveBeenCalledWith(URL_TEXT);
+    await vi.waitFor(() => expect(openUrl).toHaveBeenCalledWith(URL_TEXT));
+    expect(openUrl).toHaveBeenCalledTimes(1);
   });
 
   it("TRM-FR-HWKO: a plain click and Ctrl+click on macOS open nothing and log nothing", async () => {
@@ -153,7 +155,7 @@ describe("terminal links", () => {
   });
 
   it("TRM-FR-HWKO, TRM-FR-LNOZ: an address with no host, a leading space, or no scheme is refused", async () => {
-    const urls = ["http://", " https://example.com", "www.example.com", "averyveryverylongscheme://x", "javascript:alert(1)"];
+    const urls = ["http://", " https://example.com", "www.example.com", "averyveryverylongscheme://x", "javascript:alert(1)", "secret123:x"];
     for (const url of urls) activateTerminalLink(url, click({ ctrlKey: true }), "t1", false);
     await flush();
     expect(openUrl).not.toHaveBeenCalled();
@@ -163,7 +165,18 @@ describe("terminal links", () => {
       "none",
       "none",
       "javascript",
+      "other",
     ]);
+  });
+
+  it("TRM-FR-HWKO: Cmd+click on a link of another scheme from the detector opens nothing, also no window", async () => {
+    for (const url of ["mailto:dev@example.com", "file:///etc/hosts"]) {
+      const detector = terminalWith(libraryLink(url));
+      (await detector.getLinkAt(0, 0))!.activate(click({ metaKey: true }));
+    }
+    await flush();
+    expect(openUrl).not.toHaveBeenCalled();
+    expect(windowOpen).not.toHaveBeenCalled();
   });
 
   it("TRM-FR-HWKO: a click without the modifier on a refused link gives no record", async () => {

@@ -31,7 +31,13 @@ async function seed(list: TerminalSummary[]) {
   await act(() => refreshTerminals());
 }
 
-function Strip({ onActivate }: { onActivate: (id: string) => void }) {
+function Strip({
+  onActivate,
+  onMoveTab,
+}: {
+  onActivate: (id: string) => void;
+  onMoveTab?: (id: string, toIndex: number) => void;
+}) {
   const [menu, setMenu] = useState<TabMenuState | null>(null);
   return (
     <TabStrip
@@ -43,6 +49,7 @@ function Strip({ onActivate }: { onActivate: (id: string) => void }) {
       menu={menu}
       onMenuChange={setMenu}
       massCloseTargets={() => []}
+      onMoveTab={onMoveTab}
     />
   );
 }
@@ -161,5 +168,31 @@ describe("the menu of a Terminal tab", () => {
     expect(theme).toHaveFocus();
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByTestId("tab-context-menu")).toBeNull();
+  });
+});
+
+describe("a Terminal tab in a rename (TAB-FR-ZMZS, TAB-FR-SFGR)", () => {
+  it("TAB-FR-ZMZS: is not draggable while its label is the field, and is again after", async () => {
+    await seed([session({ id: "a" })]);
+    render(<Strip onActivate={() => {}} onMoveTab={() => {}} />);
+    expect(tab("terminal:a")).toHaveAttribute("draggable", "true");
+    fireEvent.contextMenu(tab("terminal:a"));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Rename terminal" }));
+    const field = screen.getByRole("textbox", { name: "Terminal name" });
+    expect(tab("terminal:a")).toHaveAttribute("draggable", "false");
+    fireEvent.keyDown(field, { key: "Escape" });
+    await waitFor(() => expect(tab("terminal:a")).toHaveAttribute("draggable", "true"));
+  });
+
+  it("TAB-FR-SFGR: Alt+Shift+Arrow in the field moves no tab", async () => {
+    await seed([session({ id: "a" })]);
+    const onMoveTab = vi.fn();
+    render(<Strip onActivate={() => {}} onMoveTab={onMoveTab} />);
+    fireEvent.contextMenu(tab("terminal:a"));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Rename terminal" }));
+    const field = screen.getByRole("textbox", { name: "Terminal name" });
+    fireEvent.keyDown(field, { key: "ArrowLeft", altKey: true, shiftKey: true });
+    fireEvent.keyDown(field, { key: "ArrowRight", altKey: true, shiftKey: true });
+    expect(onMoveTab).not.toHaveBeenCalled();
   });
 });

@@ -63,7 +63,20 @@ interface TabStripProps {
   onMenuChange?: (menu: TabMenuState | null) => void;
   /** SNV-FR-56: opening the menu closes every other floating overlay. */
   onOverlayOpening?: () => void;
+  /**
+   * TAB-FR-ERUM / TAB-FR-SFGR: move a tab to `toIndex`, the index it has in the
+   * strip after the move. The shell applies the Dashboard rule of TAB-FR-XNID.
+   */
+  onMoveTab?: (id: string, toIndex: number) => void;
 }
+
+/** The strip's own drag type, so no text field takes a tab drop as text. */
+const TAB_DRAG_TYPE = "application/x-synthesis-tab";
+/** TAB-FR-ILJY: the width of each edge zone, and the scroll of one dragover. */
+const EDGE_ZONE_PX = 32;
+const EDGE_STEP_PX = 16;
+
+type DropSide = "before" | "after";
 
 export function TabStrip({
   tabs,
@@ -79,6 +92,7 @@ export function TabStrip({
   menu,
   onMenuChange,
   onOverlayOpening,
+  onMoveTab,
 }: TabStripProps) {
   // SNV-FR-09: the Home affordance stands in the Dashboard tab's own place at
   // the head of the strip, and only while that tab is closed — so the Dashboard
@@ -201,6 +215,115 @@ export function TabStrip({
     });
   };
 
+  /**
+   * TAB-FR-SFGR: the tab to focus again after a keyboard move. Moving a DOM node
+   * can drop its focus, so the focus is set again once the strip re-renders.
+   */
+  const [refocus, setRefocus] = useState<string | null>(null);
+  useEffect(() => {
+    if (refocus === null) return;
+    setRefocus(null);
+    focusTab(refocus);
+    // focusTab is recreated each render; the move is what triggers this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabs, refocus]);
+
+  /**
+   * TAB-FR-ERUM / TAB-FR-PHHH: the tab being dragged, and the tab edge where it
+   * goes. Only a drag that started on a tab of this strip is answered, so a
+   * file dragged in from elsewhere does nothing here. A dragged tab that left
+   * the strip during the drag (TAB-FR-19) ends the drag, as it may send no
+   * `dragend`.
+   */
+  const [dragState, setDragId] = useState<string | null>(null);
+  const dragId = dragState && tabs.some((t) => t.id === dragState) ? dragState : null;
+  const [drop, setDrop] = useState<{ id: string; side: DropSide } | null>(null);
+  /**
+   * TAB-FR-PHHH: the receding treatment starts on the first `drag` event, not
+   * on `dragstart`. The engine takes the drag image after `dragstart`, so a
+   * treatment set there would dim the drag image too.
+   */
+  const [receding, setReceding] = useState(false);
+  const endDrag = () => {
+    setDragId(null);
+    setDrop(null);
+    setReceding(false);
+  };
+  // A tab that comes back under the same id must not revive an old drag.
+  useEffect(() => {
+    if (dragState === null || dragId !== null) return;
+    setDragId(null);
+    setDrop(null);
+    setReceding(false);
+  }, [dragState, dragId]);
+
+  /**
+   * Where a drag event over the region puts the dragged tab. Read from the
+   * event itself rather than from the indicator state, so a drop is placed
+   * correctly also after a `dragleave` cleared the indicator. Space in the
+   * region but outside every tab counts as the nearest end of the strip.
+   */
+  const dropAt = (e: React.DragEvent<HTMLDivElement>) => {
+    const el = (e.target as Element).closest?.<HTMLElement>("[data-tab-id]");
+    let id: string | undefined;
+    let side: DropSide;
+    if (el && e.currentTarget.contains(el)) {
+      id = el.dataset.tabId;
+      const box = el.getBoundingClientRect();
+      side = e.clientX < box.left + box.width / 2 ? "before" : "after";
+    } else {
+      const first = scrollRef.current?.querySelector<HTMLElement>("[data-tab-id]");
+      const leading = !!first && e.clientX < first.getBoundingClientRect().left;
+      id = (leading ? tabs[0] : tabs[tabs.length - 1])?.id;
+      side = leading ? "before" : "after";
+    }
+    if (id === undefined) return null;
+    // TAB-FR-XNID: no tab goes before the Dashboard.
+    if (id === "dashboard") side = "after";
+    return { id, side };
+  };
+
+  const onRegionDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (dragId === null) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    const region = e.currentTarget;
+    // TAB-FR-ILJY: dragover repeats while the pointer is still, so one step
+    // per event scrolls the region with no timer.
+    const box = region.getBoundingClientRect();
+    if (e.clientX < box.left + EDGE_ZONE_PX) region.scrollLeft -= EDGE_STEP_PX;
+    else if (e.clientX > box.right - EDGE_ZONE_PX) region.scrollLeft += EDGE_STEP_PX;
+    const next = dropAt(e);
+    if (next?.id !== drop?.id || next?.side !== drop?.side) setDrop(next);
+  };
+
+  /**
+   * The indicator goes when the pointer leaves the region. Read from the
+   * pointer position: WebKit sends `dragleave` with no related target also
+   * between the children of one tab, and the indicator must not blink there.
+   */
+  const onRegionDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    const inside =
+      e.clientX > box.left && e.clientX < box.right && e.clientY > box.top && e.clientY < box.bottom;
+    if (!inside) setDrop(null);
+  };
+
+  const onRegionDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    if (dragId === null) return;
+    e.preventDefault();
+    const at = dropAt(e);
+    endDrag();
+    const from = tabs.findIndex((t) => t.id === dragId);
+    const target = at ? tabs.findIndex((t) => t.id === at.id) : -1;
+    if (!at || from < 0 || target < 0 || !onMoveTab) return;
+    // The insertion point among the tabs as they stand, then the index the
+    // dragged tab has once it is out of the list.
+    const point = at.side === "after" ? target + 1 : target;
+    const to = point > from ? point - 1 : point;
+    if (to !== from) onMoveTab(dragId, to);
+  };
+
   const onTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, id: string) => {
     const index = tabs.findIndex((t) => t.id === id);
     if (index < 0) return;
@@ -210,6 +333,16 @@ export function TabStrip({
     if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
       e.preventDefault();
       openMenuFor(id, e.currentTarget);
+      return;
+    }
+    // TAB-FR-SFGR: Alt+Shift+Arrow moves the tab one place. Focus stays on it.
+    if (e.altKey && e.shiftKey && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
+      e.preventDefault();
+      if (!onMoveTab || id === "dashboard") return;
+      const to = index + (e.key === "ArrowRight" ? 1 : -1);
+      if (to < 0 || to >= tabs.length || tabs[to].id === "dashboard") return;
+      setRefocus(id);
+      onMoveTab(id, to);
       return;
     }
     // Moving focus does NOT activate (TAB-FR-30): a tab is reached and then
@@ -361,6 +494,9 @@ export function TabStrip({
           role="tablist"
           aria-label="Open tabs"
           ref={scrollRef}
+          onDragOver={onRegionDragOver}
+          onDragLeave={onRegionDragLeave}
+          onDrop={onRegionDrop}
         >
           {tabs.map((t) => {
             // TAB-FR-16 / DSH-FR-02: the Dashboard's close control is active
@@ -377,6 +513,9 @@ export function TabStrip({
             // becoming active and its indication clearing are one frame apart.
             const mark = t.id === activeId ? undefined : attention?.get(t.id);
             const isPinned = !!pinned?.has(t.id);
+            // TAB-FR-XNID / TAB-FR-ZMZS: the Dashboard does not move, and a tab
+            // in a rename does not start a drag.
+            const movable = !!onMoveTab && t.id !== "dashboard" && renamingTabId !== t.id;
             return (
               <div
                 key={t.id}
@@ -385,6 +524,29 @@ export function TabStrip({
                 data-active={t.id === activeId}
                 data-attention={mark}
                 data-pinned={isPinned || undefined}
+                data-dragging={(receding && dragId === t.id) || undefined}
+                data-drop={drop?.id === t.id && dragId !== t.id ? drop.side : undefined}
+                draggable={movable}
+                onDragStart={(e) => {
+                  if (!movable) {
+                    e.preventDefault();
+                    return;
+                  }
+                  // Guarded: a host that hands the handler no `dataTransfer`
+                  // must not break the gesture. The strip reads its own state,
+                  // not this payload; Firefox starts no drag without one.
+                  if (e.dataTransfer) {
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData(TAB_DRAG_TYPE, t.id);
+                  }
+                  setDragId(t.id);
+                }}
+                // TAB-FR-ZMZS: a drag that ends with no drop, or with Escape,
+                // moves nothing.
+                onDragEnd={endDrag}
+                onDrag={() => {
+                  if (!receding && dragId === t.id) setReceding(true);
+                }}
                 role="tab"
                 aria-selected={t.id === activeId}
                 // TAB-FR-30: one tab stop for the whole strip, on the tab the

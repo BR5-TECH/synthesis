@@ -451,7 +451,7 @@ export function useShellSession(stores: ShellSessionStores = {}) {
   );
 
   // TAB-FR-10 / TAB-FR-34 / TAB-FR-38: the closes and pins the author performs.
-  const { closeTab, setTabPinned: setStripTabPinned, closeTabGroup } = createTabStripActions({
+  const { closeTab, setTabPinned: setStripTabPinned, closeTabGroup, moveTab } = createTabStripActions({
     tabsRef,
     activeTab,
     pinnedTabs: shownPinnedTabs,
@@ -888,6 +888,8 @@ export function useShellSession(stores: ShellSessionStores = {}) {
     // the menu reads to decide which of them can act.
     massCloseTargets,
     closeTabGroup,
+    // TAB-FR-ERUM: the author's own order of the strip.
+    moveTab,
     openSettings,
     openGlobalSettings,
     openProjectSettings,

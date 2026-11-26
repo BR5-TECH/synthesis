@@ -210,6 +210,9 @@ describe("the close control keeps the tab's trailing edge (TAB-FR-29)", () => {
         ".tabstrip__scroll > .tab",
         // The rule this file pins for the parts themselves.
         ".tab > *",
+        // TAB-FR-PHHH: the drop indicator. It is absolutely positioned, so it
+        // is out of the flex flow and moves no part of the tab.
+        ".tab[data-drop]::after",
       ]),
       "a second rule lays .tab out",
     ).toEqual([]);
@@ -315,3 +318,34 @@ describe("the leading gutter (TAB-FR-35, NTF-FR-34)", () => {
     },
   );
 });
+
+describe("the drag marks move no part of the strip (TAB-FR-PHHH)", () => {
+  const body = (selector: string) =>
+    parse(CSS)
+      .filter((r) => r.selector === selector)
+      .map((r) => r.body)
+      .join(";");
+
+  it("TAB-FR-PHHH: the drop indicator is out of the flex flow and takes no pointer", () => {
+    const indicator = body(".tab[data-drop]::after");
+    expect(indicator).toMatch(/position:\s*absolute/);
+    expect(indicator).toMatch(/pointer-events:\s*none/);
+    // The indicator is placed against the tab itself.
+    expect(body(".tab")).toMatch(/position:\s*relative/);
+  });
+
+  it("TAB-FR-ERUM: tab text is not selectable, so a drag carries the tab and not text", () => {
+    expect(body(".tabstrip__scroll > .tab")).toMatch(/(^|;)\s*user-select:\s*none/);
+    expect(body(".tabstrip__scroll > .tab")).toMatch(/-webkit-user-select:\s*none/);
+    expect(body(".tabstrip__scroll > .tab .tab__label-field")).toMatch(/(^|;)\s*user-select:\s*text/);
+  });
+
+  it("TAB-FR-PHHH: the receding treatment sets opacity and nothing else", () => {
+    const declarations = body(".tab[data-dragging]")
+      .split(";")
+      .map((d) => d.split(":")[0].trim())
+      .filter(Boolean);
+    expect(declarations).toEqual(["opacity"]);
+  });
+});
+

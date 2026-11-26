@@ -557,6 +557,8 @@ export function AppShell(props: AppShellProps) {
               void s.closeTabGroup(scope, targetId)
             }
             massCloseTargets={s.massCloseTargets}
+            // TAB-FR-ERUM / TAB-FR-SFGR: the author's own order of the strip.
+            onMoveTab={s.moveTab}
             // TAB-FR-32 / SNV-FR-56: the menu's state, and the closing of every
             // other floating overlay when it opens.
             menu={tabMenu}

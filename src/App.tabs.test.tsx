@@ -23,6 +23,7 @@ import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
 import { pickSelector } from "./test/selectors";
 import { makeMergeRun, makeQueue, makeRun } from "./test/graduationFixtures";
 import { resetPanelReveals } from "./state/panelReveal";
+import { resetLogBufferForTest } from "./logging";
 import {
   activeWorktreePath,
   createDraftFromPanel,
@@ -104,6 +105,9 @@ beforeEach(() => {
   // one counter for the app's life, so a suite that does not reset finds its
   // first request already consumed by the previous one.
   resetPanelReveals();
+  // The strip logs a tab move (TAB-FR-ERUM); its flush timer must not outlive
+  // the test.
+  resetLogBufferForTest();
   resetAppFixture();
   invokeMock.mockReset();
   invokeMock.mockImplementation(
@@ -508,6 +512,76 @@ describe("tab context menu through the shell (TAB-FR-32 / TAB-FR-37 / TAB-FR-39)
     await userEvent.click(await screen.findByTestId("tabmenu-close"));
 
     await waitFor(() => expect(labels()).toEqual(["Dashboard", "main.rs"]));
+  });
+
+  // TAB-FR-ERUM / TAB-FR-ZMZS / TAB-FR-SFGR through the shell: the move
+  // reaches the strip state, and the active tab and the pins stay.
+  it("TAB-FR-ERUM, TAB-FR-ZMZS, TAB-FR-SFGR: a keyboard move reorders the strip and keeps the active tab and the pins", async () => {
+    await threeTabs();
+    fireEvent.contextMenu(tabByLabel("CHG-changes.md"));
+    await userEvent.click(await screen.findByTestId("tabmenu-pin"));
+    await waitFor(() =>
+      expect(tabByLabel("CHG-changes.md")).toHaveAttribute("data-pinned", "true"),
+    );
+    // `main.rs` is the active tab, having just been opened.
+    act(() => tabByLabel("main.rs").focus());
+    fireEvent.keyDown(tabByLabel("main.rs"), { key: "ArrowLeft", altKey: true, shiftKey: true });
+
+    await waitFor(() => expect(labels()).toEqual(["Dashboard", "main.rs", "CHG-changes.md"]));
+    expect(tabByLabel("main.rs")).toHaveAttribute("aria-selected", "true");
+    expect(tabByLabel("CHG-changes.md")).toHaveAttribute("data-pinned", "true");
+    expect(document.activeElement).toBe(tabByLabel("main.rs"));
+
+    // TAB-FR-XNID: the Dashboard stays first.
+    fireEvent.keyDown(tabByLabel("main.rs"), { key: "ArrowLeft", altKey: true, shiftKey: true });
+    expect(labels()).toEqual(["Dashboard", "main.rs", "CHG-changes.md"]);
+  });
+
+  // TAB-FR-IZJJ: the mass closes read the order the author set.
+  it("TAB-FR-IZJJ, TAB-FR-39: Close tabs to the right follows the moved order", async () => {
+    await threeTabs();
+    fireEvent.keyDown(tabByLabel("CHG-changes.md"), { key: "ArrowRight", altKey: true, shiftKey: true });
+    await waitFor(() => expect(labels()).toEqual(["Dashboard", "main.rs", "CHG-changes.md"]));
+
+    // CHG-changes.md is last now, so nothing stands to its right.
+    fireEvent.contextMenu(tabByLabel("CHG-changes.md"));
+    expect(await screen.findByTestId("tabmenu-right")).toHaveAttribute("aria-disabled", "true");
+    fireEvent.keyDown(screen.getByTestId("tab-context-menu"), { key: "Escape" });
+
+    fireEvent.contextMenu(tabByLabel("main.rs"));
+    await userEvent.click(await screen.findByTestId("tabmenu-right"));
+    await waitFor(() => expect(labels()).toEqual(["Dashboard", "main.rs"]));
+  });
+
+  // TAB-FR-IZJJ: after a move, a new tab still opens at the end, the
+  // Dashboard still reopens first, and Close other tabs keeps its rule.
+  it("TAB-FR-IZJJ: a reopened tab goes last and the Dashboard reopens first after a move", async () => {
+    await threeTabs();
+    fireEvent.keyDown(tabByLabel("CHG-changes.md"), { key: "ArrowRight", altKey: true, shiftKey: true });
+    await waitFor(() => expect(labels()).toEqual(["Dashboard", "main.rs", "CHG-changes.md"]));
+
+    await userEvent.click(tabByLabel("main.rs").querySelector<HTMLElement>(".tab__close")!);
+    await waitFor(() => expect(labels()).toEqual(["Dashboard", "CHG-changes.md"]));
+    const panel = document.querySelector(".vpanel") as HTMLElement;
+    await userEvent.click(await within(panel).findByText("main.rs"));
+    await waitFor(() => expect(labels()).toEqual(["Dashboard", "CHG-changes.md", "main.rs"]));
+
+    await userEvent.click(tabByLabel("Dashboard").querySelector<HTMLElement>(".tab__close")!);
+    await waitFor(() => expect(labels()).toEqual(["CHG-changes.md", "main.rs"]));
+    await userEvent.click(screen.getByTestId("home-affordance"));
+    await waitFor(() => expect(labels()).toEqual(["Dashboard", "CHG-changes.md", "main.rs"]));
+  });
+
+  it("TAB-FR-IZJJ, TAB-FR-37: Close other tabs keeps the pinned tab wherever it moved", async () => {
+    await threeTabs();
+    fireEvent.contextMenu(tabByLabel("CHG-changes.md"));
+    await userEvent.click(await screen.findByTestId("tabmenu-pin"));
+    fireEvent.keyDown(tabByLabel("CHG-changes.md"), { key: "ArrowRight", altKey: true, shiftKey: true });
+    await waitFor(() => expect(labels()).toEqual(["Dashboard", "main.rs", "CHG-changes.md"]));
+
+    fireEvent.contextMenu(tabByLabel("main.rs"));
+    await userEvent.click(await screen.findByTestId("tabmenu-others"));
+    await waitFor(() => expect(labels()).toEqual(["main.rs", "CHG-changes.md"]));
   });
 
   /**

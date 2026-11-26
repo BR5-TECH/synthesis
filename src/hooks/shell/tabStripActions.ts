@@ -12,6 +12,7 @@
  * owned by `useShellSession`.
  */
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { logDebug } from "../../logging";
 import { forgetClosedConversationTab } from "./discussionActions";
 import {
   hunkCandidateBuffers,
@@ -52,6 +53,28 @@ export interface TabStripActions {
   closeTab: (id: string) => Promise<boolean>;
   setTabPinned: (id: string, pinned: boolean) => void;
   closeTabGroup: (scope: TabCloseScope, targetId: string) => Promise<void>;
+  /** TAB-FR-ERUM / TAB-FR-SFGR: move one tab to a new index in the strip. */
+  moveTab: (id: string, toIndex: number) => void;
+}
+
+/**
+ * TAB-FR-ERUM / TAB-FR-XNID: the strip with one tab moved to `toIndex`.
+ *
+ * `toIndex` is the index the tab has in the result. The Dashboard does not
+ * move, and no tab goes before it: an index in front of it is clamped to the
+ * place directly after it. A move that changes nothing returns the same array,
+ * so the caller can skip the state update.
+ */
+export function moveTabInStrip(tabs: Tab[], id: string, toIndex: number): Tab[] {
+  if (id === "dashboard" || Number.isNaN(toIndex)) return tabs;
+  const from = tabs.findIndex((t) => t.id === id);
+  if (from < 0) return tabs;
+  const rest = tabs.filter((_, i) => i !== from);
+  const floor = rest.findIndex((t) => t.id === "dashboard") + 1;
+  // Clamped before the truncation, so an infinite index reaches an end.
+  const to = Math.trunc(Math.min(Math.max(toIndex, floor), rest.length));
+  if (to === from) return tabs;
+  return [...rest.slice(0, to), tabs[from], ...rest.slice(to)];
 }
 
 /**
@@ -335,5 +358,31 @@ export function createTabStripActions(
     if (eligible.includes(activeBefore)) activateTab(targetId);
   };
 
-  return { closeTab, setTabPinned, closeTabGroup };
+  /**
+   * TAB-FR-ERUM / TAB-FR-ZMZS: a move is a display change only. It does not
+   * touch the active tab, the pinned set, or any session store.
+   */
+  const moveTab = (id: string, toIndex: number) => {
+    // Logged from the live strip and outside the updater, which React can run
+    // twice in development.
+    const live = tabsRef.current;
+    const from = live.findIndex((t) => t.id === id);
+    const moved = moveTabInStrip(live, id, toIndex);
+    if (moved !== live) {
+      logDebug(["frontend"], "tab moved in the strip", {
+        tabKind: live[from].kind ?? "editor",
+        from,
+        to: moved.findIndex((t) => t.id === id),
+      });
+    }
+    setTabs((ts) => {
+      const next = moveTabInStrip(ts, id, toIndex);
+      if (next === ts) return ts;
+      // TAB-FR-IZJJ: the mass closes read the live strip through the ref.
+      tabsRef.current = next;
+      return next;
+    });
+  };
+
+  return { closeTab, setTabPinned, closeTabGroup, moveTab };
 }

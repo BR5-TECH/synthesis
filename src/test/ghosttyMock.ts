@@ -29,6 +29,28 @@ export async function init(): Promise<void> {
 /** Test hook: while true, `open()` makes no renderer, as a library without the contrast hook. */
 export const fakeNoRenderer = { on: false };
 
+/** Test hook: while true, `open()` makes no link detector, as a library without the link hook. */
+export const fakeNoLinkHook = { on: false };
+
+/** A link as the library's link detector gives it (TRM-FR-HWKO). */
+export interface FakeLink {
+  text: string;
+  range: { start: { x: number; y: number }; end: { x: number; y: number } };
+  activate(event: MouseEvent): void;
+}
+
+/**
+ * A stand-in for the link detector that `open()` makes. `links` maps
+ * `"col,row"` to the link at that cell, and `getLinkAt` gives the same object
+ * each time, as the library's cache does.
+ */
+export class FakeLinkDetector {
+  links = new Map<string, FakeLink>();
+  async getLinkAt(col: number, row: number): Promise<FakeLink | undefined> {
+    return this.links.get(`${col},${row}`);
+  }
+}
+
 /** Each `Ghostty.load()` in order, so a test can check that no two terminals share one. */
 export const fakeInstances: FakeGhostty[] = [];
 
@@ -86,6 +108,8 @@ export class FakeTerminal {
    * cells that its `renderCellText` got, so a test can read the colours drawn.
    */
   renderer: FakeRenderer | undefined = undefined;
+  /** The link detector that `open()` makes (TRM-FR-HWKO). */
+  linkDetector: FakeLinkDetector | undefined = undefined;
   private data = emitter<string>();
   private resizes = emitter<{ cols: number; rows: number }>();
   readonly onData = this.data.event;
@@ -99,6 +123,7 @@ export class FakeTerminal {
   }
   open(parent: HTMLElement) {
     if (!fakeNoRenderer.on) this.renderer = new FakeRenderer(String((this.options.theme as ITheme | undefined)?.background ?? "#1e1e1e"));
+    if (!fakeNoLinkHook.on) this.linkDetector = new FakeLinkDetector();
     this.opened = parent;
     this.openedConnected = parent.isConnected;
     const canvas = document.createElement("canvas");

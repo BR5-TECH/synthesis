@@ -408,7 +408,9 @@
 .editor__find { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .editor__find-row { display: flex; align-items: center; gap: 4px; }
 .editor__find-input { flex: 1; min-width: 0; }
-.editor__find-input input { all: unset; flex: 1; min-width: 0; font-size: var(--fs-ui-sm); color: var(--fg-1); }
+/* SNV-FR-TLXS: `all: unset` makes the field take `user-select: none` from the
+   document, and WebKit then takes no typed text in it. */
+.editor__find-input input { all: unset; flex: 1; min-width: 0; font-size: var(--fs-ui-sm); color: var(--fg-1); -webkit-user-select: text; user-select: text; cursor: text; }
 .editor__find-count {
   flex: none; min-width: 56px; text-align: right;
   font-family: var(--font-mono); font-size: var(--fs-ui-xs); color: var(--fg-3);

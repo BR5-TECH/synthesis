@@ -6,6 +6,7 @@ import { readSettingsWindowBoot, readSettingsWindowProject } from "./settingsWin
 import { setWindowProjectId } from "./api/invoke";
 import { readProjectWindowBoot } from "./projectWindowBoot";
 import { markPlatform } from "./platform";
+import { installContextMenuGuard } from "./contextMenuGuard";
 import { installDropGuard } from "./dropGuard";
 
 /**
@@ -25,6 +26,10 @@ markPlatform(document.documentElement, navigator.platform);
 // SNV-FR-UKER: the main window hands every drag to its web content
 // (SNV-FR-RQLF), so a drop no surface takes must not load the dropped file.
 if (!boot) installDropGuard(window);
+
+// SNV-FR-WCQH: in both windows, a secondary click opens only an application
+// menu, or the system text menu over editable or selected text.
+installContextMenuGuard(window);
 
 // PWN-FR-VIYR: the Settings window serves the project of the window that opened
 // it, so its calls carry that project's id.

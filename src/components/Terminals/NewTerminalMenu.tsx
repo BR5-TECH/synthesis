@@ -61,10 +61,12 @@ function kindIcon(kind: KindAvailability): ReactNode {
   return <Icon.Agents size={13} aria-hidden="true" />;
 }
 
-function failureText(err: unknown): string {
+/** TRM-FR-YVPJ, LCM-FR-WNPH: the text of a failed create. */
+export function failureText(err: unknown): string {
   const code = errorCode(err);
   const typed = err as Partial<TerminalError> | null;
   if (code === "terminal_limit_reached") return "The project holds the most terminals it can hold (16).";
+  if (code === "invalid_start_folder") return "This folder is not in the worktree.";
   if (code === "target_gone") return "This target is gone.";
   if (code === "kind_unavailable") return reasonText(typed?.reason);
   if (code === "platform_unsupported") return "Terminals are not available on this platform.";

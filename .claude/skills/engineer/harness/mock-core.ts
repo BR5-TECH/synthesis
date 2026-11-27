@@ -8526,6 +8526,9 @@ function publicationMetadataMock() {
  * The app's `invoke`: the unified discussion contract in front of the legacy
  * switch below (see `mock-unified-discussions.ts`).
  */
+/** The Open In hand-offs sent this session (PST-FR-JJGI, PST-FR-ZGNE). */
+const openInCalls: { cmd: string; path: string }[] = [];
+
 export async function invoke(cmd: string, args?: Record<string, any>): Promise<any> {
   // OCW-FR-TRLG / OCW-FR-COLR: the discussions and the edit proposal of the
   // demo change on its stream (see mock-openspec.ts).
@@ -9083,6 +9086,14 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     // and the (debounced) structural-change event is what makes the Project
     // panel go and get it. A name already taken beside the node is the typed
     // collision the panel surfaces inline; the backend rejects it the same way.
+    // PST-FR-JJGI, PST-FR-ZGNE: outside-app hand-offs start nothing in the
+    // harness. The path is kept so a check can read what was sent.
+    case "open_in_system_terminal":
+    case "reveal_in_file_manager": {
+      openInCalls.push({ cmd, path: String(a.path) });
+      (globalThis as Record<string, unknown>).__openInCalls = openInCalls;
+      return undefined;
+    }
     case "rename_path": {
       const path = String(a.path);
       const newName = String(a.newName);

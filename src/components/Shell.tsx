@@ -974,6 +974,9 @@ export function VPanel({
       onNewFolder={onNewFolder}
       reveal={panelReveal?.panel === "library" ? panelReveal : null}
       onViewSpecMap={onViewSpecMap}
+      // LCM-FR-XWFO, LCM-FR-NJVW: the Terminal Tab entry of Open In.
+      onOpenTerminal={terminals?.onOpenTerminal}
+      hasActiveWorktree={terminals?.activeWorktreePath != null}
     />
   );
 }

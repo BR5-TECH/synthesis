@@ -20,8 +20,13 @@ export const listTerminalTargets = () => invoke<TerminalTarget[]>("list_terminal
 
 export const listTerminals = () => invoke<TerminalSummary[]>("list_terminals");
 
-export const createTerminal = (target: TargetRef, kind: TerminalKind, vendor: CliVendor | null) =>
-  invoke<TerminalSummary>("create_terminal", { target, kind, vendor });
+/** TRS-FR-ZZZN: `startFolder` is a folder relative to the target's directory, Host shell only. */
+export const createTerminal = (
+  target: TargetRef,
+  kind: TerminalKind,
+  vendor: CliVendor | null,
+  startFolder: string | null = null,
+) => invoke<TerminalSummary>("create_terminal", { target, kind, vendor, startFolder });
 
 /**
  * TRS-FR-HIIK: attaches a channel to the session. Each message is one frame of

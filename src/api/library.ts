@@ -111,6 +111,20 @@ export const renamePath = (path: string, newName: string) =>
 export const copyPathIntoFolder = (sourcePath: string, destFolder: string) =>
   invoke<void>("copy_path_into_folder", { sourcePath, destFolder });
 
+// --- Outside-app hand-offs (open_in.rs) -------------------------------------
+
+/** PST-FR-JJGI: the typed error when no system terminal application starts. */
+export const ERR_NO_TERMINAL_FOUND = "no_terminal_found";
+
+/** PST-FR-JJGI, PST-FR-ZGNE: the typed error for a path that is not on disk. */
+export const ERR_PATH_NOT_FOUND = "path not found";
+
+/** PST-FR-JJGI: start the system terminal in the folder of `path`. */
+export const openInSystemTerminal = (path: string) => invoke<void>("open_in_system_terminal", { path });
+
+/** PST-FR-ZGNE: show `path` selected in the platform file manager. */
+export const revealInFileManager = (path: string) => invoke<void>("reveal_in_file_manager", { path });
+
 // --- Plain-file creation (library.rs) -------------------------------------
 
 // PST-FR-26 / NFI-new-file.md: create an empty plain file and return its node so

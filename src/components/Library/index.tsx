@@ -21,6 +21,8 @@ import { useTreeFilter } from "./useTreeFilter";
 import { VirtualRows } from "./VirtualRows";
 import { noteOwnerDeleted } from "../../voice/voiceController";
 import { runMainBranchWrite, WRITE_CANCELLED } from "../../state/mainBranchWrite";
+import { isWindowsPlatform } from "../../platform";
+import { useOpenIn } from "./useOpenIn";
 import {
   ContextMenu,
   RecursiveDeleteConfirm,
@@ -31,6 +33,7 @@ import type {
   AssignScope,
   OpenableArtifact,
   PanelRevealRequest,
+  TerminalSummary,
   TreeNode,
 } from "../../types";
 
@@ -69,6 +72,13 @@ interface LibraryProps {
   reveal?: PanelRevealRequest | null;
   /** LIB-FR-VMAQ: open the Map tab, or jump focus to it. */
   onViewSpecMap?: () => void;
+  /**
+   * LCM-FR-XWFO: open and focus the tab of a new terminal session. Without it,
+   * or with no active worktree, **Terminal Tab** is greyed (LCM-FR-NJVW).
+   */
+  onOpenTerminal?: (session: TerminalSummary) => void;
+  /** LCM-FR-NJVW: whether a worktree is active. */
+  hasActiveWorktree?: boolean;
 }
 
 export function Library({
@@ -80,6 +90,8 @@ export function Library({
   onNewFolder,
   reveal,
   onViewSpecMap,
+  onOpenTerminal,
+  hasActiveWorktree = false,
 }: LibraryProps) {
   const { expanded, toggleExpanded, expandAll, typeFilter, text } = panel;
   // LIB-FR-EMOO: the folders this panel has loaded, one at a time.
@@ -102,6 +114,13 @@ export function Library({
   // Set only when the backend reported the folder non-empty, so the window
   // appears for exactly the case that cannot be undone.
   const [confirmRecursive, setConfirmRecursive] = useState<TreeNode | null>(null);
+  // LCM-FR-WBHG: the **Open In** entries.
+  const openIn = useOpenIn(setError, onOpenTerminal);
+  const terminalTabEntry = isWindowsPlatform()
+    ? "hidden"
+    : onOpenTerminal && hasActiveWorktree
+      ? "enabled"
+      : "disabled";
 
   /**
    * LIB-FR-19: the types the project holds, from `"list project artifacts"`.
@@ -582,6 +601,19 @@ export function Library({
           onPaste={() => void pasteInto(ctx.node)}
           onRename={(newName) => void renameNode(ctx.node, newName)}
           onNotes={() => showNotes(ctx.node)}
+          terminalTab={terminalTabEntry}
+          onSystemTerminal={() => {
+            setCtx(null);
+            void openIn.systemTerminal(ctx.node);
+          }}
+          onTerminalTab={() => {
+            setCtx(null);
+            void openIn.terminalTab(ctx.node);
+          }}
+          onRevealInFileManager={() => {
+            setCtx(null);
+            void openIn.revealInFileManager(ctx.node);
+          }}
         />
       )}
       {/* LCM-FR-11: raised only once the backend has reported the folder

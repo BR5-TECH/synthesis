@@ -391,6 +391,7 @@ describe("New terminal menu", () => {
       target: { kind: "worktree", path: "/repo" },
       kind: "agent_cli",
       vendor: "codex",
+      startFolder: null,
     });
     expect(terminalsSnapshot().sessions.map((s) => s.id)).toEqual(["n1"]);
   });
@@ -410,6 +411,7 @@ describe("New terminal menu", () => {
       target: { kind: "work_stream", streamId: "st" },
       kind: "host_shell",
       vendor: null,
+      startFolder: null,
     });
   });
 

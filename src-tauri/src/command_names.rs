@@ -89,6 +89,8 @@ pub(crate) const COMMAND_NAMES: &[&str] = &[
     // Library file operations (PST-project-storage.md / LIB-library.md).
     "delete_path",
     "rename_path",
+    "open_in_system_terminal",
+    "reveal_in_file_manager",
     "copy_path_into_folder",
     // Plain-file creation (PST-project-storage.md / NFI-new-file.md).
     "create_file",

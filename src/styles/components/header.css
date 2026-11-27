@@ -191,7 +191,9 @@
 }
 .search-input:hover { border-color: var(--border-2); }
 .search-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); background: var(--bg-canvas); }
-.search-input input { all: unset; flex: 1; min-width: 0; font-size: var(--fs-ui-sm); color: var(--fg-1); }
+/* SNV-FR-TLXS: `all: unset` makes the field take `user-select: none` from the
+   document, and WebKit then takes no typed text in it. */
+.search-input input { all: unset; flex: 1; min-width: 0; font-size: var(--fs-ui-sm); color: var(--fg-1); -webkit-user-select: text; user-select: text; cursor: text; }
 /* The text field is what gives way on a narrow window; the icon, the mode
    toggles and the shortcut hint keep their own width. */
 .search-input > svg, .search-input__modes, .search-input > kbd { flex: none; }

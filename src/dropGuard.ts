@@ -20,10 +20,8 @@
  * it.
  */
 import { DRAG_TYPE, DRAG_ZONE_ATTRIBUTE } from "./components/draftsTree";
+import { inEditableRegion, isTextControl } from "./editableTarget";
 import { logDebug } from "./logging";
-
-/** Input types that take dropped text. */
-const TEXT_INPUT_TYPES = ["", "text", "search", "url", "email", "tel", "password"];
 
 function hasType(e: DragEvent, type: string): boolean {
   const types = e.dataTransfer?.types;
@@ -37,18 +35,8 @@ const carriesText = (e: DragEvent) => hasType(e, "text/plain");
 /** Whether the drop lands in a field that takes dropped text. */
 export function isTextField(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
-  // The nearest `contenteditable` decides, so an island marked `false` inside
-  // an editable region is not a text field.
-  const host = target.closest("[contenteditable]");
-  if (host && host.getAttribute("contenteditable")?.toLowerCase() !== "false") return true;
-  if (target instanceof HTMLTextAreaElement) return !target.readOnly && !target.disabled;
-  if (target instanceof HTMLInputElement)
-    return (
-      TEXT_INPUT_TYPES.includes(target.getAttribute("type")?.toLowerCase() ?? "") &&
-      !target.readOnly &&
-      !target.disabled
-    );
-  return false;
+  if (inEditableRegion(target)) return true;
+  return isTextControl(target) && !target.readOnly && !target.disabled;
 }
 
 /** DRP-FR-PXMK: a Drafts panel row drag over a place outside the panel. */

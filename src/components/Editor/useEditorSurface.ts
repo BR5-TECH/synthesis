@@ -17,6 +17,7 @@ import { CommentHighlight } from "../commentHighlight";
 import { FindHighlight } from "../findHighlight";
 import { HunkDecorations } from "../DraftDiscussion";
 import { MainBranchEditGate } from "./mainBranchEditGate";
+import type { LinkHost } from "../linkFollow";
 import { useHostImageDecorations } from "./useHostImageDecorations";
 import { useHostImageResolution } from "./useHostImageResolution";
 import {
@@ -38,6 +39,8 @@ export interface EditorSurfaceDeps {
   mode: EditMode;
   imageHost: EditorImageHost | undefined;
   imageHostRef: RefObject<EditorImageHost | undefined>;
+  /** EDT-FR-QBIE: where a file link of the surface goes, read at each click. */
+  linkHostRef: RefObject<LinkHost | null>;
   editorRef: RefObject<TiptapEditor | null>;
   announceRef: RefObject<((message: string) => void) | undefined>;
   bodyRef: RefObject<string>;
@@ -60,6 +63,7 @@ export function useEditorSurface(deps: EditorSurfaceDeps) {
     mode,
     imageHost,
     imageHostRef,
+    linkHostRef,
     editorRef,
     announceRef,
     bodyRef,
@@ -186,7 +190,7 @@ export function useEditorSurface(deps: EditorSurfaceDeps) {
       HunkDecorations,
       // EDT-FR-QXEK: the first change on an unconfirmed main branch is held.
       MainBranchEditGate,
-    ]),
+    ], { linkHost: () => linkHostRef.current }),
     // The ProseMirror node carries the `doc` class so the existing document
     // typography (.doc h1/p/ul/blockquote/code…) styles the WYSIWYG content.
     editorProps: {

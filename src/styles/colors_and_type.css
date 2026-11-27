@@ -485,6 +485,40 @@ html, body {
   margin: 0;
   padding: 0;
   overflow: hidden;
+  /* SNV-FR-TLXS: the text of the window chrome cannot be selected, and the
+     pointer over it is the arrow, as in a native application. */
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+/* SNV-FR-TLXS: editable fields and reading content stay selectable. An
+   explicit `text` is necessary on an editable region: WebKit carries an
+   inherited `none` into it. This file loads first, so a local rule of the same
+   weight (a diff gutter, a code label, a control) still makes its own part
+   unselectable. The diff, PDF, CALM and diagram surfaces keep their own
+   selectable rules. */
+input,
+textarea,
+[contenteditable]:not([contenteditable="false"]),
+.doc,
+.document-viewer__source,
+.dds-message__body,
+.comment__body,
+.agent-surface__text,
+.logs__msg,
+.logs__json,
+.logs__error,
+.glw__viewport,
+.diff-line__text,
+.diff-sbs__cell,
+.pp-detail__scroll,
+.miv-desc,
+.miv-error,
+.git-info__message {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: auto;
 }
 
 /* DISPLAY — used in Project Picker, large empty states */
@@ -522,6 +556,10 @@ html, body {
 .doc em { font-style: italic; }
 .doc a  { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); }
 .doc a:hover { border-bottom-style: solid; }
+/* EDT-FR-BBIF: the hand pointer on a link that a click follows. */
+.doc[contenteditable="false"] a[href],
+.link-modifier-held .doc[contenteditable="true"] a[href],
+.doc a.diff-link { cursor: pointer; }
 .doc blockquote {
   border-left: 2px solid var(--border-3);
   padding: var(--sp-1) 0 var(--sp-1) var(--sp-4);

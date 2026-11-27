@@ -20,6 +20,8 @@ import { DocumentTextViewer } from "./DocumentViewer";
 import { PdfViewer } from "./PdfViewer";
 import { OpenSpecChangeWorkspace } from "./OpenSpecChange";
 import { InPlaceReviewScope } from "./MapPlanProposal";
+import { LinkOpenerContext } from "./linkFollow";
+import { useViewportLinkOpener } from "../hooks/shell/useFileLinkOpener";
 import type { Discussion, SearchHit } from "../types";
 
 interface ViewportProps {
@@ -108,7 +110,13 @@ interface ViewportProps {
   onOpenProjectSettings?: (section: "delivery" | "github-polling") => void;
   /** MDL-FR-DHHW / LIB-FR-18: reveal a file in the Project panel. */
   onRevealInProject?: (artifactId: string) => void;
+  /** EDT-FR-GEHE: open a file as a click in the Project panel opens it. */
+  onActivateFile?: (item: OpenableArtifact) => void;
+  /** EDT-FR-AWFH: the absolute paths of the project root. */
+  projectRoots?: readonly string[];
 }
+
+const NO_ROOTS: readonly string[] = [];
 
 /**
  * Routes the focused tab to its surface: the Dashboard by tab id, then a Flow
@@ -121,8 +129,20 @@ interface ViewportProps {
  * shell's session store, which the Editor resumes from (EDT-FR-29/EDT-FR-30).
  */
 export function Viewport(props: ViewportProps) {
-  const surface = <ViewportSurface {...props} />;
   const { activeTab, activeT } = props;
+  // EDT-FR-GEHE / EDT-FR-QBIE / EDT-FR-YXUD: the rich surfaces of each tab
+  // follow a file link through the shell.
+  const linkOpener = useViewportLinkOpener(
+    props.projectRoots ?? NO_ROOTS,
+    props.onActivateFile ?? props.onOpenArtifact,
+    activeT?.artifactId ?? null,
+    activeTab,
+  );
+  const surface = (
+    <LinkOpenerContext.Provider value={linkOpener}>
+      <ViewportSurface {...props} />
+    </LinkOpenerContext.Provider>
+  );
   // MPV-FR-HGLN: each tab that shows a discussion holds its own review of plan
   // proposals. The Map tab holds the review of its map session, and the
   // Dashboard shows no discussion.

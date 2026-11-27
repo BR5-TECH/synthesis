@@ -9141,7 +9141,13 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
     case "open_artifact_by_id": {
       // PST-FR-QQAE: the answer carries the resolved type of the file, which
       // includes this session's assignments (TAB-FR-SZGD reads it from here).
-      const artifactType = findIn(tree(), String(a.id))?.artifactType;
+      const node = findIn(tree(), String(a.id));
+      // EDT-FR-HYVP: the real backend refuses a file that is not on disk, so
+      // a link to a missing file shows its toast and opens no tab.
+      if (!node && artifactBodies[String(a.id)] === undefined) {
+        return Promise.reject(new Error(`artifact not found: ${String(a.id)}`));
+      }
+      const artifactType = node?.artifactType;
       return {
         key: a.id,
         kind: String(a.id).endsWith(".flow.md")

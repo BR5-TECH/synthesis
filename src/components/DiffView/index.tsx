@@ -61,6 +61,8 @@ import { useSettledText } from "./settle";
 import { diagramEditorRequest, subscribeDiagramEditor } from "../DiagramEditor/store";
 import { coalescedRun } from "../../coalescedRun";
 import { DiffComparisonBody, DiffModeToolbar } from "./comparison";
+import { useDiffLinkHost } from "./links";
+import { RichLinkHostContext } from "../linkFollow";
 import { holdEdit, runMainBranchWrite, WRITE_CANCELLED } from "../../state/mainBranchWrite";
 
 export { DERIVE_SETTLE_MS } from "./settle";
@@ -244,7 +246,11 @@ export function DiffView({ target, sessions }: DiffViewProps) {
   // DFV-FR-YMJA: a comparison with no target (a deleted file) scrolls too.
   const scrollMemory = useDiffScrollMemory(revisions, modes.visualization);
 
+  // DFV-FR-QJRW: the links of the Rich rendering resolve against this file.
+  const linkHost = useDiffLinkHost(target.path);
+
   return (
+    <RichLinkHostContext.Provider value={linkHost}>
     <div className="diff-view">
       <div className="panel-header">
         {/* DFV-FR-03 / SNV-FR-57: a file name is content, so it reads in the
@@ -349,6 +355,7 @@ export function DiffView({ target, sessions }: DiffViewProps) {
         missing={deleted}
       />
     </div>
+    </RichLinkHostContext.Provider>
   );
 }
 

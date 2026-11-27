@@ -38,6 +38,7 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { logDebug } from "../logging";
 import { getMarkdown, markdownExtensions } from "./markdownFidelity";
+import { useRichLinkHost } from "./linkFollow";
 import type { TargetEditing } from "./DiffTarget";
 import type { Range } from "../diff/wordDiff";
 
@@ -370,6 +371,10 @@ export function EditableRichRun({
   /** The last text this run and the target agreed on, in either direction. */
   const seenRef = useRef(source);
   const clickRef = useRef<{ left: number; top: number } | null>(null);
+  // DFV-FR-QJRW: the Diff tab says where a file link of the run goes.
+  const linkHost = useRichLinkHost();
+  const linkHostRef = useRef(linkHost);
+  linkHostRef.current = linkHost;
 
   const editor = useEditor(
     {
@@ -379,7 +384,10 @@ export function EditableRichRun({
         [DiffMarks.configure({ units: () => unitsRef.current })],
         // EDT-FR-MOQW, DFV-FR-EGFA: the Edit button on the target's diagram
         // fences, except where the target is the candidate of a review.
-        { diagramEditor: editing.diagramEditor !== false },
+        {
+          diagramEditor: editing.diagramEditor !== false,
+          linkHost: () => linkHostRef.current,
+        },
       ),
       editorProps: {
         attributes: {

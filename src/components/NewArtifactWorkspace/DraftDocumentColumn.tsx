@@ -12,10 +12,20 @@ import type { EditMode } from "../../state/editHistory";
 import { Icon } from "../icons";
 import { Editor } from "../Editor";
 import { DraftVersionReading } from "../DraftVersionReading";
+import { RichLinkHostContext, useLinkHost, type LinkPlace } from "../linkFollow";
 import { MapPlanReviewLayer } from "../MapPlanProposal";
 import { sourceLabelOf, standingOf } from "./labels";
 
 type EditorProps = ComponentProps<typeof Editor>;
+
+/**
+ * NAW-FR-RUPR: the link place of a prompt, live or read in a version. The
+ * prompt has no folder in the project, so its file links start at the
+ * project root, and a link to `path`, its own name, stays in the prompt.
+ */
+export function draftLinkPlace(path: string | null): LinkPlace {
+  return { fileDir: "", selfPath: path };
+}
 
 export function DraftDocumentColumn({
   drafts,
@@ -65,6 +75,11 @@ export function DraftDocumentColumn({
   fragmentHost: EditorProps["fragmentHost"];
   review: EditorProps["review"];
 }) {
+  // NAW-FR-RUPR: the prompt has no folder in the project, so a file link
+  // resolves against the project root, and a link to the prompt's own name
+  // stays in the prompt.
+  const livePlace = draftLinkPlace(selected);
+  const readingHost = useLinkHost(draftLinkPlace(viewing?.path ?? selected));
   return (
     /* NAW-FR-27: the field the page is set on, and the corner of it the
        action control floats in. The collapsed control has a strip of that
@@ -199,11 +214,13 @@ export function DraftDocumentColumn({
                EDT-FR-17, EDT-FR-63), so the only thing that changes between
                reading a version and editing the prompt is whether the
                surface takes a keystroke. */
-            <DraftVersionReading
-              text={viewText ?? ""}
-              mode={readingMode}
-              label={`Read-only past version of ${viewing.path} — ${sourceLabelOf(viewing)}, ${standingOf(viewing, entries)}`}
-            />
+            <RichLinkHostContext.Provider value={readingHost}>
+              <DraftVersionReading
+                text={viewText ?? ""}
+                mode={readingMode}
+                label={`Read-only past version of ${viewing.path} — ${sourceLabelOf(viewing)}, ${standingOf(viewing, entries)}`}
+              />
+            </RichLinkHostContext.Provider>
           )
         ) : docKey !== null ? (
           /* NAW-FR-11: the Editor's own two-mode Markdown surface — the same
@@ -218,6 +235,7 @@ export function DraftDocumentColumn({
             artifactId={docKey}
             artifactName={selected ?? undefined}
             sessions={drafts.docs}
+            linkPlace={livePlace}
             // NAW-FR-14: a draft's threads are served in the draft scope of
             // the thread operations, which this surface does not yet
             // distinguish — so the rail stays off rather than reading and

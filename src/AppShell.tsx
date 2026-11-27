@@ -587,6 +587,10 @@ export function AppShell(props: AppShellProps) {
                 activeTab={s.activeTab}
                 activeT={s.activeT}
                 onOpenArtifact={s.openArtifact}
+                // EDT-FR-GEHE / EDT-FR-AWFH: a file link opens as a Project
+                // panel click, against the active worktree and the project.
+                onActivateFile={s.activateLibraryFile}
+                projectRoots={[s.activeWorktree?.path ?? "", s.projectPath]}
                 onOpenRuns={s.openRuns}
                 onOpenGit={s.openGit}
                 sessions={s.sessions}

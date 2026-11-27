@@ -38,6 +38,8 @@ import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Markdown } from "tiptap-markdown";
 import { LiteralBacktick } from "./markdownBacktick";
+import { LinkNavigation } from "./linkNavigation";
+import type { LinkHost } from "./linkFollow";
 import { MermaidDiagrams } from "./markdownMermaid";
 import { markupExtensions } from "./markdownMarkup";
 
@@ -180,13 +182,27 @@ export function getMarkdown(editor: {
  *
  * `diagramEditor` is false on the candidate of a review modal, which offers no
  * Edit button on its diagram fences (EDT-FR-MOQW).
+ *
+ * `linkHost` says where a file link of the surface goes (EDT-FR-QBIE). With no
+ * host, only external links and fragments are followed.
  */
 export function markdownExtensions(
   extra: Extensions = [],
-  { diagramEditor = true }: { diagramEditor?: boolean } = {},
+  {
+    diagramEditor = true,
+    linkHost,
+  }: { diagramEditor?: boolean; linkHost?: () => LinkHost | null } = {},
 ): Extensions {
   return [
-    MarkdownStarterKit.configure({ undoRedo: false, text: false }),
+    // EDT-FR-YHKG: the Link extension opens nothing itself. `window.open` does
+    // nothing in the WebView, so LinkNavigation follows a link instead.
+    MarkdownStarterKit.configure({
+      undoRedo: false,
+      text: false,
+      link: { openOnClick: false },
+    }),
+    // EDT-FR-YHKG to EDT-FR-QBIE: links can be followed on every rich surface.
+    LinkNavigation.configure({ host: linkHost ?? (() => null) }),
     LiteralText,
     // EDT-FR-FDGH, EDT-FR-VCOH, EDT-FR-LLBU: the backtick key opens, closes and
     // wraps inline code, and the platform adds no backtick of its own.

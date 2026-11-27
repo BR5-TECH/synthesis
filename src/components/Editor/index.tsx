@@ -42,6 +42,7 @@ import { REVIEW_SELECTOR, type EditorProps } from "./props";
 import { MockEditor } from "./MockEditor";
 import { EditorView } from "./EditorView";
 import { useDocumentOutline } from "./useDocumentOutline";
+import { useEditorLinkHost, usePendingFragment } from "./useEditorLinks";
 import { useCommentAnchors } from "./useCommentAnchors";
 import { useEditorDiscussions } from "./useEditorDiscussions";
 import { useEditorFind } from "./useEditorFind";
@@ -101,6 +102,7 @@ function LiveEditor({
   review,
   fragmentHost,
   toc = false,
+  linkPlace,
 }: EditorProps & { artifactId: string; sessions: EditSessionStore }) {
   // EXC-FR-LKHZ: keep the store's divergence watch alive while an Editor is up, so
   // the surface works on its own (embedded, or without the shell) rather than
@@ -269,11 +271,14 @@ function LiveEditor({
    * EDT-FR-85 / EDT-FR-86 / NAW-FR-50 .. NAW-FR-54: the rich editing surface and
    * everything about the images it carries.
    */
+  // EDT-FR-QBIE: where the file links of the rich surface go.
+  const linkHostRef = useEditorLinkHost(artifactId, linkPlace);
   const surfaceGroup = useEditorSurface({
     session,
     mode,
     imageHost,
     imageHostRef,
+    linkHostRef,
     editorRef,
     announceRef,
     bodyRef,
@@ -377,6 +382,16 @@ function LiveEditor({
   // EDT-FR-LGQA / NAW-FR-TFFX: the headings of the document, for the table of
   // contents control in this tab's cluster.
   const outline = useDocumentOutline({ editor, mode, sourceText, sourceRef });
+  // EDT-FR-YXUD: the heading that a link from another surface named.
+  usePendingFragment({
+    artifactId,
+    loaded: doc.loaded,
+    editor,
+    mode,
+    outline,
+    sourceText,
+    buffer: session.buffer,
+  });
 
 
   /**

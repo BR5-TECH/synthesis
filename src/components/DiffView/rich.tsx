@@ -19,6 +19,7 @@ import { CalmStatic } from "./CalmStatic";
 import { MermaidStatic } from "./MermaidStatic";
 import type { FileRevisions } from "../../types";
 import { BreakSpacer, CommentChip, CommentChipLine } from "../markdownChips";
+import { StaticLink } from "./links";
 
 // ---------------------------------------------------------------------------
 // Rich rendering (DFV-FR-17 .. DFV-FR-22)
@@ -40,10 +41,13 @@ function RichBlock({
   mark,
   ranges,
   target,
+  revision,
 }: {
   block: MarkdownBlock;
   mark: BlockMark;
   ranges?: Range[];
+  /** DFV-FR-QJRW: the revision the block is from, where a fragment looks. */
+  revision: "old" | "new";
   /**
    * DFV-FR-41: whether this is the target's content. The read-only state is
    * carried by every rendering of the original — the left pane, a removed
@@ -57,6 +61,7 @@ function RichBlock({
       className="diff-block"
       data-mark={mark}
       data-kind={block.kind}
+      data-revision={revision}
       {...(target ? {} : READ_ONLY_PROPS)}
     >
       {/* The marker is what carries the marking without colour. */}
@@ -202,6 +207,7 @@ function RichStream({
             mark={group.item.mark}
             ranges={group.item.ranges}
             target={editable && group.item.target}
+            revision={group.item.target ? "new" : "old"}
           />
         ) : (
           <RichRun
@@ -261,6 +267,7 @@ function RichRun({
           mark={item.mark}
           ranges={item.ranges}
           target
+          revision="new"
         />
       ))}
     </EditableRichRun>
@@ -329,12 +336,11 @@ function Inline({ text, ranges }: { text: string; ranges?: Range[] }) {
             return <code key={index}>{content}</code>;
           case "link":
             // The rendered document shows the link's text rather than its
-            // syntax. It is not navigable: the tab renders no affordance that
-            // acts on anything (DFV-FR-06).
+            // syntax. A click follows it (DFV-FR-QJRW).
             return (
-              <a key={index} title={span.href} aria-disabled>
+              <StaticLink key={index} href={span.href}>
                 {content}
-              </a>
+              </StaticLink>
             );
           case "comment":
             // DFV-FR-NJIS: a comment is a chip, inert on this side.
@@ -628,6 +634,7 @@ export function RichSideBySide({
                   block={pair.old}
                   mark={pair.changed ? "removed" : "none"}
                   ranges={words.old}
+                  revision="old"
                 />
               ) : (
                 <div
@@ -660,6 +667,7 @@ export function RichSideBySide({
                   mark={item.mark}
                   ranges={item.ranges}
                   target={editing != null}
+                  revision="new"
                 />
               )}
             </div>

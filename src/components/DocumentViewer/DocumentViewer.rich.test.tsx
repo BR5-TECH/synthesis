@@ -155,7 +155,8 @@ describe("DTV-FR-SSQI: the typographic roles", () => {
     // The rich surface carries the shared Rich Markdown class of the Editor.
     expect(region.querySelector(".doc.document-viewer__rich")).not.toBeNull();
     const base = sheet("colors_and_type.css");
-    const doc = blocksFor(base, ".doc");
+    // SNV-FR-TLXS adds a second `.doc` rule, for selection only.
+    const doc = blocksFor(base, ".doc").filter((b) => decl(b, "font-family") !== null);
     expect(doc).toHaveLength(1);
     expect(decl(doc[0], "font-family")).toBe("var(--font-rich-family)");
   });

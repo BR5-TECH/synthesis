@@ -1,7 +1,8 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 
 import { FRONTMATTER_RE, markdownExtensions } from "./markdownFidelity";
+import { useRichLinkHost } from "./linkFollow";
 import type { EditMode } from "../state/editHistory";
 
 /**
@@ -57,12 +58,17 @@ export function DraftVersionReading({
     [text],
   );
   const rich = mode === "wysiwyg";
+  // NAW-FR-RUPR / DCR-FR-HFUZ: the host of the tab that shows the reading says
+  // where a file link goes. With none, only external links and fragments work.
+  const linkHost = useRichLinkHost();
+  const linkHostRef = useRef(linkHost);
+  linkHostRef.current = linkHost;
 
   const editor = useEditor(
     {
       // The Editor's own extension set, so a construct that renders as itself
       // there renders as itself here (EDT-FR-68).
-      extensions: markdownExtensions(),
+      extensions: markdownExtensions([], { linkHost: () => linkHostRef.current }),
       editorProps: {
         attributes: {
           // `doc` is what typesets an Editor tab's WYSIWYG surface, so a version

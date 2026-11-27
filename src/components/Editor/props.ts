@@ -1,3 +1,4 @@
+import type { LinkPlace } from "../linkFollow";
 import type { ReactNode } from "react";
 
 import type { DiagramChange } from "../DraftDiscussion/diagramFence";
@@ -251,4 +252,10 @@ export interface EditorProps {
    * pass `true`; it shows over a Markdown file alone.
    */
   toc?: boolean;
+  /**
+   * EDT-FR-QBIE: where the file links of the surface resolve. Absent for an
+   * Editor tab on a project file, which resolves against that file. `null`
+   * resolves no file link.
+   */
+  linkPlace?: LinkPlace | null;
 }

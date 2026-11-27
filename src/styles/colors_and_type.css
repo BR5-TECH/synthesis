@@ -522,6 +522,10 @@ html, body {
 .doc em { font-style: italic; }
 .doc a  { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); }
 .doc a:hover { border-bottom-style: solid; }
+/* EDT-FR-BBIF: the hand pointer on a link that a click follows. */
+.doc[contenteditable="false"] a[href],
+.link-modifier-held .doc[contenteditable="true"] a[href],
+.doc a.diff-link { cursor: pointer; }
 .doc blockquote {
   border-left: 2px solid var(--border-3);
   padding: var(--sp-1) 0 var(--sp-1) var(--sp-4);

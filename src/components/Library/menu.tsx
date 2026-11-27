@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { logError } from "../../logging";
 import { ARTIFACT_TYPES } from "../../artifactTypes";
 import { Icon } from "../icons";
+import { fileManagerLabel } from "../../platform";
+import { OpenInSubmenu, type TerminalTabEntry } from "./OpenInSubmenu";
+import { useInsideWindow, useSubmenuIntent, useSubmenuShift } from "./menuPlacement";
 import type { ArtifactType, TreeNode } from "../../types";
 
 // LCM-FR-01: the single declarative action-applicability mapping. Each context-
@@ -9,7 +12,7 @@ import type { ArtifactType, TreeNode } from "../../types";
 // applies to; the menu render below only consults this map and never re-derives
 // availability, so retargeting an action is a one-line edit here. Notes is
 // offered for any artifact file (a file node with a resolved type, Flows
-// included); Delete/Copy/Rename and the
+// included); Delete/Copy/Rename, the Open In submenu (LCM-FR-WBHG), and the
 // Artifact Type submenu are universal; Paste and the three creation entries — New
 // File, New Artifact and New Folder — are folder-only (LCM-FR-08, LCM-FR-09,
 // LCM-FR-10).
@@ -22,6 +25,7 @@ type MenuAction =
   | "copy"
   | "paste"
   | "rename"
+  | "openIn"
   | "artifactType";
 
 const ACTION_APPLIES: Record<MenuAction, (node: TreeNode) => boolean> = {
@@ -33,6 +37,7 @@ const ACTION_APPLIES: Record<MenuAction, (node: TreeNode) => boolean> = {
   copy: () => true,
   paste: (n) => n.nodeKind === "folder",
   rename: () => true,
+  openIn: () => true,
   artifactType: () => true };
 
 export interface ContextMenuState {
@@ -56,6 +61,11 @@ interface ContextMenuProps extends ContextMenuState {
   onCopy: () => void;
   onPaste: () => void;
   onRename: (newName: string) => void;
+  // LCM-FR-WBHG: the three **Open In** entries.
+  terminalTab: TerminalTabEntry;
+  onSystemTerminal: () => void;
+  onTerminalTab: () => void;
+  onRevealInFileManager: () => void;
 }
 
 // Why a rename was rejected client-side, or null when it is valid (LCM-FR-02,
@@ -211,15 +221,24 @@ export function ContextMenu({
   onDelete,
   onCopy,
   onPaste,
-  onRename }: ContextMenuProps) {
+  onRename,
+  terminalTab,
+  onSystemTerminal,
+  onTerminalTab,
+  onRevealInFileManager }: ContextMenuProps) {
   // "menu" is the root list; "rename" swaps in a rename input. Delete has no
   // mode of its own: it acts directly (LCM-FR-11), and the only prompt in the
   // flow is the recursive-delete window the *backend* triggers by reporting a
   // folder non-empty.
   const [mode, setMode] = useState<"menu" | "rename">("menu");
-  // Whether the nested **Artifact Type** submenu is expanded (LCM-FR-04). It
-  // opens on mouse-over of its parent entry, without a click.
-  const [assignOpen, setAssignOpen] = useState(false);
+  // The open nested submenu, or null: **Artifact Type** (LCM-FR-04) or
+  // **Open In** (LCM-FR-WBHG). Each opens on mouse-over of its parent entry,
+  // without a click, and one state holds both so that at most one is open.
+  // Hover between them has intent (LCM-FR-UCJY).
+  const sub = useSubmenuIntent<"assign" | "openIn">();
+  const assignOpen = sub.open === "assign";
+  // LCM-FR-PDXH: the Artifact Type submenu moves up to fit the window.
+  const assignShift = useSubmenuShift(assignOpen);
   const [nameDraft, setNameDraft] = useState(node.name);
   // Why the last rename attempt was rejected client-side, or null. The input
   // stays open carrying the offending value so the user can correct it rather
@@ -228,6 +247,8 @@ export function ContextMenu({
 
   /** The menu's own frame, so a press inside it is not an outside one. */
   const frameRef = useRef<HTMLDivElement | null>(null);
+  // LCM-FR-PDXH: the menu moves up or left to fit the window.
+  const position = useInsideWindow(frameRef, x, y);
 
   // The menu dismisses on an outside click or on Escape, in any mode and without
   // invoking an action (LCM non-functional requirement).
@@ -290,8 +311,8 @@ export function ContextMenu({
 
   const wrapperStyle: React.CSSProperties = {
     position: "fixed",
-    left: x,
-    top: y,
+    left: position.left,
+    top: position.top,
     zIndex: 200 };
 
   if (mode === "rename") {
@@ -410,21 +431,36 @@ export function ContextMenu({
 
       <div className="menu-sep"></div>
 
+      {/* LCM-FR-WBHG: **Open In**, between Rename and Artifact Type. */}
+      {can("openIn") && (
+        <OpenInSubmenu
+          open={sub.open === "openIn"}
+          onEnter={() => sub.enter("openIn")}
+          onLeave={sub.leave}
+          onOpenClick={() => sub.click("openIn")}
+          fileManagerLabel={fileManagerLabel()}
+          terminalTab={terminalTab}
+          onSystemTerminal={onSystemTerminal}
+          onTerminalTab={onTerminalTab}
+          onRevealInFileManager={onRevealInFileManager}
+        />
+      )}
+
       {/* LCM-FR-04: the nested **Artifact Type** submenu. It opens on mouse-over
           and carries its own leading icon (LCM-FR-04 / LCM-FR-07). It lists the
           ten types and, after a divider, **Clear Type** at the very bottom
           (LCM-FR-04). */}
       <div
         className="menu-item--parent"
-        onMouseEnter={() => setAssignOpen(true)}
-        onMouseLeave={() => setAssignOpen(false)}
+        onMouseEnter={() => sub.enter("assign")}
+        onMouseLeave={sub.leave}
       >
         <div
           className="menu-item"
           aria-expanded={assignOpen}
           // Hover is the primary opener; a click also opens (never closes) so
           // the submenu is reachable without a pointer that can hover.
-          onClick={() => setAssignOpen(true)}
+          onClick={() => sub.click("assign")}
         >
           <Icon.Tag size={13} /> Artifact Type
           <span className="menu-item__kbd">
@@ -432,7 +468,7 @@ export function ContextMenu({
           </span>
         </div>
         {assignOpen && (
-          <div className="menu menu--sub">
+          <div className="menu menu--sub" ref={assignShift.ref} style={assignShift.style}>
             {ARTIFACT_TYPES.map((t) => {
               const TypeIcon = t.icon;
               return (

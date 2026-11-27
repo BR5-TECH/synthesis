@@ -66,6 +66,7 @@ pub mod new_draft_proposals;
 pub mod notes;
 pub mod notifications;
 mod onnx_runtime;
+pub mod open_in;
 pub mod openspec;
 pub mod openspec_archive;
 pub mod progress;
@@ -359,6 +360,8 @@ pub fn run() {
             library::clear_artifact_type,
             library::delete_path,
             library::rename_path,
+            open_in::open_in_system_terminal,
+            open_in::reveal_in_file_manager,
             library::copy_path_into_folder,
             library::create_file,
             library::create_folder,

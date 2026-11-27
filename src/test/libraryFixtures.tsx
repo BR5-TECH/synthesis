@@ -18,6 +18,7 @@ import { useLibraryPanelState } from "../hooks/useLibraryPanelState";
 import type {
   LibraryPanelState,
   OpenableArtifact,
+  TerminalSummary,
   TreeNode,
 } from "../types";
 
@@ -130,6 +131,8 @@ export function LibraryHost({
   onNewFolder = vi.fn(),
   revealId,
   onViewSpecMap,
+  onOpenTerminal,
+  hasActiveWorktree,
 }: {
   surface?: "library" | "other";
   onOpenArtifact?: (node: OpenableArtifact) => void;
@@ -139,6 +142,8 @@ export function LibraryHost({
   onNewFolder?: (folder: TreeNode) => void;
   revealId?: string | null;
   onViewSpecMap?: () => void;
+  onOpenTerminal?: (session: TerminalSummary) => void;
+  hasActiveWorktree?: boolean;
 }) {
   const panel = useLibraryPanelState();
   // The panel takes a nonce-bearing request rather than a bare id (LIB-FR-18).
@@ -172,6 +177,8 @@ export function LibraryHost({
       onNewFolder={onNewFolder}
       reveal={reveal}
       onViewSpecMap={onViewSpecMap}
+      onOpenTerminal={onOpenTerminal}
+      hasActiveWorktree={hasActiveWorktree}
     />
   );
 }

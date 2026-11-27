@@ -29,3 +29,12 @@ export function isWindowsPlatform(navigatorPlatform: string = globalThis.navigat
 export function isMacPlatform(navigatorPlatform: string = globalThis.navigator?.platform ?? ""): boolean {
   return /mac/i.test(navigatorPlatform);
 }
+
+/** LCM-FR-VTLR: the name of the platform file manager. */
+export function fileManagerLabel(
+  navigatorPlatform: string = globalThis.navigator?.platform ?? "",
+): "Finder" | "Explorer" | "File Manager" {
+  if (isMacPlatform(navigatorPlatform)) return "Finder";
+  if (isWindowsPlatform(navigatorPlatform)) return "Explorer";
+  return "File Manager";
+}

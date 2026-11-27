@@ -63,10 +63,11 @@ pub async fn create_terminal(
     target: TargetRef,
     kind: TerminalKind,
     vendor: Option<CliVendor>,
+    start_folder: Option<String>,
 ) -> Result<TerminalSummary, TerminalError> {
     let worker = app.clone();
     let result = crate::project_scope::context::spawn_blocking(move || {
-        service::create(&worker, target, kind, vendor)
+        service::create(&worker, target, kind, vendor, start_folder)
     })
     .await
     .unwrap_or_else(|_| Err(TerminalError::new("start_failed")));

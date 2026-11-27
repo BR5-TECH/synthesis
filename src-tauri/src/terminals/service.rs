@@ -134,14 +134,20 @@ fn checkout_path(target: &TargetRef, worktrees: &[targets::WorktreeFact]) -> Opt
     }
 }
 
-/// TRS-FR-YYER .. TRS-FR-XXPE: starts a session.
+/// TRS-FR-YYER .. TRS-FR-XXPE: starts a session. TRS-FR-ZZZN: a Host shell
+/// can start in a folder inside the target's directory.
 pub fn create<R: Runtime>(
     app: &AppHandle<R>,
     target: TargetRef,
     kind: TerminalKind,
     vendor: Option<CliVendor>,
+    start_folder: Option<String>,
 ) -> Result<TerminalSummary, TerminalError> {
     platform_check()?;
+    let start_folder = start_folder.filter(|folder| !folder.is_empty());
+    if start_folder.is_some() && kind != TerminalKind::HostShell {
+        return Err(TerminalError::new("start_folder_unsupported"));
+    }
     let registry = registry(app);
     let facts = gather::project(app)?;
     let all = list_targets(app)?;
@@ -168,6 +174,8 @@ pub fn create<R: Runtime>(
     let worktrees = gather::worktrees(app, facts.root.path()).unwrap_or_default();
     let checkout =
         checkout_path(&target, &worktrees).ok_or_else(|| TerminalError::new("unknown_target"))?;
+    // TRS-FR-ZZZN: a refused start folder starts nothing and records no session.
+    let working_dir = super::host::working_dir(kind, &checkout, start_folder.as_deref())?;
     let runs_in = availability.runs_in;
     let session = registry.add(
         new_terminal_id(),
@@ -188,7 +196,7 @@ pub fn create<R: Runtime>(
         },
     )?;
     if runs_in == RunsIn::Host {
-        if let Err(err) = start_host(app, &session, &facts, &checkout) {
+        if let Err(err) = start_host(app, &session, &facts, &working_dir) {
             // TRS-FR-VGGS: the session stays, exited with its failed start.
             warn(app, "terminal start failed", &session.spec.id, err.code);
             session.start_failed(&err.to_string());

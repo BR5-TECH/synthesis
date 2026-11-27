@@ -379,3 +379,41 @@ fn the_platform_check() {
         assert!(result.is_ok());
     }
 }
+
+// TRS-FR-ZZZN: a start folder with a kind other than a Host shell is refused
+// before anything starts, and no session is recorded.
+#[cfg(unix)]
+#[test]
+fn a_start_folder_with_another_kind_is_refused() {
+    let f = fixture();
+    let handle = f.app.handle().clone();
+    context::run_in("p", || {
+        for kind in
+            [TerminalKind::ContainerShell, TerminalKind::MicrosandboxShell, TerminalKind::AgentCli]
+        {
+            let err = create(&handle, worktree("/r"), kind, None, Some("docs".into())).unwrap_err();
+            assert_eq!(err.code, "start_folder_unsupported");
+        }
+        assert!(registry(&handle).all().is_empty());
+    });
+    assert_eq!(f.announces.load(Ordering::SeqCst), 0);
+}
+
+// TRS-FR-ZZZN: an empty start folder is no start folder, so another kind is
+// not refused for it.
+#[cfg(unix)]
+#[test]
+fn an_empty_start_folder_is_no_start_folder() {
+    let f = fixture();
+    let handle = f.app.handle().clone();
+    context::run_in("p", || {
+        let result = create(
+            &handle,
+            worktree("/r"),
+            TerminalKind::ContainerShell,
+            None,
+            Some(String::new()),
+        );
+        assert_ne!(result.err().map(|e| e.code), Some("start_folder_unsupported"));
+    });
+}

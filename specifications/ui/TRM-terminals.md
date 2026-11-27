@@ -31,7 +31,7 @@ The Terminals panel and the terminal tab let the author open an interactive term
 19. **TRM-FR-PVTT** When the targets are read, the focus goes to the first available kind entry of the active worktree, else to the first entry. The Up and Down arrow keys move the focus between the entries of the menu that holds it. A header and a separator take no focus.
 20. **TRM-FR-VJXC** A pointer over a submenu entry, a click, Enter, or the Right arrow key opens its submenu beside the menu. The keys also put the focus on its first entry. One submenu is open at a time. The Left arrow key or Escape in a submenu closes it, and the focus goes back to its submenu entry.
 21. **TRM-FR-JZPT** Escape in the menu closes it, and the focus goes back to the button that opened it. An activation outside the menu and its submenu closes both. A closed menu creates nothing.
-22. **TRM-FR-FYYB** A click, or Enter, on an available kind entry calls `"create terminal (target, kind, vendor)"` with that entry's target. While the call runs, the menu ignores other choices. On success the menu closes, the new row appears, and its tab opens and takes focus.
+22. **TRM-FR-FYYB** A click, or Enter, on an available kind entry calls `"create terminal (target, kind, vendor, start folder)"` with that entry's target and no start folder. While the call runs, the menu ignores other choices. On success the menu closes, the new row appears, and its tab opens and takes focus.
 23. **TRM-FR-YVPJ** A create that fails keeps the menu open, shows the error under the kind entries of the chosen target, and emits a `WARN` record.
 24. **TRM-FR-IVGX** While a target is busy, its section or its submenu shows the line "A graduation run is working in this target." above its kind entries. The line disables no entry.
 
@@ -148,7 +148,7 @@ Layout notes:
 - **Delegated to backend (abstract)**:
   - `"list terminal targets"` — the targets and kinds of the New terminal menu. Owned by `../core/TRS-terminal-sessions.md`.
   - `"list terminals"` — the panel's rows. Owned by `../core/TRS-terminal-sessions.md`.
-  - `"create terminal (target, kind, vendor)"` — the menu's kind entries. Owned by `../core/TRS-terminal-sessions.md`.
+  - `"create terminal (target, kind, vendor, start folder)"` — the menu's kind entries. Owned by `../core/TRS-terminal-sessions.md`. The **Terminal Tab** entry of the Project panel context menu also creates a session, and its tab opens here (per `LCM-library-context-menu.md` LCM-FR-XWFO).
   - `"attach terminal (id, output)"` — a tab's output. Owned by `../core/TRS-terminal-sessions.md`.
   - `"detach terminal (id)"` — a tab's close. Owned by `../core/TRS-terminal-sessions.md`.
   - `"write terminal input (id, data)"` — keys and pastes. Owned by `../core/TRS-terminal-sessions.md`.

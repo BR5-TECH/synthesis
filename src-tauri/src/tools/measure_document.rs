@@ -31,12 +31,12 @@ mod tests;
 pub const NAME: &str = "measure_document";
 
 /// MDT-FR-YFZQ: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Measure the size of a project file or of a draft's prompt without reading it. Use this before you decide to read a whole document: it tells you how many lines and characters the document holds, an estimate of how many tokens it takes, and whether it is above the size limit for documents in this conversation. Pass `path` for a project file or `draft_id` for a draft, not both. The token count is an estimate, not an exact count. When the document is above the limit, do not read it whole: read only the parts you need, with `offset` and `limit`. It returns no text of the document and changes nothing.";
+pub const DESCRIPTION: &str = "Measure the size of a project file or of a change's prompt without reading it. Use this before you decide to read a whole document: it tells you how many lines and characters the document holds, an estimate of how many tokens it takes, and whether it is above the size limit for documents in this conversation. Pass `path` for a project file or `change_id` for a change, not both. The token count is an estimate, not an exact count. When the document is above the limit, do not read it whole: read only the parts you need, with `offset` and `limit`. It returns no text of the document and changes nothing.";
 
-const PATH_DESCRIPTION: &str = "The project-relative path of a file to measure, exactly as it was reported to you. Leave it out when you pass `draft_id`.";
+const PATH_DESCRIPTION: &str = "The project-relative path of a file to measure, exactly as it was reported to you. Leave it out when you pass `change_id`.";
 
-const DRAFT_ID_DESCRIPTION: &str =
-    "The ID of a draft to measure; its current prompt is measured. Leave it out when you pass `path`.";
+const CHANGE_ID_DESCRIPTION: &str =
+    "The ID of a change to measure; its current prompt is measured. Leave it out when you pass `path`.";
 
 /// The arguments, as the model composed them. Unknown fields are ignored
 /// (TLC-FR-07), and a blank value counts as absent.
@@ -44,7 +44,16 @@ const DRAFT_ID_DESCRIPTION: &str =
 pub struct MeasureDocumentArgs {
     #[serde(default)]
     pub path: Option<String>,
-    #[serde(default, alias = "draftId")]
+    /// `change_id` in the schema (PVC-FR-SQAF). `draft_id` is the earlier
+    /// name, which a stored call of an earlier turn carries, and the schema
+    /// does not show it. The Rust field keeps its internal name (PVC-FR-ODXM).
+    #[serde(
+        default,
+        rename = "change_id",
+        alias = "draft_id",
+        alias = "changeId",
+        alias = "draftId"
+    )]
     pub draft_id: Option<String>,
 }
 
@@ -54,7 +63,7 @@ pub fn parameters() -> serde_json::Value {
         "type": "object",
         "properties": {
             "path": { "type": "string", "description": PATH_DESCRIPTION },
-            "draft_id": { "type": "string", "description": DRAFT_ID_DESCRIPTION },
+            "change_id": { "type": "string", "description": CHANGE_ID_DESCRIPTION },
         },
         // MDT-FR-OTUZ: exactly one is needed, which no schema keyword states,
         // so neither is listed as required.
@@ -117,7 +126,7 @@ fn file_text(root: &crate::fs::RootFs, path: &str) -> Result<String, ToolRefusal
     root.read_text(&absolute).map_err(file_refusal)
 }
 
-/// MDT-FR-TVWI: the live prompt of a draft, on the terms of `read_draft`.
+/// MDT-FR-TVWI: the live prompt of a draft, on the terms of `read_change`.
 fn draft_text(root: &crate::fs::RootFs, draft_id: &str) -> Result<String, ToolRefusal> {
     crate::drafts::read_draft_prompt(root, draft_id).map(|d| d.content).map_err(|error| match error
         .as_str()

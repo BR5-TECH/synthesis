@@ -169,7 +169,7 @@ describe("DraftInformationModal", () => {
     expect(labels.slice(0, 7)).toEqual([
       "Time spent editing",
       "AI interactions",
-      "Draft edits",
+      "Change edits",
       "Accepted proposals",
       "Rejected proposals",
       "Input",
@@ -283,7 +283,7 @@ describe("DraftInformationModal", () => {
     invokeMock.mockReset();
     renderModal(statistics({ boundaryAt: null }));
     expect(
-      await screen.findByText("Nothing has been captured for this draft yet."),
+      await screen.findByText("Nothing has been captured for this change yet."),
     ).toBeInTheDocument();
     // DFI-FR-NTPG: opening the modal records nothing of any kind — its two
     // calls are both reads.
@@ -347,7 +347,7 @@ describe("DraftInformationModal", () => {
       <DraftInformationModal draftId="d-1" draftName="artifact-window" onClose={vi.fn()} />,
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "This draft's statistics could not be read.",
+      "This change's statistics could not be read.",
     );
     expect(screen.queryByText("0")).toBeNull();
 

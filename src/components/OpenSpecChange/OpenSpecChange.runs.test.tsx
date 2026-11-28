@@ -246,7 +246,7 @@ describe("Apply (OCW-FR-DTJD, OCW-FR-NNRY, OCW-FR-EKYF)", () => {
     await userEvent.click(apply());
     const refusal = await screen.findByTestId("openspec-apply-refusal");
     expect(within(refusal).getByRole("alert")).toHaveTextContent(
-      `The change "${CHANGE}" has tasks that are not done. No run started.`,
+      `The OpenSpec change "${CHANGE}" has tasks that are not done. No run started.`,
     );
     expect(refusal).not.toHaveTextContent("this change");
   });
@@ -266,10 +266,10 @@ describe("Apply (OCW-FR-DTJD, OCW-FR-NNRY, OCW-FR-EKYF)", () => {
     await userEvent.click(apply());
     const refusal = await screen.findByTestId("openspec-apply-refusal");
     expect(within(refusal).getByRole("alert")).toHaveTextContent(
-      "The change misses these artifacts: design, tasks. Complete them before Apply. No run started.",
+      "The OpenSpec change misses these artifacts: design, tasks. Complete them before Apply. No run started.",
     );
-    // OFN-FR-RLSO: the tab of the change offers no Open change.
-    expect(within(refusal).queryByRole("button", { name: "Open change" })).toBeNull();
+    // OFN-FR-RLSO: the tab of the change offers no Open OpenSpec change.
+    expect(within(refusal).queryByRole("button", { name: "Open OpenSpec change" })).toBeNull();
     await userEvent.click(within(refusal).getByRole("button", { name: /Details/ }));
     expect(within(refusal).getAllByTestId("openspec-failure-diagnostic").map((d) => d.textContent)).toEqual([
       "error: Missing artifact: design",
@@ -370,7 +370,7 @@ describe("the run strip (OCW-FR-JHAB, OCW-FR-YTGJ, OCW-FR-BTSI, OCW-FR-FAEL)", (
       }),
     ];
     await opened();
-    expect(await screen.findByTestId("openspec-run-strip")).toHaveTextContent("Committed one change on the work stream.");
+    expect(await screen.findByTestId("openspec-run-strip")).toHaveTextContent("Made one commit on the work stream.");
     await userEvent.click(within(strip()).getByRole("button", { name: "Close" }));
     expect(screen.queryByTestId("openspec-run-strip")).toBeNull();
 

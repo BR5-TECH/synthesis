@@ -164,12 +164,12 @@ describe("activating a status bar row through the shell (STB-FR-RWPD, STB-FR-DNL
     inFlight = [
       op(2, {
         kind: "graduation",
-        label: "Graduating Editor scroll fix…",
+        label: "Implementing Editor scroll fix…",
         activation: { type: "graduation_run", runId: "r-2" },
       }),
       op(1, {
         kind: "graduation",
-        label: "Graduating Empty state…",
+        label: "Implementing Empty state…",
         activation: { type: "graduation_run", runId: "r-1" },
       }),
     ];
@@ -178,7 +178,7 @@ describe("activating a status bar row through the shell (STB-FR-RWPD, STB-FR-DNL
     const overlay = await openOverlay();
     await userEvent.click(
       within(overlay).getByRole("button", {
-        name: "Graduating Empty state… — open graduation run",
+        name: "Implementing Empty state… — open implementation run",
       }),
     );
 
@@ -191,12 +191,12 @@ describe("activating a status bar row through the shell (STB-FR-RWPD, STB-FR-DNL
     inFlight = [
       op(2, {
         kind: "graduation",
-        label: "Graduating Editor scroll fix…",
+        label: "Implementing Editor scroll fix…",
         activation: { type: "graduation_run", runId: "r-2" },
       }),
       op(1, {
         kind: "graduation",
-        label: "Graduating Empty state…",
+        label: "Implementing Empty state…",
         activation: { type: "graduation_run", runId: "r-1" },
       }),
     ];
@@ -204,7 +204,7 @@ describe("activating a status bar row through the shell (STB-FR-RWPD, STB-FR-DNL
     await enterIde();
     await userEvent.click(
       within(await openOverlay()).getByRole("button", {
-        name: "Graduating Editor scroll fix… — open graduation run",
+        name: "Implementing Editor scroll fix… — open implementation run",
       }),
     );
     const region = await screen.findByLabelText("The selected run");
@@ -212,7 +212,7 @@ describe("activating a status bar row through the shell (STB-FR-RWPD, STB-FR-DNL
 
     await userEvent.click(
       within(await openOverlay()).getByRole("button", {
-        name: "Graduating Empty state… — open graduation run",
+        name: "Implementing Empty state… — open implementation run",
       }),
     );
     await waitFor(() =>

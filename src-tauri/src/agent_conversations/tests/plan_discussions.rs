@@ -139,13 +139,13 @@ fn the_state_of_a_file_discussion_holds_the_rows_of_its_proposals() {
     .expect("a proposal");
     let state = state_of(&build_input(roots, &origin, &trigger));
     assert!(state.contains("Plan proposals of this discussion:"), "{state}");
-    assert!(state.contains("- proposal 1 row \"a\": new draft \"Payments\": waiting"), "{state}");
+    assert!(state.contains("- proposal 1 row \"a\": new change \"Payments\": waiting"), "{state}");
     assert!(!state.contains("Focus:"), "no Map focus: {state}");
 
     crate::map_plan::accept_row(&h.app.handle().clone(), &thread.id, &proposal.id, "a")
         .expect("an accept");
     let state = state_of(&build_input(roots, &origin, &trigger));
-    assert!(state.contains("\"Payments\": accepted (draft created)"), "{state}");
+    assert!(state.contains("\"Payments\": accepted (change created)"), "{state}");
 }
 
 // CVL-FR-JMEP: the prompts of the file, draft, note, and change discussions and
@@ -170,7 +170,7 @@ fn the_prompts_of_every_discussion_describe_the_plan_tools() {
             "The author reviews each row alone, in this tab.",
             "search the plan, so that you do not propose an issue that the plan holds already",
             "say that you could not read or change the plan",
-            "Nothing reaches GitHub, and no draft is created, before the author accepts the row that does it.",
+            "Nothing reaches GitHub, and no change is created, before the author accepts the row that does it.",
         ] {
             assert!(template.contains(needle), "{kind:?} lacks {needle:?}");
         }

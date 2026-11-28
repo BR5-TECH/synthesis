@@ -87,9 +87,9 @@ function region(run: GraduationRun) {
 }
 
 describe("a propose run", () => {
-  it("GRU-FR-LTWN: a completed propose run offers Open change, which opens its change on its stream", async () => {
+  it("GRU-FR-LTWN: a completed propose run offers Open OpenSpec change, which opens its change on its stream", async () => {
     row(propose("completed"));
-    await userEvent.click(screen.getByRole("button", { name: "Open change" }));
+    await userEvent.click(screen.getByRole("button", { name: "Open OpenSpec change" }));
     expect(open).toHaveBeenCalledWith(
       { kind: "stream", streamId: "s-7" },
       "add-logout-3f2a",
@@ -107,16 +107,16 @@ describe("a propose run", () => {
     "failed",
     "discarded",
   ])(
-    "GRU-FR-LTWN: a propose run in %s offers no Open change",
+    "GRU-FR-LTWN: a propose run in %s offers no Open OpenSpec change",
     (state) => {
       row(propose(state));
-      expect(screen.queryByRole("button", { name: "Open change" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Open OpenSpec change" })).toBeNull();
     },
   );
 
-  it("GRU-FR-LTWN: a completed draft run offers no Open change", () => {
+  it("GRU-FR-LTWN: a completed draft run offers no Open OpenSpec change", () => {
     row(makeRun("r2", "completed"));
-    expect(screen.queryByRole("button", { name: "Open change" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open OpenSpec change" })).toBeNull();
   });
 
   it.each<GraduationRunState>([

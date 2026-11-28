@@ -42,12 +42,13 @@ pub enum DraftEvent {
 }
 
 impl DraftEvent {
-    /// PST-FR-YWXF: the words the commit message opens with.
+    /// PST-FR-YWXF, PVC-FR-MBQE: the verb of the commit subject, in the words
+    /// of the author. A graduation start is an implementation (PVC-FR-ZQRE).
     fn verb(self) -> &'static str {
         match self {
             Self::Created => "create",
             Self::Deleted => "delete",
-            Self::GraduationStarted => "graduate",
+            Self::GraduationStarted => "implement",
         }
     }
 
@@ -63,14 +64,16 @@ impl DraftEvent {
     }
 }
 
-/// PST-FR-YWXF: the message of one draft-event commit — the event and the
-/// draft's current name, and nothing else.
+/// PST-FR-YWXF, PVC-FR-MBQE: the message of one draft-event commit — the event
+/// and the draft's current name, and nothing else. The subject calls the draft
+/// a change. A commit that an older build made keeps its `draft:` subject, and
+/// nothing reads that subject back.
 ///
 /// A control character in the name, a line break above all, would turn the
 /// one-line message into a subject and a body, so each one is read as a space.
 pub fn message(event: DraftEvent, draft_name: &str) -> String {
     let name: String = draft_name.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
-    format!("draft: {} \"{}\"", event.verb(), name.trim())
+    format!("change: {} \"{}\"", event.verb(), name.trim())
 }
 
 /// Why a commit was not taken. Each is a silent no-op rather than a fault

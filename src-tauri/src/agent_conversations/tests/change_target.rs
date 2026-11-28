@@ -371,7 +371,7 @@ fn the_history_of_a_change_turn_ends_with_the_split() {
     let state = input.iter().find(|s| s.tag == TAG_DISCUSSION_STATE).expect("state");
     assert!(state
         .body
-        .contains(&format!("The split {} of this change, not confirmed", record.set_id)));
+        .contains(&format!("The split {} of this OpenSpec change, not confirmed", record.set_id)));
     assert!(state.body.contains("Part one only."), "the pending files are shown");
     assert!(!history.body.contains("Part one only."), "not in the history");
     assert!(history
@@ -401,18 +401,18 @@ fn a_change_turn_records_into_the_change_statistics() {
     assert!(!h.root.path().join("statistics").exists(), "no draft log");
 }
 
-// CVL-FR-BOFI: the change prompt says how a split is made.
+// CVL-FR-BOFI, PVC-FR-NEXL: the change prompt says how a split is made.
 #[test]
 fn the_change_prompt_explains_the_split() {
-    assert!(DISCUSS_CHANGE_PROMPT_TEMPLATE.contains("## Splitting the change"));
-    assert!(DISCUSS_CHANGE_PROMPT_TEMPLATE.contains("one new change at a time"));
+    assert!(DISCUSS_CHANGE_PROMPT_TEMPLATE.contains("## Splitting the OpenSpec change"));
+    assert!(DISCUSS_CHANGE_PROMPT_TEMPLATE.contains("one new OpenSpec change at a time"));
 }
 
 // CVL-FR-NTUH: the change prompt says how an action is asked for, that only
 // the author's confirmation starts a run, and when the agent may confirm.
 #[test]
 fn the_change_prompt_explains_the_change_actions() {
-    assert!(DISCUSS_CHANGE_PROMPT_TEMPLATE.contains("## Applying or reworking the change"));
+    assert!(DISCUSS_CHANGE_PROMPT_TEMPLATE.contains("## Applying or reworking the OpenSpec change"));
     assert!(DISCUSS_CHANGE_PROMPT_TEMPLATE.contains("Only the author's confirmation starts a run"));
     assert!(DISCUSS_CHANGE_PROMPT_TEMPLATE.contains("latest comment says explicitly to go ahead"));
 }

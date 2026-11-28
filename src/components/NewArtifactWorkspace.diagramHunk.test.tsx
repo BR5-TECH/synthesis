@@ -181,7 +181,7 @@ const callsTo = (cmd: string) =>
 
 /** The block that a diagram hunk draws, once the review is up. */
 async function block(id = "h1") {
-  await screen.findByRole("region", { name: "Proposed changes" });
+  await screen.findByRole("region", { name: "Proposed edits" });
   return waitFor(() => {
     const el = document.querySelector<HTMLElement>(`[data-hunk="${id}"]`);
     expect(el).not.toBeNull();
@@ -212,7 +212,7 @@ describe("a diagram hunk that changes a diagram (DCR-FR-JKVA, DCR-FR-XNPE)", () 
     mount();
     const drawn = await block();
     expect(drawn).toHaveClass("hunk--add", "hunk--diagram");
-    expect(drawn).toHaveAccessibleName(/^Change 1 of 1, diagram change proposed by .*arch/);
+    expect(drawn).toHaveAccessibleName(/^Edit 1 of 1, diagram edit proposed by .*arch/);
     await waitFor(() => expect(drawn.querySelector("svg")).not.toBeNull());
     expect(drawn.querySelector("svg")?.getAttribute("data-source")).toContain("B --> C");
     // The old fence stays in the document, and is only hidden.
@@ -222,7 +222,7 @@ describe("a diagram hunk that changes a diagram (DCR-FR-JKVA, DCR-FR-XNPE)", () 
     // DCR-FR-WTCQ: no editing surface and no edit write.
     expect(drawn.querySelector("[contenteditable='true'], textarea")).toBeNull();
     // DCR-FR-BYSX: counted as any hunk is.
-    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing change 1 of 1");
+    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing edit 1 of 1");
     await letWriteLand();
     expect(callsTo("save_draft_file_contents")).toEqual([]);
     expect(callsTo("edit_draft_change_hunk")).toEqual([]);
@@ -283,7 +283,7 @@ describe("a diagram hunk that adds or removes a diagram (DCR-FR-JKVA)", () => {
     const marked = document.querySelector<HTMLElement>(".hunk--diagram-marked");
     expect(marked).toHaveClass("hunk--rejected");
     expect(document.querySelector(".hunk--diagram-foot")).toHaveTextContent(
-      "Diagram change rejected",
+      "Diagram edit rejected",
     );
     // DCR-FR-HBTM: Accept, Discuss, and Compare, and no Reject.
     expect(await screen.findByRole("button", { name: "Compare diagrams" })).toBeInTheDocument();
@@ -298,7 +298,7 @@ describe("a diagram hunk the document cannot place (DCR-FR-BYSX, DCR-FR-31)", ()
   it("DCR-FR-BYSX, DCR-FR-31: it is counted and decidable, and the bar says it is not drawn", async () => {
     backend([{ ...CHANGE, before: "```mermaid\nflowchart TD\n  Q --> R\n```" }]);
     renderWorkspace();
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
     expect(await screen.findByText(/not shown in the document/i)).toBeInTheDocument();
     expect(document.querySelector("[data-hunk]")).toBeNull();
     expect(screen.getByRole("button", { name: /accept all/i })).toBeEnabled();
@@ -501,11 +501,11 @@ describe("a diagram hunk among the hunks of a proposal (DCR-FR-BYSX)", () => {
     mount();
     await block("h1");
     await block("h2");
-    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing change 1 of 2");
+    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing edit 1 of 2");
     const marks = within(screen.getByTestId("hunk-gutter-map")).getAllByRole("button");
     expect(marks).toHaveLength(2);
     expect(marks[0]).toHaveAttribute("data-kind", "replace");
-    expect(marks[0]).toHaveAccessibleName(/diagram change/);
+    expect(marks[0]).toHaveAccessibleName(/diagram edit/);
     expect(marks[1]).toHaveAccessibleName(/replacement/);
     // Only the diagram hunk has Compare, and only text is editable.
     expect(document.querySelector(".hunk--add[data-hunk='h2'] .hunk__doc")).not.toBeNull();

@@ -114,7 +114,7 @@ pub(in crate::agent_conversations) fn open_proposal_text_within(
 ) -> Option<String> {
     let (path, hunks) = open_hunks(roots, target)?;
     let mut text = format!(
-        "\nThe open proposal to {path}, every change in proposal order. When the author names a change by its place, it is the change with that place:\n"
+        "\nThe open proposal to {path}, every edit in proposal order. When the author names an edit by its place, it is the edit with that place:\n"
     );
     let total = hunks.len();
     let mut place = 0;
@@ -154,7 +154,7 @@ pub(in crate::agent_conversations) fn open_proposal_text_within(
 
 /// AGC-FR-MATQ: the line that counts the hunks a bounded proposal left out.
 fn more_changes_line(count: usize) -> String {
-    format!("  …and {count} more changes.\n")
+    format!("  …and {count} more edits.\n")
 }
 
 #[cfg(test)]

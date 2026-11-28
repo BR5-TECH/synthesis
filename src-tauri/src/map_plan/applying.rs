@@ -168,7 +168,7 @@ fn create_draft<R: tauri::Runtime>(
     store: &RootFs,
     fields: &NewDraftFields,
 ) -> Applied {
-    let fail = || failed(ERR_DRAFT_CREATE_FAILED, "The draft could not be created.");
+    let fail = || failed(ERR_DRAFT_CREATE_FAILED, "The change could not be created.");
     let Ok(root) = project.require_root() else { return fail() };
     let Ok(created) = crate::drafts::create_draft_impl(&root, Some(&fields.name), None) else {
         return fail();

@@ -159,7 +159,7 @@ export function seedRaisedEntries(
  * of a draft (GRU-FR-ZKYU).
  */
 export function raiseTitle(run: GraduationRun, stateWord: string): string {
-  return run.merge ? `Merge · ${stateWord}` : `Graduation · ${stateWord}`;
+  return run.merge ? `Merge · ${stateWord}` : `Implementation · ${stateWord}`;
 }
 
 /**

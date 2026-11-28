@@ -288,6 +288,6 @@ describe("find and replace over the live prompt (NAW-FR-57 … NAW-FR-59)", () =
       await screen.findByText(/kept as the record of what the specification/),
     ).toBeInTheDocument();
     await openActions();
-    expect(screen.getByRole("menuitem", { name: "Graduate" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Implement" })).toBeDisabled();
   });
 });

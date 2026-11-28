@@ -125,7 +125,7 @@ describe("New Artifact workspace — Copy as Source", () => {
       screen.getAllByRole("menuitem").map((e) => e.textContent?.trim()),
     ).toEqual([
       "Discuss",
-      "Graduate",
+      "Implement",
       "Copy as Source",
       "Publish to GitHub",
       "Archive",
@@ -247,7 +247,7 @@ describe("New Artifact workspace — Copy as Source", () => {
     ["published", "published", null],
     ["graduated", "graduated", null],
     ["github_shadow", "github_shadow", null],
-    ["held by a graduation run", "active", held],
+    ["held by an implementation run", "active", held],
   ];
   it.each(cases)(
     "NAW-FR-FJXX, NAW-FR-44, NAW-FR-AXFQ: Copy as Source is enabled on a draft that is %s",
@@ -284,7 +284,7 @@ describe("New Artifact workspace — Copy as Source", () => {
         // NAW-FR-44: the lock has landed, so Graduate is disabled by now.
         await waitFor(() =>
           expect(
-            screen.getByRole("menuitem", { name: "Graduate" }),
+            screen.getByRole("menuitem", { name: "Implement" }),
           ).toBeDisabled(),
         );
       }
@@ -357,9 +357,9 @@ describe("New Artifact workspace — Copy as Source", () => {
       },
     ]);
     expect(COPY_FAILED_KEY).toBe("draft-copy-failed");
-    expect(COPY_FAILED_TITLE).toBe("Draft not copied");
+    expect(COPY_FAILED_TITLE).toBe("Change not copied");
     expect(COPY_FAILED_BODY).toBe(
-      "The prompt of the draft was not copied to the clipboard.",
+      "The prompt of the change was not copied to the clipboard.",
     );
     // No other message shows, and nothing reached the backend.
     expect(screen.queryAllByRole("alert")).toEqual([]);

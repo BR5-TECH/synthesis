@@ -445,7 +445,7 @@ describe("Semantic results on the full results page (SCH-FR-LTSO / SCH-FR-RAAU)"
       emitEnded(bus, lastSearchId());
     });
     expect(await screen.findByText("Documents")).toBeInTheDocument();
-    expect(screen.getByText("Drafts")).toBeInTheDocument();
+    expect(screen.getByText("Changes")).toBeInTheDocument();
     expect(screen.queryByText("Files")).toBeNull();
     expect(screen.getByText("How a worktree is torn down.")).toBeInTheDocument();
     expect(screen.getByText("Rate limits of the interface.")).toBeInTheDocument();

@@ -254,7 +254,7 @@ export const folderRow = (name: string) =>
 
 /** A draft row, by the name it renders. */
 export const draftRow = (name: string) =>
-  screen.getByRole("treeitem", { name: new RegExp(`^Draft ${name}(,|$)`) });
+  screen.getByRole("treeitem", { name: new RegExp(`^Change ${name}(,|$)`) });
 
 /**
  * DRP-FR-22: a row's menu is opened by right-clicking the row, the way the

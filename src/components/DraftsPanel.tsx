@@ -747,7 +747,7 @@ export function DraftsPanel({
     setSelected(itemKey(moved));
     focusNext.current = itemKey(moved);
     setAnnouncement(
-      `${label} moved to ${destination === ROOT ? "Drafts" : destination}.`,
+      `${label} moved to ${destination === ROOT ? "Changes" : destination}.`,
     );
     onDraftChanged();
   };

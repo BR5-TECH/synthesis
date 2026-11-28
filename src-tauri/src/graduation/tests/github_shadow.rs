@@ -86,7 +86,7 @@ fn a_shadow_draft_is_admitted_to_graduation() {
     assert_eq!(run.input.prompt, "Make the login page load.\n");
     // GSU-FR-RNOM / PST-FR-YWXF: an enqueued start asks for one
     // graduation-start commit, named for the draft.
-    assert_eq!(graduation_events(), vec!["draft: graduate \"Fix the login page\"".to_string()]);
+    assert_eq!(graduation_events(), vec!["change: implement \"Fix the login page\"".to_string()]);
     // DRS-FR-JYIO: the graduation lock applies to it unchanged.
     assert!(crate::graduation::require_unlocked_draft(&fx.app, &draft).is_err());
 }

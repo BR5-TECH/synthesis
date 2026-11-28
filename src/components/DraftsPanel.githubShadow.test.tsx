@@ -79,7 +79,7 @@ describe("GitHub-shadow rows", () => {
     drafts = [shadow({ status: "graduated" })];
     renderPanel();
     const row = await waitFor(() => draftRow("cache-invalidation"));
-    expect(within(row).getByTestId("draft-graduated-marker")).toHaveTextContent("Graduated");
+    expect(within(row).getByTestId("draft-graduated-marker")).toHaveTextContent("Implemented");
     expect(within(row).queryByTestId("draft-github-task-marker")).toBeNull();
     expect(within(row).getByTestId("draft-github-marker")).toBeInTheDocument();
   });
@@ -89,12 +89,12 @@ describe("GitHub-shadow rows", () => {
     renderPanel({ filter: "active" });
     await waitFor(() => draftRow("cache-invalidation"));
     expect(draftRow("plain-draft")).toBeInTheDocument();
-    expect(screen.queryByRole("treeitem", { name: /^Draft done-task/ })).toBeNull();
+    expect(screen.queryByRole("treeitem", { name: /^Change done-task/ })).toBeNull();
     cleanup();
 
     renderPanel({ filter: "graduated" });
     await waitFor(() => draftRow("done-task"));
-    expect(screen.queryByRole("treeitem", { name: /^Draft cache-invalidation/ })).toBeNull();
+    expect(screen.queryByRole("treeitem", { name: /^Change cache-invalidation/ })).toBeNull();
   });
 
   it("DRP-FR-NPZO / DRP-FR-10: the menu offers Open, Information, Graduate…, Open issue on GitHub, and disables the rest with the reason", async () => {
@@ -104,7 +104,7 @@ describe("GitHub-shadow rows", () => {
     expect(menuItems()).toEqual([
       "Open",
       "Information",
-      "Graduate…",
+      "Implement…",
       "Open issue on GitHub",
       "Rename…",
       "Move to Folder…",
@@ -117,8 +117,8 @@ describe("GitHub-shadow rows", () => {
       expect(item).toHaveAttribute("title", expect.stringMatching(/mirrors a GitHub issue/));
     }
     await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
-    expect(screen.queryByRole("dialog", { name: "Delete draft" })).toBeNull();
-    expect(screen.getByRole("menuitem", { name: "Graduate…" })).not.toHaveAttribute(
+    expect(screen.queryByRole("dialog", { name: "Delete change" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Implement…" })).not.toHaveAttribute(
       "aria-disabled",
     );
   });
@@ -151,7 +151,7 @@ describe("GitHub-shadow rows", () => {
     await waitFor(() => draftRow("cache-invalidation"));
     await act(async () => void openDraftMenu("cache-invalidation"));
     const before = invokeMock.mock.calls.length;
-    await userEvent.click(screen.getByRole("menuitem", { name: "Graduate…" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Implement…" }));
     expect(onGraduateDraft).toHaveBeenCalledWith("gh-1", "cache-invalidation");
     expect(invokeMock.mock.calls.slice(before).map((c) => c[0])).not.toContain(
       "start_graduation",
@@ -174,16 +174,16 @@ describe("GitHub-shadow rows", () => {
     const { onGraduateDraft } = renderPanel();
     await waitFor(() => draftRow("cache-invalidation"));
     await act(async () => void openDraftMenu("cache-invalidation"));
-    const held = screen.getByRole("menuitem", { name: "Graduate…" });
+    const held = screen.getByRole("menuitem", { name: "Implement…" });
     expect(held).toHaveAttribute("aria-disabled", "true");
-    expect(held).toHaveAttribute("title", "A graduation run already holds this draft");
+    expect(held).toHaveAttribute("title", "An implementation run already holds this change");
     await userEvent.click(held);
     expect(onGraduateDraft).not.toHaveBeenCalled();
 
     await act(async () => void openDraftMenu("done-task"));
-    expect(screen.getByRole("menuitem", { name: "Graduate…" })).toHaveAttribute(
+    expect(screen.getByRole("menuitem", { name: "Implement…" })).toHaveAttribute(
       "title",
-      "This draft has already been graduated",
+      "This change has already been implemented",
     );
   });
 

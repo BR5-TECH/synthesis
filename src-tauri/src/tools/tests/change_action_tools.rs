@@ -81,7 +81,7 @@ fn rca_is_a_portable_tool_with_its_fixed_text_and_schema() {
     let t = tool_with(&f, f.sites(), &Arc::default(), &QUIET);
     assert_eq!(
         <RequestChangeActionTool<tauri::test::MockRuntime> as PortableTool>::NAME,
-        "request_change_action"
+        "request_openspec_change_action"
     );
     assert!(t.description().starts_with("Ask the author to start a run on the OpenSpec change"));
     assert!(t
@@ -92,7 +92,7 @@ fn rca_is_a_portable_tool_with_its_fixed_text_and_schema() {
     assert_eq!(schema["properties"]["action"]["enum"], serde_json::json!(["apply", "rework"]));
     assert_eq!(
         schema["properties"]["action"]["description"],
-        "`apply` to implement the tasks of the change, or `rework` to revise the change itself."
+        "`apply` to implement the tasks of the OpenSpec change, or `rework` to revise the OpenSpec change itself."
     );
     assert!(schema["properties"]["instruction"]["description"]
         .as_str()
@@ -322,7 +322,7 @@ fn rca_logs_ids_and_the_action_alone() {
     let info = records.iter().find(|r| r.level == LogLevel::Info).expect("info");
     assert!(info.domains.contains(&Domain::Backend));
     let fields = serde_json::to_value(&info.fields).unwrap();
-    assert_eq!(fields["tool"], "request_change_action");
+    assert_eq!(fields["tool"], "request_openspec_change_action");
     assert_eq!(fields["streamId"], STREAM);
     assert_eq!(fields["change"], CHANGE);
     assert_eq!(fields["action"], "rework");
@@ -695,18 +695,19 @@ fn dce_refuses_an_id_that_names_no_pending_request() {
 // DCE-FR-ILCP / DCE-FR-RNHP: the description is the fixed text, which names
 // the request and says a confirmation starts its run, and the `id` and
 // `action` descriptions name the request.
+// PVC-FR-NEXL: the texts call the change an OpenSpec change.
 #[test]
 fn dce_describes_the_request_entries() {
     let f = Fixture::new();
     let t = f.decider(f.sites(), &QUIET);
     assert_eq!(t.description(), crate::tools::decide_change_edits::DESCRIPTION);
-    assert!(t.description().contains("the pending request to apply or rework the change"));
+    assert!(t.description().contains("the pending request to apply or rework the OpenSpec change"));
     assert!(t.description().contains("Confirming a request starts its run."));
-    assert!(t
-        .description()
-        .ends_with("This never creates or changes a hunk, a proposed change, or a request."));
+    assert!(t.description().ends_with(
+        "This never creates or changes a hunk, a proposed OpenSpec change, or a request."
+    ));
     let schema = t.parameters().to_string();
-    assert!(schema.contains("of the request to apply or rework the change"), "{schema}");
+    assert!(schema.contains("of the request to apply or rework the OpenSpec change"), "{schema}");
     assert!(schema.contains("with the id of the request to start its run"), "{schema}");
 }
 

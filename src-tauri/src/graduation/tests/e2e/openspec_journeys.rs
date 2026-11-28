@@ -160,7 +160,8 @@ fn an_apply_run_reads_its_task_counts_from_the_working_copy_and_lands_one_commit
         .expect_work_turns_stood_in_the_stream()
         .expect_dispatch(1, |d| d.apply_progress("ready", 1, 2))
         .expect_dispatch(2, |d| {
-            d.pass(2).field_contains("loop_instruction", "task(s) of the change are not done")
+            d.pass(2)
+                .field_contains("loop_instruction", "task(s) of the OpenSpec change are not done")
         })
         .expect_dispatch(3, |d| d.apply_progress("all_done", 2, 2))
         .expect_cli_read_the_directory_of("instructions", 1)

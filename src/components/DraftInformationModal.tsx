@@ -447,7 +447,7 @@ export function DraftInformationModal({
         <div className="modal__body draft-info__body">
           {failure && (
             <div className="draft-info__failure" role="alert">
-              <span className="t-ui-sm">This draft's statistics could not be read.</span>
+              <span className="t-ui-sm">This change's statistics could not be read.</span>
               <button className="btn btn--ghost btn--sm" onClick={() => void read()}>
                 Retry
               </button>
@@ -459,7 +459,7 @@ export function DraftInformationModal({
                   pair, in this order and no other. */}
               <Row label="Time spent editing" measure={statistics.editingTimeMs} format={formatDuration} />
               <Row label="AI interactions" measure={statistics.aiInteractions} format={formatCount} />
-              <Row label="Draft edits" measure={statistics.draftEdits} format={formatCount} />
+              <Row label="Change edits" measure={statistics.draftEdits} format={formatCount} />
               <Row label="Accepted proposals" measure={statistics.acceptedProposals} format={formatCount} />
               <Row label="Rejected proposals" measure={statistics.rejectedProposals} format={formatCount} />
               <div className="draft-info__group t-ui-sm">Conversation tokens</div>
@@ -497,7 +497,7 @@ export function DraftInformationModal({
               <div className="draft-info__footer t-ui-xs">
                 {statistics.boundaryAt
                   ? `Statistics cover activity captured since ${formatBoundary(statistics.boundaryAt)}.`
-                  : "Nothing has been captured for this draft yet."}
+                  : "Nothing has been captured for this change yet."}
               </div>
             </>
           )}

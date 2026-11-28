@@ -696,7 +696,7 @@ export function Changes({
       reasons.push("the artifact lens must be All files");
     if (reasons.length === 0) return null;
     const why = reasons.join(", and ");
-    return `Cannot discard changes: ${why}.`;
+    return `Cannot discard files: ${why}.`;
   };
 
   /**
@@ -827,13 +827,13 @@ export function Changes({
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div className="panel-header">
-        <span className="panel-header__title">Changes</span>
+        <span className="panel-header__title">Commits</span>
         <div className="panel-header__actions">
           {/* CHG-FR-23: manual refresh. */}
           <button
             className="btn btn--ghost btn--icon btn--sm"
-            title="Refresh changes"
-            aria-label="Refresh changes"
+            title="Refresh"
+            aria-label="Refresh"
             // CHG-FR-65: the report clears on the next rollback and on a manual
             // refresh. Without this a stale failure would outlive the state it
             // described — the author fixes the file by hand, refreshes, and is
@@ -914,7 +914,7 @@ export function Changes({
             an author who cannot commit needs to know which of the two
             situations they are in. */}
         {emptyChangeSet && (
-          <PanelEmptyState line="No changes.">
+          <PanelEmptyState line="Nothing to commit.">
             {mode === "branch"
               ? `Nothing differs between this worktree and ${targetBranch ?? "the target branch"}.`
               : "This worktree matches its last commit — nothing has been edited since."}
@@ -926,7 +926,7 @@ export function Changes({
             changes next is the filter in front of them. */}
         {filteredToNothing && (
           <PanelFilteredState>
-            No changes match the current filters.
+            No files match the current filters.
           </PanelFilteredState>
         )}
 

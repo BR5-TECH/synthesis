@@ -25,7 +25,7 @@ import { activityStatus } from "../../../state/agentActivity";
 import { ToolDisclosure } from "../../discussion/ToolActivity";
 import { splitAroundBubble } from "../../discussion/LiveBubble";
 import type { AgentRoster } from "../../agentTags";
-import type { AgentTurn, Comment, TurnToolCall } from "../../../types";
+import type { AgentTurn, Comment, DiscussionTarget, TurnToolCall } from "../../../types";
 import type { PairedHalf } from "../../discussion/questionPairs";
 
 export interface StreamMessagesProps {
@@ -35,6 +35,8 @@ export interface StreamMessagesProps {
   roster: AgentRoster;
   threadId: string;
   draftId?: string;
+  /** PVC-FR-PXOE: the target kind of the conversation, for the saved activity rows. */
+  targetKind?: DiscussionTarget["kind"];
   /** DDS-FR-CLBK: the head of a long discussion is folded above this index. */
   visibleFrom: number;
   /** DDS-FR-CLBK / DDS-FR-GKMT: the fold row and the unread divider. */
@@ -256,6 +258,7 @@ function StreamRow({
             roster={props.roster}
             threadId={props.threadId}
             draftId={props.draftId}
+            targetKind={props.targetKind}
             onQuote={props.onQuote}
             firstIndex={positions.get(item.question.id) ?? 0}
             authorOf={props.authorOf}
@@ -267,6 +270,7 @@ function StreamRow({
               roster={props.roster}
               threadId={props.threadId}
               draftId={props.draftId}
+              targetKind={props.targetKind}
               onQuote={props.onQuote}
               firstIndex={positions.get(item.answer.id) ?? 0}
               authorOf={props.authorOf}
@@ -297,6 +301,7 @@ function StreamRow({
       roster={props.roster}
       threadId={props.threadId}
       draftId={props.draftId}
+      targetKind={props.targetKind}
       onQuote={props.onQuote}
       firstIndex={positions.get(item.comments[0].id) ?? 0}
       authorOf={props.authorOf}

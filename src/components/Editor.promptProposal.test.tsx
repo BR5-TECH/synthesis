@@ -227,9 +227,9 @@ describe("PCR-FR-QHZN: the review renders in place", () => {
   it("PCR-FR-QHZN, DCR-FR-GNRL: renders the draft's review bar in the document column, with no dialog and no scrim", async () => {
     withMd();
     const { container } = renderTab(MD, sessions);
-    const bar = await screen.findByRole("region", { name: "Proposed changes" });
+    const bar = await screen.findByRole("region", { name: "Proposed edits" });
     expect(container.querySelector(".editor__column, .editor-tab")?.contains(bar)).toBe(true);
-    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing change 1 of 2");
+    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing edit 1 of 2");
     // DCR-FR-27: said about the file, in the draft's words.
     expect(screen.getByTestId("review-standing")).toHaveTextContent("The file has not changed.");
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -240,23 +240,23 @@ describe("PCR-FR-QHZN: the review renders in place", () => {
   it("PCR-FR-16: a proposal that arrives in an open tab enters review with nothing to activate", async () => {
     renderTab(MD, sessions);
     await waitFor(() => expect(callsTo("list_prompt_change_proposals")).toHaveLength(1));
-    expect(screen.queryByRole("region", { name: "Proposed changes" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Proposed edits" })).toBeNull();
     await act(async () => {
       notePromptProposalChanged({ artifactId: MD, proposal: proposalFor(MD, ["pending", "pending"]) });
     });
-    expect(await screen.findByRole("region", { name: "Proposed changes" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Proposed edits" })).toBeInTheDocument();
     expect(screen.getByTestId("editor-prompt-proposal-indication")).toBeInTheDocument();
   });
 
   it("PCR-FR-QHZN: the review goes when no change is undecided", async () => {
     withMd();
     renderTab(MD, sessions);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
     await act(async () => {
       notePromptProposalChanged({ artifactId: MD, proposal: proposalFor(MD, ["accepted", "rejected"]) });
     });
     await waitFor(() =>
-      expect(screen.queryByRole("region", { name: "Proposed changes" })).toBeNull(),
+      expect(screen.queryByRole("region", { name: "Proposed edits" })).toBeNull(),
     );
     expect(screen.queryByTestId("editor-prompt-proposal-indication")).toBeNull();
   });
@@ -266,7 +266,7 @@ describe("PCR-FR-LAGZ: a change accepted elsewhere", () => {
   it("PCR-FR-LAGZ, DPC-FR-TVKX, PCR-FR-PFOW: a session with no unsaved edit takes the file's new text", async () => {
     withMd();
     renderTab(MD, sessions);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
     const reads = callsTo("load_artifact_contents_by_id").length;
     backend.bodies[MD] = "# Review\n\nThe accepted line.\n\nA second line.\n";
     version += 1;
@@ -283,7 +283,7 @@ describe("PCR-FR-LAGZ: a change accepted elsewhere", () => {
   it("PCR-FR-LAGZ, DPC-FR-TVKX: a session with an unsaved edit keeps it, writes nothing over the file, and raises the external-change modal", async () => {
     withMd();
     renderTab(MD, sessions);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
     act(() => {
       sessions.update(MD, { buffer: `${MD_BODY}Typed by the author.\n`, dirty: true });
     });
@@ -305,7 +305,7 @@ describe("PCR-FR-LAGZ: a change accepted elsewhere", () => {
   it("PCR-FR-LAGZ: the first reading of a proposal with an accepted change reads nothing again", async () => {
     withMd(["accepted", "pending"]);
     renderTab(MD, sessions);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
     await act(async () => {});
     expect(callsTo("load_artifact_contents_by_id")).toHaveLength(1);
     expect(sessions.get(MD)?.conflict).toBe(false);
@@ -314,7 +314,7 @@ describe("PCR-FR-LAGZ: a change accepted elsewhere", () => {
   it("PCR-FR-LAGZ: a rejection elsewhere reads nothing again", async () => {
     withMd();
     renderTab(MD, sessions);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
     const reads = callsTo("load_artifact_contents_by_id").length;
     await act(async () => {
       notePromptProposalChanged({ artifactId: MD, proposal: proposalFor(MD, ["rejected", "pending"]) });
@@ -333,7 +333,7 @@ describe("PCR-FR-AXPW: deciding one change", () => {
         : outcome(["accepted", "accepted"], true);
     };
     renderTab(MD, sessions);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
     const loadsBefore = callsTo("load_artifact_contents_by_id").length;
 
     await act(async () => {
@@ -363,7 +363,7 @@ describe("PCR-FR-AXPW: deciding one change", () => {
     };
     renderTab(MD, sessions);
     render(<MainBranchWriteHost />);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Accept all" }));
@@ -389,7 +389,7 @@ describe("PCR-FR-AXPW: deciding one change", () => {
     withMd();
     renderTab(MD, sessions);
     render(<MainBranchWriteHost />);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Accept all" }));
@@ -414,7 +414,7 @@ describe("PCR-FR-AXPW: deciding one change", () => {
   it("PCR-FR-AXPW, EDT-FR-81: an unsaved edit is written before the acceptance is asked for", async () => {
     withMd();
     renderTab(MD, sessions);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
     await act(async () => {
       const session = sessions.ensure(MD);
       session.buffer = `${MD_BODY}An edit of the author's.\n`;
@@ -436,14 +436,14 @@ describe("PCR-FR-AXPW: deciding one change", () => {
     withMd();
     backend.accept = () => "anchor_lost";
     renderTab(MD, sessions);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Accept all" }));
     });
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "The text this change alters is no longer in the file.",
+      "The text this edit alters is no longer in the file.",
     );
     expect(callsTo("accept_prompt_change_hunk")).toHaveLength(1);
     // A refusal resets nothing: the file is read no second time for it.
@@ -453,7 +453,7 @@ describe("PCR-FR-AXPW: deciding one change", () => {
   it("PCR-FR-QHZN: Reject all declines the proposal and writes nothing", async () => {
     withMd();
     renderTab(MD, sessions);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Reject all" }));
@@ -473,7 +473,7 @@ describe("PCR-FR-AXPW: deciding one change", () => {
     backend.accept = (hunkId) =>
       hunkId === "h1" ? outcome(["accepted", "pending"], false) : outcome(["accepted", "accepted"], true);
     renderTab(MD, sessions);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Accept all" }));
@@ -494,7 +494,7 @@ describe("PCR-FR-AXPW: deciding one change", () => {
     backend.hunks = { hunks: [MD_HUNKS[0]], resolutions: [], checksum: "hk-1", legacy: false };
     backend.accept = () => "acceptance_incomplete";
     renderTab(MD, sessions);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Accept all" }));
@@ -525,7 +525,7 @@ describe("PCR-FR-PFOW: a decision by tool that settles", () => {
     withMd(["pending"]);
     backend.hunks = { hunks: [MD_HUNKS[0]], resolutions: [], checksum: "hk-1", legacy: false };
     renderTab(MD, sessions);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
 
     // The event at the commit point, then the event after the comment landed.
     await act(async () => {
@@ -555,19 +555,19 @@ describe("PCR-FR-WLTE: the rich surface only", () => {
     sessions.ensure(MD);
     sessions.update(MD, { mode: "text" });
     renderTab(MD, sessions);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
     await waitFor(() => expect(sessions.get(MD)?.mode).toBe("wysiwyg"));
   });
 
   it("PCR-FR-WLTE, EDT-FR-RWTG: the raw toggle is disabled while a proposal is pending, and states why", async () => {
     withMd();
     renderTab(MD, sessions);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
     const toggle = screen.getByTestId("editor-mode-toggle");
     expect(toggle).toBeDisabled();
     expect(toggle).toHaveAttribute(
       "title",
-      "A proposed change is under review. Decide it before you switch to raw text.",
+      "A proposal is under review. Decide it before you switch to raw text.",
     );
 
     await act(async () => {
@@ -582,7 +582,7 @@ describe("PCR-FR-SKRV: the source surface", () => {
     withTxt();
     renderTab(TXT, sessions);
     const surface = await screen.findByTestId("source-review");
-    expect(surface).toHaveTextContent("This file is read-only while a proposed change is under review.");
+    expect(surface).toHaveTextContent("This file is read-only while a proposal is under review.");
     // The editable textarea of the file is not offered while the change stands.
     expect(screen.queryByRole("textbox", { name: "Source" })).toBeNull();
     const struck = await waitFor(() => {
@@ -591,11 +591,11 @@ describe("PCR-FR-SKRV: the source surface", () => {
       return el as HTMLElement;
     });
     expect(struck).toHaveTextContent("beta");
-    const block = within(surface).getByRole("group", { name: /Change 1 of 1/ });
+    const block = within(surface).getByRole("group", { name: /Edit 1 of 1/ });
     expect(block).toHaveClass("hunk", "hunk--add");
     expect(screen.getByTestId("hunk-chip")).toBeInTheDocument();
     expect(screen.getByTestId("hunk-gutter-map")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Proposed changes" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Proposed edits" })).toBeInTheDocument();
     // ESH-FR-LKNM: a source file has no toggle to disable.
     expect(screen.queryByTestId("editor-mode-toggle")).toBeNull();
   });
@@ -604,7 +604,7 @@ describe("PCR-FR-SKRV: the source surface", () => {
     withTxt();
     backend.accept = () => outcome(["accepted"], true, TXT);
     renderTab(TXT, sessions);
-    const field = await screen.findByRole("textbox", { name: /^Proposed text of Change 1 of 1/ });
+    const field = await screen.findByRole("textbox", { name: /^Proposed text of Edit 1 of 1/ });
     expect(field).toHaveValue("BETA");
 
     await act(async () => {
@@ -688,31 +688,31 @@ describe("PCR-FR-QHZN / DCR-FR-OZVU: a withdrawn change is hidden in review", ()
     const map = await screen.findByTestId("hunk-gutter-map");
     await waitFor(() => expect(within(map).getAllByRole("button")).toHaveLength(2));
     // DCR-FR-11: counted over the changes that are not withdrawn.
-    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing change 1 of 2");
+    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing edit 1 of 2");
     // No decoration of any kind carries the withdrawn change's text.
     const struck = [...surface.querySelectorAll(".hunk--del")].map((el) => el.textContent);
     expect(struck).toEqual(["alpha", "gamma"]);
     expect(surface).not.toHaveTextContent("BETA");
-    expect(within(map).queryByRole("button", { name: /Change 3 of/ })).toBeNull();
+    expect(within(map).queryByRole("button", { name: /Edit 3 of/ })).toBeNull();
   });
 
   it("PCR-FR-QHZN, DCR-FR-OZVU, DCR-FR-QPRV: no move visits a withdrawn change", async () => {
     withTxtWithdrawn();
     renderTab(TXT, sessions);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
     await waitFor(() =>
-      expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing change 1 of 2"),
+      expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing edit 1 of 2"),
     );
     act(() => {
       fireEvent.keyDown(window, { key: "ArrowDown", altKey: true });
     });
     // From the first change the next move skips the withdrawn second one.
-    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing change 2 of 2");
+    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing edit 2 of 2");
     expect(within(screen.getByTestId("hunk-chip")).getByRole("button", { name: "Accept" })).toBeEnabled();
     act(() => {
       fireEvent.keyDown(window, { key: "ArrowDown", altKey: true });
     });
-    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing change 1 of 2");
+    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing edit 1 of 2");
   });
 
   it("PCR-FR-QHZN, DCR-FR-NYDA, DCR-FR-16: hunk_withdrawn from a stale reading renders as a refused decision", async () => {
@@ -724,7 +724,7 @@ describe("PCR-FR-QHZN / DCR-FR-OZVU: a withdrawn change is hidden in review", ()
       fireEvent.click(within(chip).getByRole("button", { name: "Accept" }));
     });
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "The agent withdrew this change, so it cannot be decided. Nothing was changed.",
+      "The agent withdrew this edit, so it cannot be decided. Nothing was changed.",
     );
     expect(callsTo("save_artifact_contents")).toHaveLength(0);
     // The decision can be retried, which is what DCR-FR-16 asks of a refusal.
@@ -735,7 +735,7 @@ describe("PCR-FR-QHZN / DCR-FR-OZVU: a withdrawn change is hidden in review", ()
     withTxtWithdrawn(["pending", "pending"]);
     backend.hunks = { hunks: TXT_THREE.slice(0, 2), resolutions: [], checksum: "hk-1", legacy: false };
     renderTab(TXT, sessions);
-    const field = await screen.findByRole("textbox", { name: /^Proposed text of Change 1 of 2/ });
+    const field = await screen.findByRole("textbox", { name: /^Proposed text of Edit 1 of 2/ });
     // An edit that is still resting, so nothing has written it yet.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
@@ -771,7 +771,7 @@ describe("PCR-FR-QHZN / DCR-FR-OZVU: a withdrawn change is hidden in review", ()
       expect(screen.getByTestId("review-counter")).toHaveTextContent("of 3"),
     );
     await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: /^Proposed text of Change 1 of 3/ })).toHaveValue(
+      expect(screen.getByRole("textbox", { name: /^Proposed text of Edit 1 of 3/ })).toHaveValue(
         "ALPHA, revised",
       ),
     );

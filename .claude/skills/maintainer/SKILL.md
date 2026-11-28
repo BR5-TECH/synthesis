@@ -42,9 +42,9 @@ git diff --name-status <base>...HEAD -- specifications/
 
 Then find what each change does:
 
-- **Intent drafts.** `.synthesis/drafts/<category>/<id>/files/*.md` hold the intent of each feature. A commit `draft: graduate "<name>"` shows that the feature went through graduation. A draft with an empty intent has no implementation.
+- **Intent changes.** `.synthesis/drafts/<category>/<id>/files/*.md` hold the intent of each feature. A commit `change: implement "<name>"` (or `draft: graduate "<name>"` from an older build) shows that the feature went through implementation. A change with an empty intent has no implementation.
 - **Specifications.** A changed or new file in `specifications/` helps you to find how the behavior changed. Use it only as a source. Do not refer to it in the PR.
-- **Commits without a draft.** Commit subjects such as "fix linker" or "Rig update" are often short. Read `git show --stat <sha>` to find the real change.
+- **Commits without a change.** Commit subjects such as "fix linker" or "Rig update" are often short. Read `git show --stat <sha>` to find the real change.
 
 Read only enough to describe each change correctly. Do not read each changed file.
 
@@ -54,7 +54,7 @@ Write the body to a file in the scratchpad directory, for example `<scratchpad>/
 
 **Changes section.**
 
-- Put related changes in groups under `##` headings (for example "Graduation and streams", "Settings", "Build"). Use the groups only when the PR has more than approximately five items.
+- Put related changes in groups under `##` headings (for example "Implementation and streams", "Settings", "Build"). Use the groups only when the PR has more than approximately five items.
 - Write one bullet for each feature or fix. Start with a bold name, then write one to three sentences about what the user can do now, or what changed for the user. Do not describe how the code does it.
 - Do not name specifications, spec codes, or requirement IDs. Users do not use specifications. They use the features.
 - Put small items (icons, README, a small fix) together in one "Other" bullet.

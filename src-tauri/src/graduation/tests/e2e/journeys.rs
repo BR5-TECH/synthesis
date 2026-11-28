@@ -391,7 +391,7 @@ fn a_cancelled_turn_commits_its_work_as_abandoned_and_keeps_the_stream() {
         .expect_dispatch_count(1)
         .expect_commits(1)
         .expect_committed_paths(&["src/half-done.ts"])
-        .expect_commit_message_contains(0, "Abandoned graduation turn")
+        .expect_commit_message_contains(0, "Abandoned implementation turn")
         .expect_stream_held()
         // GXD-FR-QGYA: the checkpoint is written before the run is reported as
         // stopped, so what the turn wrote is readable from the store rather
@@ -424,7 +424,7 @@ fn a_timed_out_turn_rests_the_run_rather_than_failing_it() {
         )
         .expect_interrupted_record_lacks("exit_code")
         .expect_commits(1)
-        .expect_commit_message_contains(0, "Abandoned graduation turn")
+        .expect_commit_message_contains(0, "Abandoned implementation turn")
         .expect_checkpoint_paths(&["src/half-done.ts"])
         .expect_stream_held()
         // GXD-FR-MTVR: the turn ran under the timeout the project configured.

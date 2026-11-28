@@ -17,13 +17,13 @@ export function NewDraftReferenceControl({ attachment }: { attachment: NewDraftP
   const proposal = newDraftProposalById(attachment.proposalId);
   const name = proposal
     ? `Part ${proposal.position} of ${proposal.total} · ${proposal.name}`
-    : "Proposed draft";
+    : "Proposed change";
   return (
     <button
       type="button"
       className="comment-attach__proposal"
       data-testid="comment-attachment-new-draft"
-      title={`${name} — show it in the draft`}
+      title={`${name} — show it in the change`}
       onClick={() => showNewDraftCard(attachment.draftId, attachment.proposalId)}
     >
       <Icon.Doc size={11} />

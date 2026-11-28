@@ -133,7 +133,7 @@ pub const DOCUMENT_NO_TEXT: &str =
 
 /// RDT-FR-11: the model sent no draft to read.
 pub const DRAFT_ID_BLANK: &str =
-    "The draft ID must name a draft to read. Call again with the ID returned by `search_drafts`.";
+    "The change ID must name a change to read. Call again with the ID returned by `search_changes`.";
 
 /// RDT-FR-12: the id names no draft in the active worktree.
 ///
@@ -141,7 +141,7 @@ pub const DRAFT_ID_BLANK: &str =
 /// corrected on the next call, and a model that cannot remember one at all has
 /// `search_drafts` to find it again.
 pub const DRAFT_NOT_FOUND: &str =
-    "No draft exists with that ID in the open project. Check the ID or search for the draft again.";
+    "No change exists with that ID in the open project. Check the ID or search for the change again.";
 
 /// RDT-FR-13: the draft's `files/` is not the single prompt DRS-FR-11 requires.
 ///
@@ -151,7 +151,7 @@ pub const DRAFT_NOT_FOUND: &str =
 /// on the one draft in the project that cannot answer. It stays retryable all
 /// the same, because naming a *different* draft is an argument the model can
 /// compose and the next call then succeeds (TLC-FR-11).
-pub const DRAFT_INCONSISTENT: &str = "That draft does not contain its required single live prompt, so it cannot be read. It must be resolved outside this tool before a later call can succeed.";
+pub const DRAFT_INCONSISTENT: &str = "That change does not contain its required single live prompt, so it cannot be read. It must be resolved outside this tool before a later call can succeed.";
 
 /// RDT-FR-18: the draft is there and holds its one prompt, and that prompt could
 /// not be read.
@@ -161,18 +161,18 @@ pub const DRAFT_INCONSISTENT: &str = "That draft does not contain its required s
 /// material is what failed. Saying "no draft exists with that ID" here would be
 /// a plain falsehood about a draft the project holds, and would send the agent
 /// back to `search_drafts` for an id it already had.
-pub const DRAFT_PROMPT_UNREADABLE: &str = "That draft's prompt could not be read. It may not be text, or it may have changed since it was found.";
+pub const DRAFT_PROMPT_UNREADABLE: &str = "That change's prompt could not be read. It may not be text, or it may have changed since it was found.";
 
 /// MDT-FR-OTUZ: a call carrying both targets, or neither.
 pub const MEASURE_NOT_ONE_TARGET: &str =
-    "Pass exactly one of `path`, for a project file, or `draft_id`, for a draft.";
+    "Pass exactly one of `path`, for a project file, or `change_id`, for a change.";
 
 /// MDT-FR-TWVZ: a path naming no file of the project.
 pub const MEASURE_FILE_NOT_FOUND: &str =
     "The project holds no file at that path. Check the path, or search for the file again.";
 
 /// MDT-FR-TVWI: the draft does not hold its single live prompt.
-pub const MEASURE_DRAFT_INCONSISTENT: &str = "That draft does not contain its required single live prompt, so it cannot be measured. It must be resolved outside this tool before a later call can succeed.";
+pub const MEASURE_DRAFT_INCONSISTENT: &str = "That change does not contain its required single live prompt, so it cannot be measured. It must be resolved outside this tool before a later call can succeed.";
 
 /// MDT-FR-VHHI: the document resolved and could not be read.
 pub const MEASURE_UNREADABLE: &str = "That document could not be read. It may not be text, or it may have changed since it was found.";
@@ -255,14 +255,14 @@ pub const SET_OPTION_DESCRIPTION_TOO_LONG: &str = "An option description is long
 /// and specified anyway, because a tool's refusals are its own contract rather
 /// than its caller's, and a set of tools selected elsewhere is not a guarantee
 /// this tool may rest on.
-pub const NOT_A_DRAFT_CONVERSATION: &str = "This conversation is not about a draft, so there is nothing here to propose a change to. Say what you would change instead; asking again will not succeed.";
+pub const NOT_A_DRAFT_CONVERSATION: &str = "This conversation is not about a change, so there is nothing here to propose an edit to. Say what you would edit instead; asking again will not succeed.";
 
 /// PDC-FR-05: `path` names no file the draft holds.
 ///
 /// Names no path of its own: TLC-FR-09 keeps a message free of anything the
 /// model sent, and the advice works without it — every file of the draft was in
 /// the material this agent was given, each under its draft-relative path.
-pub const PROPOSAL_PATH_MISSING: &str = "This draft holds no file at that path. Use one of the draft-relative paths from the material you were given.";
+pub const PROPOSAL_PATH_MISSING: &str = "This change holds no file at that path. Use one of the change-relative paths from the material you were given.";
 
 /// PDC-FR-07: an empty proposal would empty the file.
 pub const PROPOSAL_CONTENT_BLANK: &str =
@@ -271,7 +271,7 @@ pub const PROPOSAL_CONTENT_BLANK: &str =
 /// PDC-FR-07: the author reads the rationale beside the diff, so it has to say
 /// something.
 pub const PROPOSAL_RATIONALE_BLANK: &str =
-    "Say why the change is worth making. The author reads this beside the diff.";
+    "Say why the edit is worth making. The author reads this beside the diff.";
 
 /// PDC-FR-ZQOH, PPC-FR-HMEH: the comment would carry no spoken part
 /// (CVL-FR-AGNN).
@@ -296,7 +296,7 @@ pub const PROPOSAL_NO_CHANGE: &str =
 /// a proposal nothing recorded, while the one they have not decided is the very
 /// thing holding the slot — so the sentence the model most needs is the one
 /// naming the decision that is outstanding.
-pub const PROPOSAL_PENDING: &str = "A change you proposed earlier is still waiting on the author's decision, and a draft holds only one undecided change at a time, so this one was not recorded. Say so plainly in your reply — tell the author their decision on your earlier proposed change is what you are waiting on — and do not describe this change as proposed, because it was not. Propose it again once they have decided.";
+pub const PROPOSAL_PENDING: &str = "A proposed edit to this change is still waiting on the author's decision, so this one was not recorded. Wait for their decision before proposing another. Say so plainly in your reply — tell the author their decision on your earlier proposed edit is what you are waiting on — and do not describe this edit as proposed, because it was not.";
 
 /// PDC-FR-09: the conversation takes no further comments, so a proposal nobody
 /// can be told about is one nobody will decide.
@@ -309,6 +309,10 @@ pub const PROPOSAL_CONVERSATION_RESOLVED: &str = "This conversation is resolved 
 /// PDC-FR-11: the candidate or its comment could not be written.
 pub const PROPOSAL_NOT_RECORDED: &str = "The proposed change could not be recorded.";
 
+/// PDC-FR-11, PVC-FR-VBPY: the same failure as `propose_change_edits` says it,
+/// with "edit" for the proposed hunk.
+pub const EDIT_PROPOSAL_NOT_RECORDED: &str = "The proposed edit could not be recorded.";
+
 /// PPC-FR-07: the conversation is about a draft, a note, or nothing this tool
 /// can propose against.
 ///
@@ -319,7 +323,7 @@ pub const NOT_AN_ARTIFACT_CONVERSATION: &str = "This conversation is not about a
 
 /// PDM-FR-TPYC: the turn's conversation is about neither a draft nor a file of the
 /// project.
-pub const NOT_A_DOCUMENT_CONVERSATION: &str = "This conversation is not about a draft or a file of the project, so there is nothing here to propose a change to. Say what you would change instead; asking again will not succeed.";
+pub const NOT_A_DOCUMENT_CONVERSATION: &str = "This conversation is not about a change or a file of the project, so there is nothing here to propose an edit to. Say what you would edit instead; asking again will not succeed.";
 
 /// PPC-FR-05 / PPC-FR-06: `path` names no file the project holds.
 ///
@@ -366,7 +370,7 @@ pub const GRADUATION_PATH_BLANK: &str = "The path must name a file to read. Give
 /// different trees and a model told the wrong one would go looking in the
 /// wrong place (TLC-FR-09 still keeps the directory itself out of the
 /// sentence).
-pub const GRADUATION_PATH_OUTSIDE: &str = "That path is outside the working copy this graduation is being written in, which is the only place this tool can read. Call again with a path relative to the project root.";
+pub const GRADUATION_PATH_OUTSIDE: &str = "That path is outside the working copy this implementation is being written in, which is the only place this tool can read. Call again with a path relative to the project root.";
 
 /// RGF-FR-13: nothing at that path in the run's working copy.
 pub const GRADUATION_FILE_NOT_FOUND: &str = "No file exists at that path in this working copy. Check the path against the change set, or read a file you know is there.";
@@ -376,7 +380,7 @@ pub const GRADUATION_FILE_NOT_FOUND: &str = "No file exists at that path in this
 /// Not retryable, and says so outright for the reason [`NO_PROJECT_OPEN`]
 /// does: no path the model could compose would change it, and a model that
 /// kept trying would report a missing file for every path in turn.
-pub const GRADUATION_WORKING_COPY_UNAVAILABLE: &str = "The working copy this graduation is being written in cannot be reached, so nothing can be read from it. This will keep failing; do not retry.";
+pub const GRADUATION_WORKING_COPY_UNAVAILABLE: &str = "The working copy this implementation is being written in cannot be reached, so nothing can be read from it. This will keep failing; do not retry.";
 
 /// ESU-FR-05: the run is not in a state that can be paused for a question.
 pub const NOT_ESCALATABLE_NOW: &str =
@@ -884,13 +888,13 @@ impl std::fmt::Display for ToolRefusal {
             ToolRefusal::NoProjectOpen => f.write_str(NO_PROJECT_OPEN),
             ToolRefusal::InvalidArguments(message) => f.write_str(message),
             ToolRefusal::InvalidArgumentsAt { message, at, of } => {
-                write!(f, "Change {at} of {of}: {message}")
+                write!(f, "Edit {at} of {of}: {message}")
             }
             ToolRefusal::InvalidUpdateAt { message, at, of } => {
                 write!(f, "Update {at} of {of}: {message}")
             }
             ToolRefusal::InvalidDiagramAt { message, at, of } => {
-                write!(f, "Diagram change {at} of {of}: {message}")
+                write!(f, "Diagram edit {at} of {of}: {message}")
             }
             ToolRefusal::InvalidSurface { rule, component_id, property, expected } => {
                 let bound = |text: &str| text.chars().take(100).collect::<String>();
@@ -904,7 +908,7 @@ impl std::fmt::Display for ToolRefusal {
                 write!(f, ". Expected {expected}. Fix it and call again.")
             }
             ToolRefusal::NotValidMermaid { error, at, of, update } => {
-                let place = if *update { "Update" } else { "Diagram change" };
+                let place = if *update { "Update" } else { "Diagram edit" };
                 write!(
                     f,
                     "{place} {at} of {of}: The new source is not valid Mermaid. The parser says: {error} Correct the source and call again."

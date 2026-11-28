@@ -308,7 +308,7 @@ pub(super) fn finish<R: tauri::Runtime>(
             // giving that commit its graduation message.
             let retitled = match run.commits.last() {
                 Some(last) => {
-                    commit::retitle_head_commit(worktree, last, ABANDONED_TITLE, &message)
+                    commit::retitle_head_commit(worktree, last, ABANDONED_TITLES, &message)
                 }
                 None => Ok(None),
             };
@@ -373,7 +373,15 @@ pub(super) fn finish<R: tauri::Runtime>(
 }
 
 /// GRD-FR-SWOJ: the title every abandoned turn's commit opens with.
-pub(super) const ABANDONED_TITLE: &str = "Abandoned graduation turn";
+pub(super) const ABANDONED_TITLE: &str = "Abandoned implementation turn";
+
+/// PVC-FR-ZQRE: the title that an older build gave an abandoned turn's commit.
+/// A run that an older build stopped still holds a commit with this title, and
+/// GRD-FR-WQTN rewrites that commit too.
+const LEGACY_ABANDONED_TITLE: &str = "Abandoned graduation turn";
+
+/// GRD-FR-WQTN: the titles that mark a commit as an abandoned turn.
+pub(crate) const ABANDONED_TITLES: &[&str] = &[ABANDONED_TITLE, LEGACY_ABANDONED_TITLE];
 
 /// GRD-FR-SWOJ: a turn that stopped without a review has whatever it wrote
 /// committed as an abandoned turn, so the stream is left usable.
@@ -869,9 +877,9 @@ pub(crate) fn compose_instruction(verdict: &ReviewVerdict) -> String {
 ///
 /// A direct run commits under its own name alone, and an apply run under the
 /// message of OCR-FR-UZNC. Every other run commits under the first line of its
-/// prompt, with the draft named in the body.
+/// prompt, with the change named in the body.
 pub(super) fn graduation_message(run: &GraduationRun) -> String {
-    const FALLBACK: &str = "Graduation run";
+    const FALLBACK: &str = "Implementation run";
     // OCR-FR-UZNC: one line, with no body.
     if let Some(data) = run.openspec.as_ref().filter(|_| run.is_change_apply()) {
         return format!("Apply OpenSpec change {}", data.change);
@@ -885,11 +893,11 @@ pub(super) fn graduation_message(run: &GraduationRun) -> String {
     }
     let title = first_line(&run.input.prompt);
     let title = if title.is_empty() { FALLBACK.to_string() } else { title };
-    format!("{title}\n\nGraduated from the draft \"{}\".", run.input.draft_name)
+    format!("{title}\n\nImplemented from the change \"{}\".", run.input.draft_name)
 }
 
 pub(super) fn first_line(text: &str) -> String {
-    let line = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("Graduation run");
+    let line = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("Implementation run");
     let line = line.trim_start_matches('#').trim();
     line.chars().take(72).collect()
 }
@@ -933,5 +941,15 @@ mod tests {
             assert_eq!(stops_in_place(reason), in_place, "{reason:?} stops in place");
             assert_eq!(review_resumes_in_place(reason), review, "{reason:?} resumes the review");
         }
+    }
+
+    // GRD-FR-SWOJ, GRD-FR-WQTN, PVC-FR-ZQRE: a new abandoned turn uses the word
+    // "implementation". The rewrite also finds the title of an older build, so
+    // a run that an older build stopped completes on its own commit.
+    #[test]
+    fn the_abandoned_title_says_implementation_and_the_legacy_title_still_matches() {
+        assert_eq!(ABANDONED_TITLE, "Abandoned implementation turn");
+        assert!(ABANDONED_TITLES.contains(&ABANDONED_TITLE));
+        assert!(ABANDONED_TITLES.contains(&"Abandoned graduation turn"));
     }
 }

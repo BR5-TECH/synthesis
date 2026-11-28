@@ -213,7 +213,7 @@ fn the_join_ends_the_calls_of_an_advisor_it_cancels() {
         Some((meta.id.clone(), "sec".into())),
     );
     let handle = h.app.handle().clone();
-    turns.begin_tool_call(&handle, &advisor.id, "search_drafts", None).expect("call");
+    turns.begin_tool_call(&handle, &advisor.id, "search_changes", None).expect("call");
     let on_meta = turns.in_flight(None).into_iter().find(|t| t.id == meta.id).expect("meta");
     assert_eq!(on_meta.active_tool_calls.len(), 1);
 

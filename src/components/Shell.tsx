@@ -587,7 +587,7 @@ export function ActivityBar({
             with the surfaces describing the project's own content, above the
             one describing its Git state. */}
         <ActivityToggle
-          label="Drafts"
+          label="Changes"
           side={side}
           active={isToggleActive(vertical, "drafts")}
           onClick={() => onSelectPanelSurface("drafts")}
@@ -600,7 +600,7 @@ export function ActivityBar({
             subject, read top to bottom. It is not the default selection on
             project open — the Library is (OVW-FR-05). */}
         <ActivityToggle
-          label="Changes"
+          label="Commits"
           side={side}
           active={isToggleActive(vertical, "changes")}
           onClick={() => onSelectPanelSurface("changes")}

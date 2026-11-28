@@ -229,7 +229,7 @@ describe("describeTarget (NTF-FR-20)", () => {
 
   it("names every other target in prose rather than as a URI", () => {
     expect(describeTarget({ kind: "dashboard" })).toBe("the Dashboard");
-    expect(describeTarget({ kind: "draft", draftId: "d1" })).toBe("that draft");
+    expect(describeTarget({ kind: "draft", draftId: "d1" })).toBe("that change");
     expect(describeTarget({ kind: "settings", scope: "global", section: null })).toBe(
       "Global settings",
     );
@@ -271,6 +271,6 @@ describe("a run address (NTF-FR-03 / GRU-FR-BLSS)", () => {
       false,
     );
     expect(sameTarget(runTarget, runTarget)).toBe(true);
-    expect(describeTarget(runTarget)).toBe("that graduation run");
+    expect(describeTarget(runTarget)).toBe("that implementation run");
   });
 });

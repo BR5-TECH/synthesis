@@ -832,7 +832,7 @@ describe("the AI API level's explanation (AII-FR-54, AII-FR-12, AII-FR-45)", () 
     expect(explanation).toHaveTextContent(/endpoints Synthesis calls itself/i);
     // AII-FR-ALMT: the driver classifier is the second reader.
     expect(explanation).toHaveTextContent(
-      /model and reasoning here are used only by the graduation loop and by the driver classifier/i,
+      /model and reasoning here are used only by the implementation loop and by the driver classifier/i,
     );
     // And where an agent's own model is chosen instead.
     expect(explanation).toHaveTextContent(
@@ -867,7 +867,7 @@ describe("the AI API level's explanation (AII-FR-54, AII-FR-12, AII-FR-45)", () 
     // the model selector would mislead exactly as badly, and only an equality
     // turns red when one appears.
     expect(textBlocks(level).filter((t) => /\bagent/i.test(t))).toEqual([
-      "The model and reasoning here are used only by the graduation loop and " +
+      "The model and reasoning here are used only by the implementation loop and " +
         "by the driver classifier of multi-persona conversations. An agent " +
         "uses its own model and reasoning, set in the Agents section.",
       "Agents are served by the provider that is active for the project, so " +

@@ -95,7 +95,7 @@ Return a single JSON object as your `result`, holding exactly these fields:
   "findings": [
     {
       "severity": "critical",
-      "description": "Draft input is not escaped before it reaches the panel.",
+      "description": "Change name input is not escaped before it reaches the panel.",
       "affected_files": ["src/panel.tsx", "src/render.ts"],
       "correction": "Escape the value in renderRow before it is inserted."
     },

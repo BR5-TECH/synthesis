@@ -606,7 +606,7 @@ describe("a column showing no transcript (DDS-FR-DPRJ, DDS-FR-GKMT)", () => {
   it("DDS layout: a draft nobody has spoken about is told so", async () => {
     renderColumn({ discussions: [] });
     expect(
-      await screen.findByText("Nothing has been said about this draft yet."),
+      await screen.findByText("Nothing has been said about this change yet."),
     ).toBeInTheDocument();
     expect(screen.getByTestId("draft-open-discussion")).toBeInTheDocument();
   });
@@ -621,10 +621,10 @@ describe("a column showing no transcript (DDS-FR-DPRJ, DDS-FR-GKMT)", () => {
     const { rerender } = renderColumn({ discussions: [resolve(only)] });
 
     expect(
-      await screen.findByText("The discussion about this draft is resolved."),
+      await screen.findByText("The discussion about this change is resolved."),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("Nothing has been said about this draft yet."),
+      screen.queryByText("Nothing has been said about this change yet."),
     ).toBeNull();
     expect(screen.getByTestId("draft-open-discussion")).toBeInTheDocument();
 
@@ -633,7 +633,7 @@ describe("a column showing no transcript (DDS-FR-DPRJ, DDS-FR-GKMT)", () => {
     // draft holds.
     rerenderColumn(rerender, { discussions: [resolve(only), resolve(second)] });
     expect(
-      await screen.findByText("Every discussion about this draft is resolved."),
+      await screen.findByText("Every discussion about this change is resolved."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /2 resolved/ })).toBeInTheDocument();
   });
@@ -644,10 +644,10 @@ describe("a column showing no transcript (DDS-FR-DPRJ, DDS-FR-GKMT)", () => {
 
     expect(await screen.findByTestId("draft-open-discussion")).toBeInTheDocument();
     expect(
-      await screen.findByText("This begins another discussion about this draft."),
+      await screen.findByText("This begins another discussion about this change."),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("Nothing has been said about this draft yet."),
+      screen.queryByText("Nothing has been said about this change yet."),
     ).toBeNull();
     // And no follow state, because the transcript left the column with it.
     expect(screen.queryByTestId("discussion-follow-state")).toBeNull();

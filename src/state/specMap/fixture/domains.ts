@@ -32,28 +32,28 @@ function N(id: string, label: string, summary: string, children: IndexNode[] | S
   return hue ? { id, label, summary, hue, children } : { id, label, summary, children };
 }
 
-const authoring = N("authoring", "authoring", "Everything the architect writes and reviews by hand. Drafts, comments and the editor. Largest surface area in the corpus.", [
-  N("drafts", "drafts & proposals", "Drafts hold work in progress until graduation. Agents propose changes; the author accepts or rejects them.", [
-    N("drafts-store", "storage", "Where a draft, its history, assets and statistics live on disk.", [
-      S("DRS", "core/DRS-draft-storage.md", "draft storage", 73, "i", "Draft files, metadata and folders on disk."),
-      S("DHS", "core/DHS-draft-history.md", "draft history", 28, "i", "Every revision of a draft, kept and restorable."),
-      S("DAS", "core/DAS-draft-assets.md", "draft assets", 28, "d", "Images and attachments referenced from a draft."),
-      S("DSS", "core/DSS-draft-statistics-storage.md", "draft statistics", 37, "d", "Counters a draft accumulates over its life."),
+const authoring = N("authoring", "authoring", "Everything the architect writes and reviews by hand. Changes, comments and the editor. Largest surface area in the corpus.", [
+  N("drafts", "changes & proposals", "Changes hold work in progress until implementation. Agents propose edits; the author accepts or rejects them.", [
+    N("drafts-store", "storage", "Where a change, its history, assets and statistics live on disk.", [
+      S("DRS", "core/DRS-draft-storage.md", "change storage", 73, "i", "Change files, metadata and folders on disk."),
+      S("DHS", "core/DHS-draft-history.md", "change history", 28, "i", "Every revision of a change, kept and restorable."),
+      S("DAS", "core/DAS-draft-assets.md", "change assets", 28, "d", "Images and attachments referenced from a change."),
+      S("DSS", "core/DSS-draft-statistics-storage.md", "change statistics", 37, "d", "Counters a change accumulates over its life."),
     ]),
     N("drafts-prop", "change proposals", "Agent-authored edits presented for review rather than written directly.", [
-      S("DCP", "core/DCP-draft-change-proposals.md", "draft change proposals", 38, "i", "Proposed draft edits, held until accepted or rejected."),
+      S("DCP", "core/DCP-draft-change-proposals.md", "edit proposals", 38, "i", "Proposed edits to a change, held until accepted or rejected."),
       S("PCP", "core/PCP-prompt-change-proposals.md", "prompt change proposals", 29, "d", "Proposed prompt edits with the same review path."),
-      S("PDC", "tools/PDC-propose-draft-changes-tool.md", "propose draft changes", 22, "i", "Tool an agent calls to propose draft edits."),
+      S("PDC", "tools/PDC-propose-draft-changes-tool.md", "propose change edits", 22, "i", "Tool an agent calls to propose edits to a change."),
       S("PPC", "tools/PPC-propose-prompt-changes-tool.md", "propose prompt changes", 21, "d", "Tool an agent calls to propose prompt edits."),
       S("PCR", "ui/PCR-prompt-change-review.md", "prompt change review", 34, "d", "Reviewing a proposed prompt edit in place."),
     ]),
-    N("drafts-ui", "authoring surfaces", "Panels and tabs where drafts are created, discussed and graduated.", [
-      S("DRP", "ui/DRP-drafts-panel.md", "drafts panel", 37, "i", "Vertical panel listing every draft in the project."),
-      S("DCR", "ui/DCR-draft-change-review.md", "draft change review", 39, "d", "Accept or reject each proposed change in place."),
-      S("DFI", "ui/DFI-draft-information.md", "draft information", 18, "g", "Metadata header shown above an open draft."),
-      S("NAW", "ui/NAW-new-artifact.md", "new artifact", 73, "d", "The tab where a draft becomes a real artifact."),
+    N("drafts-ui", "authoring surfaces", "Panels and tabs where changes are created, discussed and implemented.", [
+      S("DRP", "ui/DRP-drafts-panel.md", "changes panel", 37, "i", "Vertical panel listing every change in the project."),
+      S("DCR", "ui/DCR-draft-change-review.md", "edit review", 39, "d", "Accept or reject each proposed edit in place."),
+      S("DFI", "ui/DFI-draft-information.md", "change information", 18, "g", "Metadata header shown above an open change."),
+      S("NAW", "ui/NAW-new-artifact.md", "new artifact", 73, "d", "The tab where a change becomes a real artifact."),
       S("NTA", "ui/NTA-new-typed-artifact.md", "new typed artifact", 16, "i", "Modal for creating one typed artifact directly."),
-      S("DDS", "ui/DDS-draft-discussion.md", "draft discussion", 32, "i", "The conversation column beside a draft."),
+      S("DDS", "ui/DDS-draft-discussion.md", "change discussion", 32, "i", "The conversation column beside a change."),
       S("DQA", "ui/DQA-discussion-question-answering.md", "question answering", 46, "d", "Answering the questions an agent asks in a discussion."),
     ]),
   ]),
@@ -87,36 +87,36 @@ const authoring = N("authoring", "authoring", "Everything the architect writes a
   ]),
 ], "#6BD7AA");
 
-const graduation = N("graduation", "graduation", "The autonomous path from specification to merged code. Longest running feature and the least verified.", [
-  N("grad-core", "graduation loop", "The agent loop that turns a graduated draft into an implementation, run by run.", [
-    N("grad-loop", "loop", "The graduation contract, the loop that drives it, and what it records.", [
-      S("GRD", "core/GRD-graduation.md", "graduation", 34, "d", "The whole graduation contract, stage by stage."),
-      S("GRL", "ai/GRL-graduation-loop.md", "graduation loop", 27, "d", "The agent loop driving a graduation to completion."),
+const graduation = N("graduation", "implementation", "The autonomous path from specification to merged code. Longest running feature and the least verified.", [
+  N("grad-core", "implementation loop", "The agent loop that turns a change into code, run by run.", [
+    N("grad-loop", "loop", "The implementation contract, the loop that drives it, and what it records.", [
+      S("GRD", "core/GRD-graduation.md", "implementation", 34, "d", "The whole implementation contract, stage by stage."),
+      S("GRL", "ai/GRL-graduation-loop.md", "implementation loop", 27, "d", "The agent loop driving an implementation to completion."),
       S("GLG", "ai/GLG-graduation-loop-logging.md", "loop logging", 9, "i", "What the loop records for later reading."),
     ]),
     N("grad-exec", "execution", "Starting a run, supervising it, rebasing it and publishing the result.", [
       S("GXD", "core/GXD-graduation-execution.md", "execution", 19, "d", "Starting and supervising an agent run."),
-      S("GSU", "core/GSU-graduation-start.md", "start", 12, "i", "Preconditions checked before a graduation begins."),
+      S("GSU", "core/GSU-graduation-start.md", "start", 12, "i", "Preconditions checked before an implementation begins."),
       S("GRB", "core/GRB-graduation-rebase.md", "rebase", 35, "d", "Replaying a run's work onto a moved upstream."),
       S("GHP", "core/GHP-github-publication.md", "github publication", 39, "g", "Publishing a finished run to GitHub."),
     ]),
     N("grad-obs", "observability", "Run logs, progress and the tests that keep a long run honest.", [
-      S("GOB", "core/GOB-graduation-observability.md", "observability", 14, "d", "Events every graduation stage emits."),
+      S("GOB", "core/GOB-graduation-observability.md", "observability", 14, "d", "Events every implementation stage emits."),
       S("GRS", "core/GRS-graduation-run-log-storage.md", "run log storage", 61, "i", "Where run logs are written and retained."),
       S("GTE", "infra/GTE-graduation-end-to-end-tests.md", "end-to-end tests", 18, "d", "Whole-run tests against the agent mock."),
     ]),
   ]),
-  N("grad-ui", "graduation surfaces", "What the architect watches while a graduation runs, and reviews when it finishes.", [
+  N("grad-ui", "implementation surfaces", "What the architect watches while an implementation runs, and reviews when it finishes.", [
     N("grad-watch", "live", "Runs list, log window, progress and escalations raised mid-run.", [
-      S("GRU", "ui/GRU-graduation-runs.md", "graduation runs", 28, "d", "Live list of graduations with their stages."),
+      S("GRU", "ui/GRU-graduation-runs.md", "implementation runs", 28, "d", "Live list of implementations with their stages."),
       S("GLW", "ui/GLW-graduation-log-window.md", "log window", 63, "d", "Detached window streaming one run log."),
       S("GEA", "ui/GEA-graduation-escalation-answering.md", "escalation answering", 47, "g", "Answering a question the agent escalated."),
-      S("GRT", "ui/GRT-graduation-restart.md", "restart", 7, "g", "Restarting a graduation from a chosen stage."),
+      S("GRT", "ui/GRT-graduation-restart.md", "restart", 7, "g", "Restarting an implementation from a chosen stage."),
       S("RPV", "ui/RPV-run-progress.md", "run progress", 28, "i", "The stage track of a run in flight."),
     ]),
     N("grad-review", "history & start", "Starting a run and reading the runs that came before.", [
-      S("GRH", "ui/GRH-graduation-history.md", "graduation history", 13, "d", "Every past graduation, searchable."),
-      S("GSD", "ui/GSD-graduation-start-dialog.md", "start dialog", 13, "i", "The dialog that confirms a graduation start."),
+      S("GRH", "ui/GRH-graduation-history.md", "implementation history", 13, "d", "Every past implementation, searchable."),
+      S("GSD", "ui/GSD-graduation-start-dialog.md", "start dialog", 13, "i", "The dialog that confirms an implementation start."),
       S("RUN", "ui/RUN-runs.md", "runs", 21, "i", "The bottom panel that lists agent runs."),
     ]),
   ]),
@@ -143,17 +143,17 @@ const agents = N("agents", "agents", "Agent conversations, vendor integrations a
     ]),
   ]),
   N("tools", "agent tools", "The bounded tool surface an agent may call. Search, read, web, and the conventions all tools share.", [
-    N("tl-search", "search", "Finding specs, skills, drafts and notes by relevance.", [
+    N("tl-search", "search", "Finding specs, skills, changes and notes by relevance.", [
       S("SPS", "tools/SPS-specification-search-tool.md", "specification search", 19, "v", "Search the specification corpus by query."),
       S("SST", "tools/SST-skill-search-tool.md", "skill search", 16, "v", "Search available skills by query."),
       S("SLT", "tools/SLT-skill-list-tool.md", "skill list", 18, "v", "List every skill the project exposes."),
-      S("DST", "tools/DST-draft-search-tool.md", "draft search", 21, "i", "Search drafts by content and metadata."),
+      S("DST", "tools/DST-draft-search-tool.md", "change search", 21, "i", "Search changes by content and metadata."),
       S("NST", "tools/NST-note-search-tool.md", "note search", 20, "i", "Search notes attached to project entities."),
     ]),
-    N("tl-read", "read", "Reading files, drafts and graduation artifacts under access rules.", [
+    N("tl-read", "read", "Reading files, changes and implementation artifacts under access rules.", [
       S("RFT", "tools/RFT-read-file-tool.md", "read file", 20, "v", "Read a project file within allowed roots."),
-      S("RDT", "tools/RDT-read-draft-tool.md", "read draft", 18, "i", "Read a draft and its current revision."),
-      S("RGF", "tools/RGF-read-graduation-file-tool.md", "read graduation file", 16, "i", "Read a file produced by a graduation."),
+      S("RDT", "tools/RDT-read-draft-tool.md", "read change", 18, "i", "Read a change and its current revision."),
+      S("RGF", "tools/RGF-read-graduation-file-tool.md", "read implementation file", 16, "i", "Read a file produced by an implementation."),
     ]),
     N("tl-web", "web", "Fetching and searching the open web from a run.", [
       S("WFT", "tools/WFT-web-fetch-tool.md", "web fetch", 16, "i", "Fetch one URL and return readable text."),
@@ -206,13 +206,13 @@ const workspace = N("workspace", "workspace", "The shell the architect works ins
       S("SDL", "ui/SDL-specification-delivery-links.md", "specification delivery links", 15, "g", "Links between delivery items and spec nodes."),
     ]),
   ]),
-  N("git", "git & changes", "A project is a Git repository. Worktrees, changes, commits and GitHub credentials live here.", [
+  N("git", "git & commits", "A project is a Git repository. Worktrees, changes, commits and GitHub credentials live here.", [
     N("git-engine", "engine", "Git operations and the change set they produce.", [
       S("GTC", "core/GTC-git.md", "git", 33, "i", "Repository operations the app performs."),
       S("CHC", "core/CHC-changes.md", "changes", 22, "v", "Uncommitted and branch comparisons with totals."),
     ]),
     N("git-ui", "surfaces", "The panels where changes are staged, committed and pushed.", [
-      S("CHG", "ui/CHG-changes.md", "changes panel", 66, "i", "Reviewing, staging and committing changes."),
+      S("CHG", "ui/CHG-changes.md", "commits panel", 66, "i", "Reviewing, staging and committing changes."),
       S("GIT", "ui/GIT-git.md", "git panel", 11, "i", "Branches, remotes and push from one panel."),
     ]),
     N("git-auth", "authentication", "GitHub tokens, stored once and picked per push.", [

@@ -1,4 +1,4 @@
-//! `request_change_action` — ask the author to apply or rework the OpenSpec
+//! `request_openspec_change_action` — ask the author to apply or rework the OpenSpec
 //! change under discussion (`RCA-request-change-action-tool.md`).
 //!
 //! A run writes the stream and costs time and tokens, so the agent does not
@@ -24,13 +24,13 @@ use crate::log_fields;
 use crate::logging::{LogBuffer, LogSink, BUFFER};
 
 /// RCA-FR-UZJK.
-pub const NAME: &str = "request_change_action";
+pub const NAME: &str = "request_openspec_change_action";
 
 /// RCA-FR-PTAK: the fixed text of the contract surface.
-pub const DESCRIPTION: &str = "Ask the author to start a run on the OpenSpec change under discussion. Use `apply` when the change is ready to build: an apply run implements its tasks and commits the work on the stream. Use `rework` when the change itself must be revised: a rework run revises the files of the change on your instruction, and its result comes back as a proposal that the author decides. You cannot start a run: this posts a request, and the author confirms or declines it. For `rework`, write in `instruction` what the revision must do; give no `instruction` for `apply`. Tell the author in `rationale` why you ask. Put one `<spoken>…</spoken>` tag in `rationale`: one short sentence that a voice can read aloud. Your turn ends when the request is posted. Make one request at a time.";
+pub const DESCRIPTION: &str = "Ask the author to start a run on the OpenSpec change under discussion. Use `apply` when the OpenSpec change is ready to build: an apply run implements its tasks and commits the work on the stream. Use `rework` when the OpenSpec change itself must be revised: a rework run revises the files of the OpenSpec change on your instruction, and its result comes back as a proposal that the author decides. You cannot start a run: this posts a request, and the author confirms or declines it. For `rework`, write in `instruction` what the revision must do; give no `instruction` for `apply`. Tell the author in `rationale` why you ask. Put one `<spoken>…</spoken>` tag in `rationale`: one short sentence that a voice can read aloud. Your turn ends when the request is posted. Make one request at a time.";
 
 const ACTION_DESCRIPTION: &str =
-    "`apply` to implement the tasks of the change, or `rework` to revise the change itself.";
+    "`apply` to implement the tasks of the OpenSpec change, or `rework` to revise the OpenSpec change itself.";
 const INSTRUCTION_DESCRIPTION: &str = "For `rework` alone: what the revision must do, in the words a reviser can act on. Leave it out for `apply`.";
 const RATIONALE_DESCRIPTION: &str = "Why you ask, in one or two sentences. It holds one `<spoken>…</spoken>` tag with one short sentence that a voice can read aloud.";
 
@@ -38,16 +38,17 @@ const RATIONALE_DESCRIPTION: &str = "Why you ask, in one or two sentences. It ho
 pub const BAD_ACTION: &str = "`action` is `apply` or `rework`.";
 pub const NO_INSTRUCTION: &str =
     "A rework needs an instruction. Write in `instruction` what the revision must do.";
-pub const APPLY_TAKES_NO_INSTRUCTION: &str = "An apply run builds the change as it stands and takes no instruction. Leave `instruction` out, or ask for `rework` to change the change first.";
+pub const APPLY_TAKES_NO_INSTRUCTION: &str = "An apply run builds the OpenSpec change as it stands and takes no instruction. Leave `instruction` out, or ask for `rework` to change the OpenSpec change first.";
 pub const BLANK_RATIONALE: &str = "Tell the author in `rationale` why you ask.";
 pub const NO_SPOKEN_PART: &str = "The rationale has no spoken part. Put one short sentence in one `<spoken>…</spoken>` tag in `rationale`.";
 pub const NOT_A_CHANGE_CONVERSATION: &str =
     "This conversation is not about an OpenSpec change, so no run can be requested here.";
 pub const CONVERSATION_RESOLVED: &str = "This conversation is resolved and takes no further comments, so nothing was requested. Answer with what you already have; asking again will not succeed.";
-pub const STREAM_GONE: &str = "The work stream of this change is gone, so no run can be requested.";
+pub const STREAM_GONE: &str =
+    "The work stream of this OpenSpec change is gone, so no run can be requested.";
 pub const CHANGE_GONE: &str =
-    "The change is not on its work stream any more, so no run can be requested.";
-pub const REQUEST_PENDING: &str = "A request for this change waits for the author. Answer with what you have; the author decides that request first.";
+    "The OpenSpec change is not on its work stream any more, so no run can be requested.";
+pub const REQUEST_PENDING: &str = "A request for this OpenSpec change waits for the author. Answer with what you have; the author decides that request first.";
 pub const COULD_NOT_RECORD: &str = "The request could not be recorded.";
 
 /// RCA-FR-ABXT: what a second call in one reply is told.
@@ -117,7 +118,7 @@ fn refusal_for(code: &str) -> ToolRefusal {
     }
 }
 
-/// RCA-FR-UZJK: `request_change_action` as a `rig` portable tool.
+/// RCA-FR-UZJK: `request_openspec_change_action` as a `rig` portable tool.
 /// `requested` is how the loop learns that a request went out and the turn
 /// ends (CVL-FR-15).
 pub struct RequestChangeActionTool<R: tauri::Runtime> {

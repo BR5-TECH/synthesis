@@ -312,13 +312,13 @@ impl Decision {
     /// that landed", so the sentence says which candidate was decided.
     fn sentence(self, path: &str, edited: bool) -> String {
         match (self, edited) {
-            (Decision::Accept, false) => format!("Accepted the proposed change to `{path}`."),
+            (Decision::Accept, false) => format!("Accepted the proposed edits to `{path}`."),
             (Decision::Accept, true) => {
-                format!("Accepted an edited version of the proposed change to `{path}`.")
+                format!("Accepted an edited version of the proposed edits to `{path}`.")
             }
-            (Decision::Decline, false) => format!("Declined the proposed change to `{path}`."),
+            (Decision::Decline, false) => format!("Declined the proposed edits to `{path}`."),
             (Decision::Decline, true) => {
-                format!("Declined the proposed change to `{path}`, having edited it first.")
+                format!("Declined the proposed edits to `{path}`, having edited them first.")
             }
         }
     }

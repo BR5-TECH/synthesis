@@ -302,11 +302,11 @@ describe("Changes vertical panel (CHG-FR-01)", () => {
 
     // OVW-FR-05: the Project panel is the initially active vertical-panel surface.
     expect(screen.getByText("Project")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Refresh changes")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Refresh")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Changes" }));
+    await userEvent.click(screen.getByRole("button", { name: "Commits" }));
 
-    expect(await screen.findByLabelText("Refresh changes")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Refresh")).toBeInTheDocument();
     // The panel replaced the previously active surface rather than stacking.
     expect(screen.queryByLabelText("Rescan project tree")).not.toBeInTheDocument();
   });
@@ -333,8 +333,8 @@ describe("Changes vertical panel (CHG-FR-01)", () => {
     await userEvent.click(within(panel()).getByText("ui"));
     expect(within(panel()).queryByText("CHG-changes.md")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Changes" }));
-    expect(await screen.findByLabelText("Refresh changes")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Commits" }));
+    expect(await screen.findByLabelText("Refresh")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Project" }));
 
     // Back on the Library: `ui` is still collapsed. If the state lived inside
@@ -347,7 +347,7 @@ describe("Changes vertical panel (CHG-FR-01)", () => {
   it("opens a Diff tab in the main viewport when a changed file is clicked (CHG-FR-13, CHG-FR-18)", async () => {
     render(<App />);
     await enterIde();
-    await userEvent.click(screen.getByRole("button", { name: "Changes" }));
+    await userEvent.click(screen.getByRole("button", { name: "Commits" }));
 
     await userEvent.click(await screen.findByText("CHG-changes.md"));
 
@@ -378,7 +378,7 @@ describe("Changes vertical panel (CHG-FR-01)", () => {
     const tabsAfterEditor = tabLabels().length;
 
     // Now open the same artifact's diff from the Changes panel.
-    await userEvent.click(screen.getByRole("button", { name: "Changes" }));
+    await userEvent.click(screen.getByRole("button", { name: "Commits" }));
     await userEvent.click(await panel().findByText("CHG-changes.md"));
     await screen.findByText("a new line");
 

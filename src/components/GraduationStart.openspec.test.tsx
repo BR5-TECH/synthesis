@@ -106,8 +106,8 @@ function draw(draftName = "Add Logout Button", draftId = "3f2a9c11") {
 }
 
 const confirm = () => screen.getByTestId("graduation-start-confirm");
-const graduateAs = () => screen.queryByRole("radiogroup", { name: "Graduate as" });
-const nameField = () => screen.getByRole("textbox", { name: "Change name" });
+const graduateAs = () => screen.queryByRole("radiogroup", { name: "Implement as" });
+const nameField = () => screen.getByRole("textbox", { name: "OpenSpec change name" });
 const segment = (name: string) => screen.getByRole("radio", { name });
 
 /** Wait until the dialog has read the streams and the status. */
@@ -118,19 +118,38 @@ async function settled() {
 }
 
 describe("what the run makes while OpenSpec mode is active", () => {
-  it("GSD-FR-DCLQ / GSD-FR-VKLD: reads the status once on open and asks Graduate as, resting on Propose change", async () => {
+  it("GSD-FR-DCLQ / GSD-FR-VKLD, PVC-FR-NEXL: reads the status once on open and asks Implement as, resting on Propose OpenSpec change", async () => {
     draw();
     await settled();
     expect(graduateAs()).toBeInTheDocument();
-    expect(segment("Propose change")).toHaveAttribute("aria-checked", "true");
-    expect(segment("Implement")).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByText("Implement as", { selector: "legend" })).toBeInTheDocument();
+    expect(screen.getAllByRole("radio").map((r) => r.textContent)).toEqual(
+      expect.arrayContaining(["Propose OpenSpec change", "Implement directly"]),
+    );
+    expect(segment("Propose OpenSpec change")).toHaveAttribute("aria-checked", "true");
+    expect(segment("Implement directly")).toHaveAttribute("aria-checked", "false");
     expect(calls("get_openspec_status")).toHaveLength(1);
   });
 
-  it("GSD-FR-WMTD, GSD-FR-DCLQ: on open, focus goes to the selected Graduate as segment, the first thing asked", async () => {
+  it("GSD-FR-WMTD, GSD-FR-DCLQ: on open, focus goes to the selected Implement as segment, the first thing asked", async () => {
     draw();
     await settled();
-    await waitFor(() => expect(segment("Propose change")).toHaveFocus());
+    await waitFor(() => expect(segment("Propose OpenSpec change")).toHaveFocus());
+  });
+
+  it("GSD-FR-DCLQ: the Implement as row is a two-segment row, so both labels have half of its width", async () => {
+    draw();
+    await settled();
+    // jsdom cannot measure a cut label. The two-segment class is what gives
+    // each segment half of the row (see the stylesheet invariant).
+    const row = screen.getByRole("radiogroup", { name: "Implement as" });
+    expect(row).toHaveClass("graduation-start__destination-row");
+    expect(row).toHaveClass("graduation-start__destination-row--two");
+    expect(within(row).getAllByRole("radio")).toHaveLength(2);
+    // The destination toggle keeps its four equal tracks.
+    expect(screen.getByRole("radiogroup", { name: "Where the run works" })).not.toHaveClass(
+      "graduation-start__destination-row--two",
+    );
   });
 
   it("GSD-FR-WMTD: while the mode is not active, focus goes to the stream picker as before", async () => {
@@ -145,7 +164,7 @@ describe("what the run makes while OpenSpec mode is active", () => {
     const { onStarted } = draw();
     await settled();
     expect(graduateAs()).toBeNull();
-    expect(screen.queryByRole("textbox", { name: "Change name" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "OpenSpec change name" })).toBeNull();
     await userEvent.click(confirm());
     await waitFor(() => expect(onStarted).toHaveBeenCalled());
     expect(calls("start_graduation")[0][1]).toMatchObject({ openspecChange: null });
@@ -161,7 +180,7 @@ describe("what the run makes while OpenSpec mode is active", () => {
     expect(calls("start_graduation")[0][1]).toMatchObject({ openspecChange: null });
   });
 
-  it("GSD-FR-CKSV: Propose change shows the Change name field, prefilled from the draft name and id", async () => {
+  it("GSD-FR-CKSV: Propose OpenSpec change shows the OpenSpec change name field, prefilled from the draft name and id", async () => {
     draw("Add Logout Button!", "3F2A9c-77");
     await settled();
     expect(nameField()).toHaveValue("add-logout-button-3f2a");
@@ -195,7 +214,7 @@ describe("what the run makes while OpenSpec mode is active", () => {
     expect(onStarted).not.toHaveBeenCalled();
   });
 
-  it("GSD-FR-AGPL: Propose change offers the three stream destinations and disables Work directly with the reason", async () => {
+  it("GSD-FR-AGPL: Propose OpenSpec change offers the three stream destinations and disables Work directly with the reason", async () => {
     draw();
     await settled();
     expect(segment("Existing stream")).not.toBeDisabled();
@@ -205,28 +224,28 @@ describe("what the run makes while OpenSpec mode is active", () => {
     expect(screen.getByTestId("graduation-direct-reason")).toHaveTextContent(DIRECT_PROPOSE_REASON);
   });
 
-  it("GSD-FR-AGPL: Implement offers all four destinations", async () => {
+  it("GSD-FR-AGPL: Implement directly offers all four destinations", async () => {
     draw();
     await settled();
-    await userEvent.click(segment("Implement"));
+    await userEvent.click(segment("Implement directly"));
     expect(segment("Work directly")).not.toBeDisabled();
     expect(screen.queryByTestId("graduation-direct-reason")).toBeNull();
-    expect(screen.queryByRole("textbox", { name: "Change name" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "OpenSpec change name" })).toBeNull();
   });
 
-  it("GSD-FR-AGPL: a choice of Propose change after Work directly moves the run to a stream", async () => {
+  it("GSD-FR-AGPL: a choice of Propose OpenSpec change after Work directly moves the run to a stream", async () => {
     draw();
     await settled();
-    await userEvent.click(segment("Implement"));
+    await userEvent.click(segment("Implement directly"));
     await userEvent.click(segment("Work directly"));
-    await userEvent.click(segment("Propose change"));
+    await userEvent.click(segment("Propose OpenSpec change"));
     expect(segment("Existing stream")).toHaveAttribute("aria-checked", "true");
   });
 
-  it("GSD-FR-ZAFX: confirming Propose change invokes start_graduation with the change name, and the confirm names it", async () => {
+  it("GSD-FR-ZAFX: confirming Propose OpenSpec change invokes start_graduation with the change name, and the confirm names it", async () => {
     const { onStarted } = draw();
     await settled();
-    expect(confirm().textContent).toBe("Propose change");
+    expect(confirm().textContent).toBe("Propose OpenSpec change");
     await userEvent.click(confirm());
     await waitFor(() => expect(onStarted).toHaveBeenCalled());
     expect(calls("start_graduation")[0][1]).toEqual({
@@ -238,13 +257,13 @@ describe("what the run makes while OpenSpec mode is active", () => {
     });
   });
 
-  it("GSD-FR-ZAFX: Propose change on a new stream creates the stream first, then starts with the change name", async () => {
+  it("GSD-FR-ZAFX: Propose OpenSpec change on a new stream creates the stream first, then starts with the change name", async () => {
     const { onStarted } = draw();
     await settled();
     await userEvent.click(segment("New stream"));
     await userEvent.type(screen.getByRole("textbox", { name: "Name" }), "made");
     // The confirm names the propose run, not the destination.
-    expect(confirm().textContent).toBe("Propose change");
+    expect(confirm().textContent).toBe("Propose OpenSpec change");
     await userEvent.click(confirm());
     await waitFor(() => expect(onStarted).toHaveBeenCalled());
     const order = invokeMock.mock.calls.map(([cmd]) => cmd);
@@ -258,39 +277,39 @@ describe("what the run makes while OpenSpec mode is active", () => {
   it("GSD-FR-ZAFX / GSD-FR-BZHW: confirming Implement starts what the destination names, with no change name", async () => {
     const { onStarted } = draw();
     await settled();
-    await userEvent.click(segment("Implement"));
+    await userEvent.click(segment("Implement directly"));
     // The confirm names the destination, Existing stream, and not the propose run.
-    expect(confirm().textContent).toBe("Graduate");
+    expect(confirm().textContent).toBe("Implement");
     await userEvent.click(confirm());
     await waitFor(() => expect(onStarted).toHaveBeenCalled());
     expect(calls("start_graduation")[0][1]).toMatchObject({ openspecChange: null });
   });
 
-  it("GSD-FR-ZAFX: the confirm of Propose change names the propose run on a temporary stream too", async () => {
+  it("GSD-FR-ZAFX: the confirm of Propose OpenSpec change names the propose run on a temporary stream too", async () => {
     draw();
     await settled();
     await userEvent.click(segment("Temporary stream"));
     expect(segment("Temporary stream")).toHaveAttribute("aria-checked", "true");
-    expect(confirm().textContent).toBe("Propose change");
+    expect(confirm().textContent).toBe("Propose OpenSpec change");
   });
 
   it("GSD-FR-ZAFX / GSD-FR-BZHW: the confirm of Implement names each other destination", async () => {
     draw();
     await settled();
-    await userEvent.click(segment("Implement"));
+    await userEvent.click(segment("Implement directly"));
     await userEvent.click(segment("New stream"));
-    expect(confirm().textContent).toBe("Create stream and graduate");
+    expect(confirm().textContent).toBe("Create stream and implement");
     await userEvent.click(segment("Temporary stream"));
-    expect(confirm().textContent).toBe("Create temporary stream and graduate");
+    expect(confirm().textContent).toBe("Create temporary stream and implement");
     await userEvent.click(segment("Work directly"));
     await waitFor(() => expect(confirm()).not.toBeDisabled());
-    expect(confirm().textContent).toBe("Graduate here");
+    expect(confirm().textContent).toBe("Implement here");
   });
 
   it("GSD-FR-ZAFX: Implement with Work directly invokes the direct start", async () => {
     const { onStarted } = draw();
     await settled();
-    await userEvent.click(segment("Implement"));
+    await userEvent.click(segment("Implement directly"));
     await userEvent.click(segment("Work directly"));
     await waitFor(() => expect(confirm()).not.toBeDisabled());
     await userEvent.click(confirm());

@@ -241,6 +241,17 @@ fn it_is_a_portable_tool_with_the_fixed_description_and_the_shared_schema() {
     };
     id(&mut prompt);
     id(&mut draft);
+    // PVC-FR-VBPY: the `decisions` text of DDC names an "edit", and this tool
+    // keeps "change" (DPC contract surface).
+    let decisions = |schema: &mut serde_json::Value| {
+        schema["properties"]["decisions"]
+            .as_object_mut()
+            .expect("decisions")
+            .remove("description")
+            .expect("described")
+    };
+    assert!(decisions(&mut prompt).as_str().is_some_and(|d| d.contains("names one change")));
+    assert!(decisions(&mut draft).as_str().is_some_and(|d| d.contains("names one edit")));
     // DPC-FR-RJBJ: `confirm` is left out of this tool's enum.
     let actions = |schema: &mut serde_json::Value| {
         schema["properties"]["decisions"]["items"]["properties"]["action"]

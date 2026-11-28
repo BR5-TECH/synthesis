@@ -130,7 +130,7 @@ export function rejectionMessage(
     case GIT_ERRORS.belongsToStream:
       return `${branch} belongs to a work stream. Delete the work stream instead.`;
     case GIT_ERRORS.directGraduation:
-      return `A graduation is running on ${subject.branch ?? "this branch"}. Wait until it ends.`;
+      return `An implementation is running on ${subject.branch ?? "this branch"}. Wait until it ends.`;
     case GIT_ERRORS.worktreeDirty:
       return `The worktree of ${subject.branch ?? "this branch"} has uncommitted changes.`;
     case GIT_ERRORS.noRemote:

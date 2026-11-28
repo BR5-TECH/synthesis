@@ -72,7 +72,7 @@ export function UpdateWindow({
           </button>
           {dirty.code !== STREAM_ERRORS.baseNotCheckedOut && (
             <button className="btn btn--default btn--sm" onClick={onOpenChanges}>
-              Open Changes
+              Open Commits
             </button>
           )}
         </div>

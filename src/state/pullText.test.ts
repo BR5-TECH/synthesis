@@ -58,7 +58,7 @@ describe("the note a pull leaves (WTS-FR-34)", () => {
     expect(pullErrorText("pull_in_progress")).toMatch(/Another pull is running/);
     expect(pullErrorText("merge_in_progress")).toMatch(/merge or update is running/);
     expect(pullErrorText("pull_run_active: run-1")).toMatch(/pull run is already reconciling/);
-    expect(pullErrorText("direct graduation active: run-2")).toMatch(/graduation run is working/);
+    expect(pullErrorText("direct graduation active: run-2")).toMatch(/implementation run is working/);
     expect(pullErrorText("work stream busy: s, r")).toMatch(/work stream/);
   });
 });

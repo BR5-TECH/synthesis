@@ -111,11 +111,11 @@ describe("a diagram hunk in the prompt's own surface", () => {
     push(editor, { hunks: [change(editor)], focused: "h1" });
     const drawn = widget(editor);
     expect(drawn?.querySelector(".hunk__gutter")).toHaveTextContent("+");
-    expect(drawn?.querySelector(".hunk__tag")).toHaveTextContent("Diagram change");
+    expect(drawn?.querySelector(".hunk__tag")).toHaveTextContent("Diagram edit");
     expect(drawn).toHaveAttribute("role", "group");
     expect(drawn).toHaveAttribute(
       "aria-label",
-      "Change 1 of 1, diagram change proposed by Helga",
+      "Edit 1 of 1, diagram edit proposed by Helga",
     );
   });
 
@@ -194,7 +194,7 @@ describe("a diagram hunk in the prompt's own surface", () => {
     expect(marked).toHaveClass("hunk--rejected");
     expect(marked).toHaveAttribute("data-hunk", "h1");
     const foot = editor.view.dom.querySelector(".hunk--diagram-foot");
-    expect(foot).toHaveTextContent("Diagram change rejected");
+    expect(foot).toHaveTextContent("Diagram edit rejected");
     expect(foot).toHaveClass("hunk--del-foot", "hunk--rejected");
   });
 
@@ -210,7 +210,7 @@ describe("a diagram hunk in the prompt's own surface", () => {
     expect(marked).not.toHaveClass("hunk--rejected");
     const foot = editor.view.dom.querySelector<HTMLElement>(".hunk--diagram-foot");
     expect(foot).toHaveTextContent("Diagram removed");
-    expect(foot).toHaveAttribute("aria-label", "Change 1 of 1, diagram removal proposed by Helga");
+    expect(foot).toHaveAttribute("aria-label", "Edit 1 of 1, diagram removal proposed by Helga");
     // The foot comes after the fence, which holds the space of the chip.
     expect(marked?.nextElementSibling).toBe(foot);
   });

@@ -104,7 +104,7 @@ describe("summary and counts (MPV-FR-WKNB, MPV-FR-GYLV)", () => {
   });
 
   it("MPV-FR-WKNB: a draft row is counted as draft, after the other operations", () => {
-    expect(summaryOf(proposal([draftRow("d", "D", "x"), createRow("a", "A")]))).toBe("1 added, 1 draft");
+    expect(summaryOf(proposal([draftRow("d", "D", "x"), createRow("a", "A")]))).toBe("1 added, 1 change");
   });
 
   it("MPV-FR-WKNB: a proposal of one issue row starts with its reference", () => {

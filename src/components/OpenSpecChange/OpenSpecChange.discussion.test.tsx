@@ -123,7 +123,7 @@ describe("the discussion column of a stream location", () => {
     expect(screen.queryByTestId("openspec-change-discussion")).not.toBeInTheDocument();
     expect(screen.queryByTestId("openspec-change-split")).not.toBeInTheDocument();
     expect(screen.getByTestId("openspec-change-no-discussion")).toHaveTextContent(
-      "A change is discussed on its work stream",
+      "An OpenSpec change is discussed on its work stream",
     );
     expect(calls("list_discussions")).toHaveLength(0);
     expect(calls("list_change_edit_proposals")).toHaveLength(0);
@@ -141,7 +141,7 @@ describe("fragment discussions of a file", () => {
       text.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     });
     await userEvent.click(await screen.findByRole("button", { name: "Discuss selection" }));
-    const composer = await screen.findByRole("textbox", { name: "Discuss this change" });
+    const composer = await screen.findByRole("textbox", { name: "Discuss this OpenSpec change" });
     await userEvent.type(composer, "Why this word?");
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
     await waitFor(() => expect(calls("open_discussion")).toHaveLength(1));
@@ -226,7 +226,7 @@ describe("fragment discussions of a file", () => {
       text.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     });
     await userEvent.click(await screen.findByRole("button", { name: "Discuss selection" }));
-    await userEvent.type(await screen.findByRole("textbox", { name: "Discuss this change" }), "Why?");
+    await userEvent.type(await screen.findByRole("textbox", { name: "Discuss this OpenSpec change" }), "Why?");
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
     await waitFor(() => expect(calls("open_discussion")).toHaveLength(1));
     expect(calls("open_discussion")[0][1]).toMatchObject({
@@ -276,7 +276,7 @@ describe("the discussion of one hunk", () => {
   it("OCW-FR-COLR: Discuss opens a discussion whose opening comment names the hunk of the change, and holds the hunk", async () => {
     drawChange({ file: "proposal.md" });
     await userEvent.click(await screen.findByRole("button", { name: "Discuss" }));
-    const composer = await screen.findByRole("textbox", { name: "Discuss this change" });
+    const composer = await screen.findByRole("textbox", { name: "Discuss this OpenSpec change" });
     expect(composer).toHaveValue("@arch ");
     await userEvent.type(composer, "why?");
     await userEvent.click(screen.getByRole("button", { name: "Post" }));

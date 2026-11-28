@@ -64,10 +64,10 @@ afterEach(cleanup);
 
 async function openGraduation() {
   render(<Settings contentRoot="/p#0" lineEndings="lf" onSelectLineEndings={vi.fn()} />);
-  await userEvent.click(screen.getByRole("tab", { name: "Graduation" }));
+  await userEvent.click(screen.getByRole("tab", { name: "Implementation" }));
 }
 
-const select = () => screen.findByRole("combobox", { name: "Concurrent graduation runs" });
+const select = () => screen.findByRole("combobox", { name: "Concurrent implementation runs" });
 
 function optionLabels(box: HTMLElement): string[] {
   return within(box)
@@ -76,10 +76,10 @@ function optionLabels(box: HTMLElement): string[] {
 }
 
 describe("Project settings — Graduation section", () => {
-  it("SET-FR-03: the window lists a Graduation section", async () => {
+  it("PVC-FR-QWAN, SET-FR-03: the window lists an Implementation section", async () => {
     backend();
     render(<Settings contentRoot="/p#0" lineEndings="lf" onSelectLineEndings={vi.fn()} />);
-    expect(screen.getByRole("tab", { name: "Graduation" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Implementation" })).toBeInTheDocument();
   });
 
   it("SET-FR-QKKQ, SET-FR-ZNXA: the drop-down offers 1, 2, 4, 8 and Unlimited, and rests on 1", async () => {
@@ -139,7 +139,7 @@ describe("Project settings — Graduation section", () => {
     expect(saves()).toEqual([{ graduationConcurrencyLimit: 8 }]);
     expect(settingsSectionsPending()).toEqual([]);
 
-    await userEvent.click(screen.getByRole("tab", { name: "Graduation" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Implementation" }));
     expect(await select()).toHaveValue("8");
   });
 
@@ -148,7 +148,7 @@ describe("Project settings — Graduation section", () => {
     await openGraduation();
     await userEvent.selectOptions(await select(), "2");
     await userEvent.click(screen.getByRole("tab", { name: "MCP servers" }));
-    await userEvent.click(screen.getByRole("tab", { name: "Graduation" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Implementation" }));
     expect(await select()).toHaveValue("2");
     expect(screen.getByTestId("graduation-pending")).toBeInTheDocument();
   });

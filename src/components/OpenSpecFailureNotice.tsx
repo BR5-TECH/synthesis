@@ -243,7 +243,7 @@ export function OpenSpecFailureNotice({
                 });
               }}
             >
-              Open change
+              Open OpenSpec change
             </button>
           )}
           {showRun && (

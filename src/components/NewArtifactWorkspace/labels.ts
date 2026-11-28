@@ -39,7 +39,7 @@ export function imageRefusal(error: string): string {
     return "That image could not be read. Try a different one.";
   }
   if (error.includes("draft_locked_by_graduation")) {
-    return "This draft takes no changes while its graduation holds it.";
+    return "This change takes no edits while its implementation holds it.";
   }
   if (error.includes("asset_store_failed")) {
     return "The image could not be stored. Nothing was written — you can try again.";

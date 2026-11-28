@@ -8,7 +8,7 @@ Project home tab; the initial tab on project open. It is the project's looking g
 ## User stories
 - As a returning user, I want to see what I was last working on so that I can resume work without searching.
 - As a user, I want to see whether an agent run is in flight so that I can jump to its activity surface quickly.
-- As a user, I want the drafts I am developing listed so that I can return to one without opening the Drafts panel.
+- As a user, I want the drafts I am developing listed so that I can return to one without opening the Changes panel.
 - As a user, I want the work pending in Git counted for me so that I can tell what is uncommitted and what is unpushed at a glance.
 - As a user who edits files outside the IDE, I want those edits to move the Dashboard so that it describes the project rather than the application's own history.
 - As an architect, I want to see the milestones on a timeline with today marked and the current milestone picked out, so that I know where the delivery stands when I open the project.

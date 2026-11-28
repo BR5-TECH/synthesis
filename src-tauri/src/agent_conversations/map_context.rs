@@ -70,7 +70,7 @@ fn row_subject(fields: &crate::map_plan::RowFields) -> String {
     match fields {
         RowFields::CreateIssue(f) => format!("new issue \"{}\"", f.title),
         RowFields::ModifyIssue(f) => format!("change to issue {} \"{}\"", f.number, f.title),
-        RowFields::NewDraft(f) => format!("new draft \"{}\"", f.name),
+        RowFields::NewDraft(f) => format!("new change \"{}\"", f.name),
     }
 }
 
@@ -79,7 +79,7 @@ fn row_subject(fields: &crate::map_plan::RowFields) -> String {
 ///
 /// The lines come from the Map folder of `roots.store`, oldest proposal first.
 /// Each line holds the row key, what the row is, its state, the issue number
-/// or the draft of an accepted row, the typed error of a failed row, and the
+/// or the change of an accepted row, the typed error of a failed row, and the
 /// reason that a waiting row is blocked.
 pub(crate) fn proposal_rows_summary(roots: Roots<'_>, discussion_id: &str) -> Vec<String> {
     use crate::map_plan::RowState;
@@ -107,7 +107,7 @@ pub(crate) fn proposal_rows_summary(roots: Roots<'_>, discussion_id: &str) -> Ve
                 let result = row.result.as_ref();
                 match (&row.fields, result.and_then(|r| r.issue_number)) {
                     (crate::map_plan::RowFields::NewDraft(_), _) => {
-                        line.push_str(" (draft created)")
+                        line.push_str(" (change created)")
                     }
                     (_, Some(number)) => line.push_str(&format!(" (issue #{number})")),
                     _ => {}

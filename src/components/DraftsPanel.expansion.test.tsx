@@ -179,7 +179,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     await screen.findByText("artifact-window");
     expect(folderRow("backend")).toHaveAttribute("aria-expanded", "false");
 
-    fireEvent.dragStart(screen.getByRole("treeitem", { name: /Draft artifact-window/ }));
+    fireEvent.dragStart(screen.getByRole("treeitem", { name: /Change artifact-window/ }));
     fireEvent.dragOver(folderRow("backend"));
     fireEvent.drop(folderRow("backend"));
 
@@ -200,7 +200,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel({ expanded: ["UI"] });
     await screen.findByText("scratch");
 
-    const row = screen.getByRole("treeitem", { name: /Draft artifact-window/ });
+    const row = screen.getByRole("treeitem", { name: /Change artifact-window/ });
     const target = folderRow("backend");
     fireEvent.dragStart(row);
     fireEvent.dragOver(target);
@@ -224,8 +224,8 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel({ expanded: ["UI", "UI/Components", "backend"] });
     await screen.findByText("button-lens");
 
-    const dragged = screen.getByRole("treeitem", { name: /Draft editor-tweaks/ });
-    const over = screen.getByRole("treeitem", { name: /Draft button-lens/ });
+    const dragged = screen.getByRole("treeitem", { name: /Change editor-tweaks/ });
+    const over = screen.getByRole("treeitem", { name: /Change button-lens/ });
     fireEvent.dragStart(dragged);
     fireEvent.dragOver(over);
     fireEvent.drop(over);
@@ -245,7 +245,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel({ expanded: ["UI"] });
     await screen.findByText("scratch");
 
-    const row = screen.getByRole("treeitem", { name: /Draft artifact-window/ });
+    const row = screen.getByRole("treeitem", { name: /Change artifact-window/ });
     fireEvent.dragStart(row);
     fireEvent.dragOver(folderRow("backend"));
     expect(folderRow("backend")).toHaveAttribute("data-drop-target", "true");
@@ -264,13 +264,13 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     const body = document.querySelector(".vpanel__body") as HTMLElement;
 
     // A draft filed under `UI` may go to the root.
-    fireEvent.dragStart(screen.getByRole("treeitem", { name: /Draft artifact-window/ }));
+    fireEvent.dragStart(screen.getByRole("treeitem", { name: /Change artifact-window/ }));
     fireEvent.dragOver(body);
     expect(body).toHaveAttribute("data-drop-target", "true");
-    fireEvent.dragEnd(screen.getByRole("treeitem", { name: /Draft artifact-window/ }));
+    fireEvent.dragEnd(screen.getByRole("treeitem", { name: /Change artifact-window/ }));
 
     // One already at the root may not.
-    fireEvent.dragStart(screen.getByRole("treeitem", { name: /Draft scratch/ }));
+    fireEvent.dragStart(screen.getByRole("treeitem", { name: /Change scratch/ }));
     fireEvent.dragOver(body);
     expect(body).not.toHaveAttribute("data-drop-target");
     fireEvent.drop(body);
@@ -427,7 +427,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     await userEvent.keyboard("{ArrowDown}");
     expect(folderRow("Components")).toHaveFocus();
     await userEvent.keyboard("{ArrowDown}");
-    expect(screen.getByRole("treeitem", { name: /Draft artifact-window/ })).toHaveFocus();
+    expect(screen.getByRole("treeitem", { name: /Change artifact-window/ })).toHaveFocus();
     await userEvent.keyboard("{ArrowUp}");
     expect(folderRow("Components")).toHaveFocus();
   });
@@ -513,9 +513,9 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: "Rename…" }));
     onOpenDraft.mockClear();
 
-    await userEvent.click(screen.getByLabelText("Draft name"));
+    await userEvent.click(screen.getByLabelText("Change name"));
     expect(onOpenDraft).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("Draft name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Change name")).toBeInTheDocument();
   });
 
   it("DRP-FR-22: menus open on right-click, and no row carries a button of its own", async () => {
@@ -550,7 +550,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
         .getAllByRole("menuitem")
         .map((b) => b.textContent),
     ).toEqual([
-      "New Draft",
+      "New change",
       "New Folder",
       "Rename",
       "Move to Folder…",
@@ -590,7 +590,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     draftRow("scratch").focus();
     await userEvent.keyboard("{Shift>}{F10}{/Shift}");
     expect(
-      screen.getByRole("menu", { name: "Draft actions for scratch" }),
+      screen.getByRole("menu", { name: "Change actions for scratch" }),
     ).toBeInTheDocument();
   });
 
@@ -608,7 +608,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
       within(screen.getByRole("menu"))
         .getAllByRole("menuitem")
         .map((b) => b.textContent),
-    ).toEqual(["New Draft", "New Folder"]);
+    ).toEqual(["New change", "New Folder"]);
   });
 
   it("DRP-FR-23: the inline field stands where the name it replaces stood", async () => {
@@ -644,13 +644,13 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     await act(async () => void openDraftMenu("artifact-window"));
     await userEvent.click(screen.getByRole("menuitem", { name: "Rename…" }));
     expect(onOpenDraft).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("Draft name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Change name")).toBeInTheDocument();
 
     await userEvent.keyboard("{Escape}");
     await act(async () => void openDraftMenu("artifact-window"));
     await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     expect(onOpenDraft).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: "Delete draft" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Delete change" })).toBeInTheDocument();
   });
 
   it("DRP-FR-23: the root's inline field is indented like a root row", async () => {

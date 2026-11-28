@@ -89,9 +89,9 @@ describe("DDS-FR-RHKW: the composer of a discussion about one change", () => {
     // DDS-FR-RHKW: the composer names its change, whichever discussion the
     // column was reading.
     expect(screen.getByTestId("draft-open-discussion")).toHaveTextContent(
-      "This begins a discussion about change 2 of 3.",
+      "This begins a discussion about edit 2 of 3.",
     );
-    const field = await screen.findByRole("textbox", { name: "Discuss this draft" });
+    const field = await screen.findByRole("textbox", { name: "Discuss this change" });
     fireEvent.change(field, { target: { value: "@arch why this word?" } });
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
 
@@ -110,7 +110,7 @@ describe("DDS-FR-RHKW: the composer of a discussion about one change", () => {
     setComposerBody(discussionTargetKey({ kind: "draft", draftId: DRAFT }), "@arch ");
     render(columnElement({ openingHunk: { reference, position: 2, total: 3 } }));
     const field = await screen.findByRole<HTMLTextAreaElement>("textbox", {
-      name: "Discuss this draft",
+      name: "Discuss this change",
     });
     await waitFor(() => expect(field).toHaveFocus());
     // Every read the strip asks for has answered, so nothing renders after the
@@ -156,11 +156,11 @@ const seedProposal = () =>
 describe("DDS-FR-WKTQ: the subject strip in the column", () => {
   it("DDS-FR-WKTQ, DDS-FR-RHKW: stands for the composer of a hunk discussion", async () => {
     render(columnElement({ openingHunk: { reference, position: 2, total: 3 } }));
-    expect(screen.getByTestId("discussion-subject")).toHaveTextContent("Change 2 of 3");
+    expect(screen.getByTestId("discussion-subject")).toHaveTextContent("Edit 2 of 3");
     await screen.findByTestId("discussion-subject-after");
   });
 
-  it("DDS-FR-WKTQ: stands for a hunk discussion, below the header and outside the scroller", async () => {
+  it("DDS-FR-WKTQ, PVC-FR-VBPY: stands for a hunk discussion, below the header and outside the scroller", async () => {
     seedProposal();
     render(
       columnElement({
@@ -170,13 +170,15 @@ describe("DDS-FR-WKTQ: the subject strip in the column", () => {
     );
     await screen.findByTestId("comment-thread-disc-h");
     const strip = screen.getByTestId("discussion-subject");
-    expect(strip).toHaveTextContent("Change 1 of 3");
+    expect(strip).toHaveTextContent("Edit 1 of 3");
+    // PVC-FR-VBPY: one proposed hunk is an edit.
+    expect(strip).toHaveAccessibleName("The edit this discussion is about");
     expect(strip.closest(".comment-card__messages")).toBeNull();
     expect(strip.previousElementSibling?.tagName).toBe("HEADER");
     // The tab names what the discussion is about.
     expect(screen.getByRole("tab", { name: /1/ })).toHaveAttribute(
       "title",
-      "Discussion 1: a change to Spec.md",
+      "Discussion 1: an edit to Spec.md",
     );
     await screen.findByTestId("discussion-subject-after");
   });
@@ -206,7 +208,7 @@ describe("DDS-FR-WKTQ: the subject strip in the column", () => {
         openingHunk: { reference: hunkReference("h2"), position: 2, total: 3 },
       }),
     );
-    expect(screen.getByTestId("discussion-subject")).toHaveTextContent("Change 2 of 3");
+    expect(screen.getByTestId("discussion-subject")).toHaveTextContent("Edit 2 of 3");
     await screen.findByTestId("discussion-subject-after");
   });
 });
@@ -253,7 +255,7 @@ describe("DDS-FR-YLRM: leaving the composer of a hunk discussion", () => {
   it("DDS-FR-YLRM: a tab leaves it for the discussion chosen, and the typed text stays", async () => {
     const s = spies();
     render(<Hosted discussions={[discussionSaying("disc-1", ["opening"])]} spies={s} />);
-    const field = await screen.findByRole("textbox", { name: "Discuss this draft" });
+    const field = await screen.findByRole("textbox", { name: "Discuss this change" });
     await userEvent.type(field, "draft text");
 
     await userEvent.click(screen.getByRole("tab", { name: /1/ }));
@@ -268,13 +270,13 @@ describe("DDS-FR-YLRM: leaving the composer of a hunk discussion", () => {
 
     // The text waits in the draft's composer for the next discussion.
     await userEvent.click(screen.getByTestId("discussion-new"));
-    expect(screen.getByRole("textbox", { name: "Discuss this draft" })).toHaveValue("draft text");
+    expect(screen.getByRole("textbox", { name: "Discuss this change" })).toHaveValue("draft text");
   });
 
   it("DDS-FR-YLRM: + leaves it for the composer of another discussion, and the typed text stays", async () => {
     const s = spies();
     render(<Hosted discussions={[discussionSaying("disc-1", ["opening"])]} spies={s} />);
-    const field = await screen.findByRole("textbox", { name: "Discuss this draft" });
+    const field = await screen.findByRole("textbox", { name: "Discuss this change" });
     await userEvent.type(field, "draft text");
 
     await userEvent.click(screen.getByTestId("discussion-new"));
@@ -282,10 +284,10 @@ describe("DDS-FR-YLRM: leaving the composer of a hunk discussion", () => {
     expect(s.cancelHunk).toHaveBeenCalledTimes(1);
     expect(s.cancelFragment).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("draft-open-discussion")).toHaveTextContent(
-      "This begins another discussion about this draft.",
+      "This begins another discussion about this change.",
     );
     expect(screen.queryByTestId("discussion-subject")).toBeNull();
-    expect(screen.getByRole("textbox", { name: "Discuss this draft" })).toHaveValue("draft text");
+    expect(screen.getByRole("textbox", { name: "Discuss this change" })).toHaveValue("draft text");
   });
 });
 

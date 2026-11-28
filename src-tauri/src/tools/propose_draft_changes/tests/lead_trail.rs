@@ -61,7 +61,7 @@ fn a_repeated_text_is_refused_with_its_place_and_names_lead_and_trail() {
         );
         assert!(refusal.retryable());
         let text = refusal.to_string();
-        assert!(text.starts_with("Change 2 of 2"), "{text}");
+        assert!(text.starts_with("Edit 2 of 2"), "{text}");
         assert!(text.contains("`lead` or `trail`"), "{text}");
         assert!(f.proposals().is_empty());
     }
@@ -92,7 +92,7 @@ fn a_context_over_its_bound_names_its_place_and_which_context() {
         assert_eq!(refusal.kind(), ToolErrorKind::InvalidArgs);
         assert!(refusal.retryable());
         let text = refusal.to_string();
-        assert!(text.starts_with("Change 1 of 1"), "{text}");
+        assert!(text.starts_with("Edit 1 of 1"), "{text}");
         assert!(text.contains(correction), "{text}");
         assert!(text.contains("200 characters"), "{text}");
         assert!(f.proposals().is_empty());
@@ -174,7 +174,7 @@ fn the_definition_names_lead_trail_and_ranged_reads() {
         assert!(text.contains("`lead`") && text.contains("`trail`"), "{text}");
         assert!(text.contains("200 characters"), "{text}");
     }
-    assert!(DESCRIPTION.contains("`offset` and `limit` on `read_draft`"));
+    assert!(DESCRIPTION.contains("`offset` and `limit` on `read_change`"));
     let schema = parameters();
     let item = &schema["properties"]["hunks"]["items"]["properties"];
     assert_eq!(item["lead"]["description"], LEAD_DESCRIPTION);

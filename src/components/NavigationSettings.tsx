@@ -107,7 +107,7 @@ export function NavigationSettings() {
     <div>
       <p className="t-p" style={{ marginBottom: 20 }}>
         Keep the side panel in step with what you are working on, so switching
-        to a tab also shows you where its file or draft lives.
+        to a tab also shows you where its file or change lives.
       </p>
 
       <label style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -122,8 +122,8 @@ export function NavigationSettings() {
 
       <p className="t-ui-xs t-muted" style={{ marginTop: 12, maxWidth: 520 }}>
         When you switch to a different tab, the panel that holds its item becomes
-        the active one and selects it: Project for a file or a Flow, Drafts for a
-        draft, Changes for a diff. Other tabs leave the panel alone, and you can
+        the active one and selects it: Project for a file or a Flow, Changes for a
+        change, Commits for a diff. Other tabs leave the panel alone, and you can
         always select something else afterwards.
       </p>
 

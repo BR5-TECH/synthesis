@@ -55,7 +55,7 @@ export function ProposalHunkControl({
       : reference.kind === "gone"
         ? "no longer available"
         : null;
-  const name = position > 0 ? `Change ${position} of ${total}` : attachment.path;
+  const name = position > 0 ? `Edit ${position} of ${total}` : attachment.path;
 
   return (
     <button

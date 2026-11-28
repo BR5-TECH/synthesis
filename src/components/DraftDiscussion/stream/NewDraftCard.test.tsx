@@ -154,22 +154,24 @@ afterEach(() => {
 const calls = (cmd: string) => invokeMock.mock.calls.filter((c) => c[0] === cmd);
 
 describe("the new-draft card", () => {
-  it("DCR-FR-RDLK, DCR-FR-QWXP, DCR-FR-LFDJ, DCR-FR-FKNQ: the card reads its proposal and names its place, name, and state", async () => {
+  it("DCR-FR-RDLK, DCR-FR-QWXP, DCR-FR-LFDJ, DCR-FR-FKNQ, PVC-FR-NEXL: the card reads its proposal and names its place, name, and state", async () => {
     renderCard();
     const card = await screen.findByTestId("new-draft-card");
-    expect(card).toHaveAccessibleName("Proposed draft, part 1 of 3, relay-auth, Waiting for you");
+    // DCR-FR-FKNQ: a change of the Changes panel is a bare "change", and
+    // never an OpenSpec change.
+    expect(card).toHaveAccessibleName("Proposed change, part 1 of 3, relay-auth, Waiting for you");
     expect(card).toHaveTextContent("Part 1 of 3 · relay-auth");
     expect(card).toHaveTextContent("Waiting for you");
     expect(card).toHaveTextContent("NEW");
     expect(calls("list_new_draft_proposals")).toHaveLength(1);
   });
 
-  it("DCR-FR-QWXP: an accepted card says so in words and names the created draft", async () => {
+  it("DCR-FR-QWXP, PVC-FR-HMJD: an accepted card says so in words and names the created change", async () => {
     listed = [proposal({ state: "accepted", createdDraftId: "n1", decidedAt: "x" })];
     renderCard({ turns: [{ id: "t" } as AgentTurn] });
     const card = await screen.findByTestId("new-draft-card");
     expect(card).toHaveTextContent("Accepted");
-    expect(card).toHaveTextContent("Created draft relay-auth");
+    expect(card).toHaveTextContent("Created change relay-auth");
     expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
   });
 
@@ -178,7 +180,7 @@ describe("the new-draft card", () => {
     const second = comment("c2", [ref("p1", "change")]);
     render(<NewDraftCard reference={ref()} comment={first} comments={[first, second]} pendingTurns={[]} />);
     const line = await screen.findByTestId("new-draft-reference");
-    expect(line).toHaveTextContent("Proposed a draft · Part 1 of 3 · relay-auth");
+    expect(line).toHaveTextContent("Proposed a change · Part 1 of 3 · relay-auth");
     expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
   });
 
@@ -192,7 +194,7 @@ describe("the new-draft card", () => {
     expect(calls("accept_new_draft_proposal")[0][1]).toEqual({ proposalId: "p1", feedback: "Keep it small." });
     expect(calls("dispatch_agent_turn")[0][1]).toMatchObject({ nickname: "arch", triggerCommentId: "decision-1" });
     // DCR-FR-UTKG: the card reads Accepted and names the created draft.
-    expect(await screen.findByText("Created draft relay-auth")).toBeInTheDocument();
+    expect(await screen.findByText("Created change relay-auth")).toBeInTheDocument();
     expect(screen.getByTestId("new-draft-card")).toHaveTextContent("Accepted");
   });
 
@@ -250,7 +252,7 @@ describe("the new-draft card", () => {
     renderCard();
     expect(await screen.findByRole("button", { name: "Accept" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Reject" })).toBeDisabled();
-    expect(screen.getByTestId("new-draft-card")).toHaveTextContent("This draft is archived");
+    expect(screen.getByTestId("new-draft-card")).toHaveTextContent("This change is archived");
     expect(screen.getByRole("button", { name: "Discuss →" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Preview ↗" })).toBeEnabled();
   });
@@ -309,7 +311,7 @@ describe("the What next? row", () => {
     renderCard();
     const row = await screen.findByTestId("decomposition-next-step");
     expect(row).toHaveTextContent("What next?");
-    expect(screen.getByRole("button", { name: "Ask for next draft" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ask for next change" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirm decomposition done" })).toBeInTheDocument();
   });
 
@@ -367,10 +369,10 @@ describe("the What next? row", () => {
     expect(calls("accept_new_draft_proposal")).toHaveLength(0);
   });
 
-  it("DCR-FR-UVMY: Ask for next draft dispatches one turn on the newest human comment and records nothing", async () => {
+  it("DCR-FR-UVMY: Ask for next change dispatches one turn on the newest human comment and records nothing", async () => {
     listed = [proposal({ state: "rejected", decidedAt: "x" })];
     renderCard();
-    fireEvent.click(await screen.findByRole("button", { name: "Ask for next draft" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Ask for next change" }));
     await waitFor(() => expect(calls("dispatch_agent_turn")).toHaveLength(1));
     expect(calls("dispatch_agent_turn")[0][1]).toMatchObject({ nickname: "arch", triggerCommentId: "decision-1" });
     expect(calls("reject_new_draft_proposal")).toHaveLength(0);
@@ -383,7 +385,7 @@ describe("the What next? row", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Accept" }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveTextContent("You asked to create a draft.");
+    expect(dialog).toHaveTextContent("You asked to create a change.");
     expect(calls("accept_new_draft_proposal")).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 

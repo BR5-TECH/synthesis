@@ -188,6 +188,17 @@ describe("the destination toggle of the graduation start dialog", () => {
     expect(decl(option, "min-width")).toBe("0");
   });
 
+  it("GSD-FR-DCLQ: the two-segment Implement as row splits its width in two equal tracks", () => {
+    const css = sheet("components.css");
+    const rows = blocksFor(css, ".graduation-start__destination-row--two");
+    expect(rows).toHaveLength(1);
+    expect(decl(rows[0], "grid-template-columns")).toBe("repeat(2, minmax(0, 1fr))");
+    // The modifier comes after the base rule, so the cascade takes its tracks.
+    expect(css.indexOf(".graduation-start__destination-row--two")).toBeGreaterThan(
+      css.indexOf(".graduation-start__destination-row {"),
+    );
+  });
+
   it("GSD-FR-BZHW, GSD-FR-WMTD: the chosen segment shows by fill and by weight", () => {
     const [chosen] = blocksFor(
       sheet("components.css"),

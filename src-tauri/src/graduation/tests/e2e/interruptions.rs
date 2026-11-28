@@ -31,7 +31,7 @@ fn an_author_pause_mid_work_rests_the_run_and_continue_resumes_it() {
         .expect_interrupted_record("author_pause", "info", &[])
         .expect_dispatch_count(1)
         .expect_commits(1)
-        .expect_commit_message_contains(0, "Abandoned graduation turn")
+        .expect_commit_message_contains(0, "Abandoned implementation turn")
         .expect_committed_paths(&["src/panel.ts"])
         .expect_checkpoint_paths(&["src/panel.ts"])
         .expect_stream_held()
@@ -47,8 +47,8 @@ fn an_author_pause_mid_work_rests_the_run_and_continue_resumes_it() {
         .expect_commits(2)
         // GRD-FR-WQTN: a resumed turn that wrote something new makes a commit of
         // its own, and the abandoned commit keeps its message.
-        .expect_commit_message_contains(0, "Abandoned graduation turn")
-        .expect_commit_message_contains(1, "Graduated from the draft")
+        .expect_commit_message_contains(0, "Abandoned implementation turn")
+        .expect_commit_message_contains(1, "Implemented from the change")
         .expect_committed_paths(&["src/panel.ts"])
         .worktree_holds("src/panel.ts", "2\n")
         .expect_stream_released();
@@ -69,7 +69,7 @@ fn an_author_pause_during_the_review_resumes_at_the_review() {
         .expect_interruption("author_pause")
         .expect_resume_phase("review")
         .expect_commits(1)
-        .expect_commit_message_contains(0, "Abandoned graduation turn")
+        .expect_commit_message_contains(0, "Abandoned implementation turn")
         .expect_committed_paths(&["src/panel.ts"])
         .expect_review_checkout_reclaimed()
         .expect_stream_held()
@@ -84,7 +84,7 @@ fn an_author_pause_during_the_review_resumes_at_the_review() {
         // graduation message, and the run records its rewritten revision.
         .expect_commits(1)
         .expect_branch_commits_since_base(1)
-        .expect_branch_head_message_contains("Graduated from the draft")
+        .expect_branch_head_message_contains("Implemented from the change")
         .expect_commit_message_contains(0, "Add the empty state to the panel.")
         .expect_last_commit_is_branch_head()
         .expect_committed_paths(&["src/panel.ts"]);
@@ -109,8 +109,8 @@ fn only_the_abandoned_commit_at_the_head_takes_the_graduation_message() {
         .expect_state(GraduationRunState::Completed)
         .expect_dispatch_order(&["review"])
         .expect_commits(2)
-        .expect_commit_message_contains(0, "Abandoned graduation turn")
-        .expect_commit_message_contains(1, "Graduated from the draft")
+        .expect_commit_message_contains(0, "Abandoned implementation turn")
+        .expect_commit_message_contains(1, "Implemented from the change")
         .expect_last_commit_is_branch_head()
         .expect_branch_commits_since_base(2)
         .worktree_holds("src/panel.ts", "2\n");
@@ -133,14 +133,14 @@ fn a_rewrite_the_index_refuses_blocks_the_run_and_continue_retries_it() {
         .expect_blocker("commit_failed")
         .expect_commits(1)
         .expect_last_commit_is_branch_head()
-        .expect_branch_head_message_contains("Abandoned graduation turn")
+        .expect_branch_head_message_contains("Abandoned implementation turn")
         .expect_stream_held()
         .releasing_the_index()
         .continued(vec![Script::answers_ready("The work answers the prompt.")])
         .expect_state(GraduationRunState::Completed)
         .expect_dispatch_order(&["review"])
         .expect_commits(1)
-        .expect_branch_head_message_contains("Graduated from the draft")
+        .expect_branch_head_message_contains("Implemented from the change")
         .expect_last_commit_is_branch_head();
 }
 
@@ -192,7 +192,7 @@ fn a_turn_that_finishes_as_the_author_pauses_still_rests_paused() {
         .expect_state(GraduationRunState::Interrupted)
         .expect_interruption("author_pause")
         .expect_commits(1)
-        .expect_commit_message_contains(0, "Abandoned graduation turn")
+        .expect_commit_message_contains(0, "Abandoned implementation turn")
         .expect_stream_held();
 }
 
@@ -343,7 +343,7 @@ fn an_application_shutdown_stops_the_turn_and_names_itself() {
         .expect_interruption("application_shutdown")
         .expect_interrupted_record("application_shutdown", "info", &[])
         .expect_commits(1)
-        .expect_commit_message_contains(0, "Abandoned graduation turn")
+        .expect_commit_message_contains(0, "Abandoned implementation turn")
         .expect_committed_paths(&["src/panel.ts"])
         .expect_stream_held()
         .expect_draft_locked(true);
@@ -369,7 +369,7 @@ fn a_project_change_during_the_review_resumes_at_the_review() {
         .expect_state(GraduationRunState::Completed)
         .expect_dispatch_order(&["review"])
         .expect_commits(1)
-        .expect_commit_message_contains(0, "Graduated from the draft")
+        .expect_commit_message_contains(0, "Implemented from the change")
         .expect_committed_paths(&["src/panel.ts"]);
 }
 
@@ -395,7 +395,7 @@ fn an_application_shutdown_during_the_review_resumes_at_the_review() {
         .expect_dispatch_order(&["review"])
         .expect_commits(1)
         .expect_branch_commits_since_base(1)
-        .expect_branch_head_message_contains("Graduated from the draft");
+        .expect_branch_head_message_contains("Implemented from the change");
 }
 
 // GTE-FR-HWQM, GTE-FR-YAEB / GRD-FR-TWMA, GRD-FR-XVUD, GRD-FR-BNTC: a shutdown
@@ -442,7 +442,7 @@ fn a_run_abandoned_by_a_relaunch_rests_as_execution_abandoned() {
         // What the turn left is committed as an abandoned turn, as for any
         // other stop, so the stream is usable by what runs next.
         .expect_commits(1)
-        .expect_commit_message_contains(0, "Abandoned graduation turn")
+        .expect_commit_message_contains(0, "Abandoned implementation turn")
         .expect_working_copy_present()
         .continued(vec![
             Script::reports_success().writes("src/panel.ts", "2\n"),
@@ -474,7 +474,7 @@ fn a_review_abandoned_by_a_relaunch_resumes_at_the_review() {
         .expect_dispatch_order(&["review"])
         .expect_pass(1)
         .expect_commits(1)
-        .expect_branch_head_message_contains("Graduated from the draft");
+        .expect_branch_head_message_contains("Implemented from the change");
 }
 
 // ---------------------------------------------------------------------------
@@ -532,7 +532,7 @@ fn a_turn_that_exits_nonzero_answers_malformed_or_is_terminated_rests_with_its_w
             .expect_interrupted_record(reason, "error", &fields)
             .expect_dispatch_count(1)
             .expect_commits(1)
-            .expect_commit_message_contains(0, "Abandoned graduation turn")
+            .expect_commit_message_contains(0, "Abandoned implementation turn")
             .expect_committed_paths(&["src/half-done.ts"])
             .expect_stream_held();
     }
@@ -569,7 +569,7 @@ fn a_review_turn_that_times_out_commits_the_unreviewed_work_and_resumes_with_a_w
         .expect_dispatch(0, |d| d.purpose("resume"))
         .expect_commits(1)
         .expect_branch_commits_since_base(1)
-        .expect_branch_head_message_contains("Graduated from the draft");
+        .expect_branch_head_message_contains("Implemented from the change");
 }
 
 /// A review turn whose sandbox could not read its own catalog.
@@ -594,7 +594,7 @@ fn a_review_turn_that_could_not_launch_resumes_at_the_review() {
         .expect_resume_phase("review")
         .expect_dispatch_order(&["work", "review"])
         .expect_commits(1)
-        .expect_commit_message_contains(0, "Abandoned graduation turn")
+        .expect_commit_message_contains(0, "Abandoned implementation turn")
         .expect_committed_paths(&["src/panel.ts"])
         .expect_review_checkout_reclaimed()
         .expect_stream_held()
@@ -606,7 +606,7 @@ fn a_review_turn_that_could_not_launch_resumes_at_the_review() {
         .expect_dispatch(0, |d| d.changed_paths(&["src/panel.ts"]))
         .expect_commits(1)
         .expect_branch_commits_since_base(1)
-        .expect_branch_head_message_contains("Graduated from the draft");
+        .expect_branch_head_message_contains("Implemented from the change");
 }
 
 // GXD-FR-ELUF, GXD-FR-TJRV, GRD-FR-SWOJ: the resume point is spent when the
@@ -632,7 +632,7 @@ fn a_second_review_that_could_not_launch_records_the_review_again() {
         .expect_dispatch_order(&["review"])
         .expect_turns(1, 3)
         .expect_commits(1)
-        .expect_branch_head_message_contains("Graduated from the draft");
+        .expect_branch_head_message_contains("Implemented from the change");
 }
 
 // GXD-FR-ELUF, GRD-FR-XVUD: a run that a relaunch moved out of the review,

@@ -194,11 +194,11 @@ fn the_turns_of_a_propose_run_carry_their_blocks() {
     assert!(work.contains("Change no file outside"));
     assert!(work.contains(&format!("openspec validate {CHANGE} --strict")));
     assert!(!work.contains("{{ change-name }}"));
-    assert!(!work.contains("judge the change"), "the review block is not the work block");
+    assert!(!work.contains("judge the OpenSpec change"), "the review block is not the work block");
 
     let review = &dispatch.of_part("review")[0].instruction;
     assert!(review.starts_with(crate::graduation::driver::prompts::REVIEW_PROMPT.trim_end()));
-    assert!(review.contains("Judge the change against the prompt"));
+    assert!(review.contains("Judge the OpenSpec change against the prompt"));
     assert!(review.contains("is a finding"));
     assert!(review.contains("input.openspec_validation"));
 }

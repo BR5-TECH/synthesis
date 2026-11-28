@@ -749,8 +749,8 @@ export function ProjectDockerImages({ contentRoot = "" }: ProjectDockerImagesPro
           {needsThisTab && (
             <p className="docker-graduates">
               {status.imageName.trim() === ""
-                ? "This project graduates through this agent, so graduation cannot start until an image name is filled in here."
-                : "This project graduates through this agent."}
+                ? "This project implements through this agent, so an implementation cannot start until an image name is filled in here."
+                : "This project implements through this agent."}
             </p>
           )}
 

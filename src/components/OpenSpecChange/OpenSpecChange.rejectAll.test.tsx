@@ -46,7 +46,7 @@ describe("the review bar (OCW-FR-EJGH)", () => {
     drawChange();
     const shown = await bar();
     // One hunk on proposal.md and one on a new spec file: two artifacts.
-    expect(within(shown).getByTestId("openspec-review-count")).toHaveTextContent("2 undecided changes in this change.");
+    expect(within(shown).getByTestId("openspec-review-count")).toHaveTextContent("2 undecided edits in this OpenSpec change.");
     const reading = screen.getByTestId("openspec-reading");
     expect(shown.compareDocumentPosition(reading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -54,7 +54,7 @@ describe("the review bar (OCW-FR-EJGH)", () => {
   it("OCW-FR-EJGH: a held hunk is still undecided and a decided one is not counted", async () => {
     backend.proposals = [changeProposal(["discussing", "accepted"])];
     drawChange();
-    expect(within(await bar()).getByTestId("openspec-review-count")).toHaveTextContent("1 undecided change in this change.");
+    expect(within(await bar()).getByTestId("openspec-review-count")).toHaveTextContent("1 undecided edit in this OpenSpec change.");
   });
 
   it("OCW-FR-EJGH: a change with no pending proposal shows no bar", async () => {
@@ -83,7 +83,7 @@ describe("the review bar (OCW-FR-EJGH)", () => {
     await user.click(within(shown).getByRole("button", { name: "Reject all" }));
     const dialog = screen.getByRole("dialog", { name: "Reject all" });
     expect(within(dialog).getByTestId("openspec-reject-all-statement")).toHaveTextContent(
-      "Reject the 2 undecided changes of this proposal?",
+      "Reject the 2 undecided edits of this proposal?",
     );
     expect(calls("decline_change_edit_proposal")).toHaveLength(0);
     await user.click(within(dialog).getByRole("button", { name: "Reject all" }));

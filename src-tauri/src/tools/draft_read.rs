@@ -50,12 +50,12 @@ mod tests;
 // ---------------------------------------------------------------------------
 
 /// RDT-FR-01.
-pub const NAME: &str = "read_draft";
+pub const NAME: &str = "read_change";
 
 /// RDT-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Read the current live prompt of a known draft. Use this after `search_drafts` gives you a draft ID, or when you already know that ID. It returns the draft's stable metadata together with its full current prompt by default; pass `offset` and `limit` to read a range of lines instead, which is what you want for a prompt too large to be worth reading whole. Use the returned prompt path only as information, not as an argument to `read_file`. It never returns an accepted-history snapshot or another version, does not search for drafts, and changes nothing.";
+pub const DESCRIPTION: &str = "Read the current live prompt of a known change. Use this after `search_changes` gives you a change ID, or when you already know that ID. It returns the change's stable metadata together with its full current prompt by default; pass `offset` and `limit` to read a range of lines instead, which is what you want for a prompt too large to be worth reading whole. A status of `graduated` means the change is implemented. Use the returned prompt path only as information, not as an argument to `read_file`. It never returns an accepted-history snapshot or another version, does not search for changes, and changes nothing.";
 
-const DRAFT_ID_DESCRIPTION: &str = "The draft ID returned by `search_drafts` or otherwise already known. This is not a file path, prompt path, history-entry ID, or version selector.";
+const CHANGE_ID_DESCRIPTION: &str = "The change ID returned by `search_changes` or otherwise already known. This is not a file path, prompt path, history-entry ID, or version selector.";
 
 const OFFSET_DESCRIPTION: &str = "The first line of the prompt to return, counting from 0. Defaults to 0, the start of the prompt. Use it with `limit` to read part of a large prompt; an offset past the end of the prompt returns no text.";
 
@@ -68,13 +68,17 @@ const LIMIT_DESCRIPTION: &str = "How many lines to return, starting at `offset`.
 /// (RDT-FR-VQYO).
 #[derive(Debug, Clone, Deserialize)]
 pub struct ReadDraftArgs {
-    /// The `alias` is TLC-FR-07's forgiveness applied to a name rather than to a
-    /// value: `draft_id` is the schema's spelling and the one the description
-    /// uses, and a model that reached for the camelCase spelling anyway has made
-    /// a mistake no answer of ours improves on by refusing. Without it serde
-    /// fails the decode as a missing field, which never reaches this tool and so
-    /// cannot even produce a clean `InvalidArgs`.
-    #[serde(alias = "draftId")]
+    /// `change_id` is the schema's spelling and the one the description uses
+    /// (PVC-FR-SQAF). The Rust field keeps its internal name (PVC-FR-ODXM).
+    ///
+    /// The aliases are TLC-FR-07's forgiveness applied to a name rather than
+    /// to a value. `draft_id` is the earlier name of the argument, which a
+    /// stored call of an earlier turn carries (PVC-FR-SQAF), and the schema
+    /// does not show it. A model that reached for a camelCase spelling anyway
+    /// has made a mistake no answer of ours improves on by refusing. Without
+    /// them serde fails the decode as a missing field, which never reaches this
+    /// tool and so cannot even produce a clean `InvalidArgs`.
+    #[serde(rename = "change_id", alias = "draft_id", alias = "changeId", alias = "draftId")]
     pub draft_id: String,
     #[serde(default, deserialize_with = "super::file_read::lenient_integer")]
     pub offset: Option<i64>,
@@ -90,9 +94,9 @@ pub fn parameters() -> serde_json::Value {
     serde_json::json!({
         "type": "object",
         "properties": {
-            "draft_id": {
+            "change_id": {
                 "type": "string",
-                "description": DRAFT_ID_DESCRIPTION,
+                "description": CHANGE_ID_DESCRIPTION,
             },
             "offset": {
                 "type": "integer",
@@ -103,7 +107,7 @@ pub fn parameters() -> serde_json::Value {
                 "description": LIMIT_DESCRIPTION,
             },
         },
-        "required": ["draft_id"],
+        "required": ["change_id"],
     })
 }
 
@@ -116,11 +120,14 @@ pub fn parameters() -> serde_json::Value {
 /// model can act on none of them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ReadDraftOutput {
+    /// PVC-FR-TKJW, RDT-FR-01: the model reads this field as `change_id`. The
+    /// Rust field keeps its internal name (PVC-FR-ODXM).
+    #[serde(rename = "change_id")]
     pub draft_id: String,
     pub name: String,
     pub status: DraftStatus,
     /// RDT-FR-09: draft-relative and informational, on the same terms
-    /// `search_drafts` returns it. Not a path `read_file` resolves to this
+    /// `search_changes` returns it. Not a path `read_file` resolves to this
     /// prompt.
     pub prompt_path: String,
     /// RDT-FR-06, RDT-FR-VQYO: the complete live prompt, or the requested
@@ -137,7 +144,7 @@ pub struct ReadDraftOutput {
 ///
 /// Consults no index, so a successful read reflects the newest persisted live
 /// prompt even while the drafts index is still catching up — the freshness
-/// `search_drafts` does not share.
+/// `search_changes` does not share.
 pub fn read(
     root: &crate::fs::RootFs,
     args: &ReadDraftArgs,
@@ -209,11 +216,11 @@ fn logged_draft_id(draft_id: &str) -> String {
 // The tool (TLC-FR-01)
 // ---------------------------------------------------------------------------
 
-/// RDT-FR-01: `read_draft` as a `rig` portable tool.
+/// RDT-FR-01: `read_change` as a `rig` portable tool.
 ///
 /// Holds the app handle rather than a root, so a project opened after the tool
 /// was constructed is visible to it and one closed since is not (TLC-FR-15).
-/// Unlike `propose_draft_changes`, nothing binds this tool to a conversation or
+/// Unlike `propose_change_edits`, nothing binds this tool to a conversation or
 /// to a draft: it reads any draft the worktree holds from any origin kind, and
 /// it changes nothing, so there is no effect that could land somewhere the model
 /// did not intend (CVL-FR-08). `session` names the agent session whose

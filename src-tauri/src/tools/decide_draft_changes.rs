@@ -36,13 +36,13 @@ use crate::draft_proposals::{self, hunks::HunkState, Decision, ProposalState, Ve
 use crate::logging::{LogBuffer, LogSink, BUFFER};
 
 /// DDC-FR-SQYQ.
-pub const NAME: &str = "decide_draft_changes";
+pub const NAME: &str = "decide_change_edits";
 
 /// DDC-FR-VAYO / DDC-FR-ROLG / DDC-FR-MDCX: the fixed text the model reads.
-pub const DESCRIPTION: &str = "Decide changes of the open proposal of the draft under discussion, when the author tells you to. Call it only when the author's latest comment tells you plainly to accept, reject, or discuss a change, for example \"accept the second change\". Never call it on your own judgement, on an earlier comment, or to tidy up a proposal. Do not read the decision back and wait for a confirmation: the author's instruction is the confirmation. Pass `decisions`, one entry for each change the author named, in the order the author named them. Each entry gives the `id` of a change and an `action`. `accept` writes the change into the prompt as it stands, with any edit the author made to it. `reject` writes nothing. `discuss` opens a new discussion about that change, with a first comment from you that says the author asked to discuss it; it does not decide the change. A rejected change can still be accepted while the proposal is open. Your input lists each change of the open proposal with its id, its place, its state, and its text. When the author names a change by its place, count the changes in their order and skip the withdrawn ones, as the review does. Each entry runs on its own: a refused entry stops no other, and the result tells you what happened to each. Tell the author in your reply what you did. The same entries decide the proposed new draft that waits on the author during a decomposition: give its id with `accept`, `reject`, or `discuss`. When the author tells you to confirm the decomposition, give the id of the decomposition with `confirm`. Copy into `instruction` the words of the author's latest comment that ask for these decisions, exactly as the author wrote or said them. A call is refused when the latest comment is not the author's, when the words are not in it, or when that comment already gave a decision. While the author is still speaking, wait until the comment of the speech arrives. This tool never makes, changes, or withdraws a change or a proposed draft; use `propose_draft_changes` or `propose_new_draft` for that.";
+pub const DESCRIPTION: &str = "Decide edits of the open proposal of the change under discussion, when the author tells you to. Call it only when the author's latest comment tells you plainly to accept, reject, or discuss an edit, for example \"accept the second edit\". Never call it on your own judgement, on an earlier comment, or to tidy up a proposal. Do not read the decision back and wait for a confirmation: the author's instruction is the confirmation. Pass `decisions`, one entry for each edit the author named, in the order the author named them. Each entry gives the `id` of an edit and an `action`. `accept` writes the edit into the prompt as it stands, with any edit the author made to it. `reject` writes nothing. `discuss` opens a new discussion about that edit, with a first comment from you that says the author asked to discuss it; it does not decide the edit. A rejected edit can still be accepted while the proposal is open. Your input lists each edit of the open proposal with its id, its place, its state, and its text. When the author names an edit by its place, count the edits in their order and skip the withdrawn ones, as the review does. Each entry runs on its own: a refused entry stops no other, and the result tells you what happened to each. Tell the author in your reply what you did. The same entries decide the proposed new change that waits on the author during a decomposition: give its id with `accept`, `reject`, or `discuss`. When the author tells you to confirm the decomposition, give the id of the decomposition with `confirm`. Copy into `instruction` the words of the author's latest comment that ask for these decisions, exactly as the author wrote or said them. A call is refused when the latest comment is not the author's, when the words are not in it, or when that comment already gave a decision. While the author is still speaking, wait until the comment of the speech arrives. This tool never makes, edits, or withdraws an edit or a proposed change; use `propose_change_edits` or `propose_new_change` for that.";
 
 /// DDC-FR-VAYO: the parameter text of `action`.
-const ACTION_DESCRIPTION: &str = "`accept` to write the change into the prompt, `reject` to decline it, `discuss` to open a new discussion about it, or `confirm` with the id of the decomposition to end it.";
+const ACTION_DESCRIPTION: &str = "`accept` to write the edit into the prompt, `reject` to decline it, `discuss` to open a new discussion about it, or `confirm` with the id of the decomposition to end it.";
 
 /// DDC-FR-LYTA: the typed errors worth a retry.
 const RETRYABLE_ERRORS: [&str; 3] = [
@@ -54,16 +54,16 @@ const RETRYABLE_ERRORS: [&str; 3] = [
 /// TLC-FR-06: the JSON Schema of [`DecideChangesArgs`] for this tool.
 /// DDC contract surface: the `id` description, which names a proposed draft
 /// too (DDC-FR-GGWO).
-const ID_DESCRIPTION: &str = "The id of a change of the open proposal, of the proposed new draft that waits on the author, or of the decomposition, as your input lists it.";
+const ID_DESCRIPTION: &str = "The id of an edit of the open proposal, of the proposed new change that waits on the author, or of the decomposition, as your input lists it.";
 
 /// DDC contract surface: a draft takes `confirm` beside the three hunk actions.
 const ACTIONS: [&str; 4] = ["accept", "reject", "discuss", "confirm"];
 
 pub fn parameters() -> serde_json::Value {
-    decide_changes::parameters_with(ACTION_DESCRIPTION, ID_DESCRIPTION, &ACTIONS)
+    decide_changes::edit_parameters(ACTION_DESCRIPTION, ID_DESCRIPTION, &ACTIONS)
 }
 
-/// DDC-FR-SQYQ: `decide_draft_changes` as a `rig` portable tool.
+/// DDC-FR-SQYQ: `decide_change_edits` as a `rig` portable tool.
 pub struct DecideDraftChangesTool<R: tauri::Runtime> {
     app: tauri::AppHandle<R>,
     roots: OwnedRoots,

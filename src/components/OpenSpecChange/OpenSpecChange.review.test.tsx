@@ -157,7 +157,7 @@ describe("the hunks of a pending proposal", () => {
     const struck = article.querySelector('.hunk--del[data-hunk="h1"]');
     expect(struck?.textContent).toBe(BEFORE);
     // Edit: the proposed text is a field of its own.
-    expect(within(article).getByRole("textbox", { name: /Proposed text of Change 1 of 2/ })).toHaveValue(AFTER);
+    expect(within(article).getByRole("textbox", { name: /Proposed text of Edit 1 of 2/ })).toHaveValue(AFTER);
     for (const name of ["Accept", "Reject", "Discuss"]) {
       expect(within(chip).getByRole("button", { name })).toBeEnabled();
     }
@@ -167,7 +167,7 @@ describe("the hunks of a pending proposal", () => {
   it("OCW-FR-COLR, CEP-FR-UCVO: an edit of the proposed text writes through edit change edit hunk after the rest, and writes nothing into the file", async () => {
     await openAtProposal();
     const field = within(fileArticle("proposal.md")).getByRole("textbox", {
-      name: /Proposed text of Change 1 of 2/,
+      name: /Proposed text of Edit 1 of 2/,
     });
     const edited = "Users cannot sign off.";
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -204,7 +204,7 @@ describe("the hunks of a pending proposal", () => {
     expect(within(created).getByTestId("openspec-file-new")).toHaveTextContent("new");
     // A new file is not on disk, so it shows in Source alone, with its text.
     expect(within(created).getByRole("button", { name: "Rich" })).toBeDisabled();
-    expect(within(created).getByRole("textbox", { name: /Proposed text of Change 2 of 2/ })).toHaveValue(NEW_TEXT);
+    expect(within(created).getByRole("textbox", { name: /Proposed text of Edit 2 of 2/ })).toHaveValue(NEW_TEXT);
   });
 
   it("OCW-FR-RRXG: a decided hunk is not counted, and an accepted new file is not marked new", async () => {
@@ -265,7 +265,7 @@ describe("decisions", () => {
     const chip = await openAtProposal();
     await userEvent.click(within(chip).getByRole("button", { name: "Accept" }));
     const refusal = await within(fileArticle("proposal.md")).findByTestId("openspec-hunk-refusal");
-    expect(refusal).toHaveTextContent("A graduation run holds this stream");
+    expect(refusal).toHaveTextContent("An implementation run holds this stream");
   });
 
   it("OCW-FR-DTRX: another refusal is stated at the hunk in words", async () => {

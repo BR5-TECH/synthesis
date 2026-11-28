@@ -74,7 +74,7 @@ describe("a PR summary run (GRU-FR-WEBM, GRU-FR-AQKZ, GRU-FR-DQSA, GRU-FR-LJUY)"
     expect(outcomeStatement(failed)).toBe("Not readable.");
   });
 
-  it("GRU-FR-LJUY: Pause, Continue and Discard on the terms of every run; no Open draft, no Restart, no Revert", () => {
+  it("GRU-FR-LJUY: Pause, Continue and Discard on the terms of every run; no Open change, no Restart, no Revert", () => {
     expect(actionsFor(makePrSummaryRun("p1", "working"))).toEqual(["pause", "discard"]);
     expect(actionsFor(makePrSummaryRun("p1", "interrupted"))).toEqual(["continue", "discard"]);
     expect(actionsFor(makePrSummaryRun("p1", "discarded"))).toEqual([]);

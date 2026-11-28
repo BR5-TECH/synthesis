@@ -35,7 +35,7 @@ pub(in crate::agent_conversations) fn action_requests_text(
         return None;
     }
     let mut text = String::from(
-        "\nThe requests to apply or rework this change, the ten newest, newest first:\n",
+        "\nThe requests to apply or rework this OpenSpec change, the ten newest, newest first:\n",
     );
     for entry in requests.iter().take(ACTION_REQUESTS_LISTED) {
         text.push_str(&format!("  {}\n", summary(entry)));
@@ -50,7 +50,7 @@ pub(in crate::agent_conversations) fn action_request_line(
 ) -> String {
     match attachment {
         comments::Attachment::ChangeActionRequest { request_id, action, .. } => {
-            format!("[asked the author to {action} this change: request {request_id}]")
+            format!("[asked the author to {action} this OpenSpec change: request {request_id}]")
         }
         _ => String::new(),
     }

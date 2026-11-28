@@ -114,10 +114,10 @@ describe("path helpers", () => {
   });
 
   it("DRP-FR-25: an empty count is elided rather than stated as zero", () => {
-    expect(countPhrase(2, 1)).toBe("The 2 drafts and 1 folder it holds move");
+    expect(countPhrase(2, 1)).toBe("The 2 changes and 1 folder it holds move");
     // Eliding the zero leaves a singular subject, so the verb agrees with it.
     expect(countPhrase(0, 1)).toBe("The 1 folder it holds moves");
-    expect(countPhrase(1, 0)).toBe("The 1 draft it holds moves");
+    expect(countPhrase(1, 0)).toBe("The 1 change it holds moves");
     expect(countPhrase(0, 2)).toBe("The 2 folders it holds move");
     expect(countPhrase(0, 0)).toBe("Nothing it holds moves");
   });
@@ -219,7 +219,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     expect(screen.getByText("button-lens")).toBeInTheDocument();
     // DRP-FR-20: the implicit root is the container, never a row of its own.
     expect(
-      screen.queryByRole("treeitem", { name: /^Folder Drafts$/ }),
+      screen.queryByRole("treeitem", { name: /^Folder (Drafts|Changes)$/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -385,7 +385,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
       expect(screen.queryByText("run-logs")).not.toBeInTheDocument(),
     );
     expect(
-      screen.getByText("No draft matches this filter."),
+      screen.getByText("No change matches this filter."),
     ).toBeInTheDocument();
 
     // DRP-FR-08 / DRP-FR-35: it stands in the active position instead, with no
@@ -439,7 +439,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     // Collapsed to start with: `button-lens` is two levels down.
     expect(screen.queryByText("button-lens")).not.toBeInTheDocument();
 
-    await userEvent.type(screen.getByLabelText("Filter drafts"), "button");
+    await userEvent.type(screen.getByLabelText("Filter changes"), "button");
     // The tree stays interactive while the search is outstanding and never
     // blanks between results (DRP non-functional requirements), so the narrowing
     // lands when the settled query comes back rather than on the keystroke.
@@ -455,7 +455,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     // DRP-FR-13: forced revelation is the filter's, not the author's.
     expect(onExpandedChange).not.toHaveBeenCalled();
 
-    await userEvent.clear(screen.getByLabelText("Filter drafts"));
+    await userEvent.clear(screen.getByLabelText("Filter changes"));
     await waitFor(() =>
       expect(screen.queryByText("button-lens")).not.toBeInTheDocument(),
     );
@@ -485,13 +485,13 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel({ onExpandedChange });
     await screen.findByText("scratch");
 
-    await userEvent.type(screen.getByLabelText("Filter drafts"), "button");
+    await userEvent.type(screen.getByLabelText("Filter changes"), "button");
     await waitFor(() => expect(screen.getByText("button-lens")).toBeInTheDocument());
 
     await userEvent.click(folderRow("UI"));
     expect(onExpandedChange).not.toHaveBeenCalled();
 
-    await userEvent.clear(screen.getByLabelText("Filter drafts"));
+    await userEvent.clear(screen.getByLabelText("Filter changes"));
     await waitFor(() =>
       expect(screen.queryByText("button-lens")).not.toBeInTheDocument(),
     );
@@ -508,7 +508,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel({ expanded: ["backend"] });
     await screen.findByText("scratch");
 
-    await userEvent.type(screen.getByLabelText("Filter drafts"), "backend");
+    await userEvent.type(screen.getByLabelText("Filter changes"), "backend");
     await waitFor(() =>
       expect(screen.queryByRole("treeitem", { name: "Folder UI" })).not.toBeInTheDocument(),
     );
@@ -533,7 +533,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel();
     await screen.findByText("editor-tweaks");
 
-    await userEvent.type(screen.getByLabelText("Filter drafts"), "overlay");
+    await userEvent.type(screen.getByLabelText("Filter changes"), "overlay");
     await waitFor(() =>
       expect(screen.getByText("matches text")).toBeInTheDocument(),
     );
@@ -544,7 +544,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
   it("DRP-FR-13: an empty filter searches nothing at all", async () => {
     renderPanel();
     await screen.findByText("artifact-window");
-    await userEvent.type(screen.getByLabelText("Filter drafts"), "a{Backspace}");
+    await userEvent.type(screen.getByLabelText("Filter changes"), "a{Backspace}");
     await new Promise((r) => setTimeout(r, 320));
     expect(calls("search_drafts")).toHaveLength(0);
   });
@@ -691,7 +691,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
         .getAllByRole("menuitem")
         .map((b) => b.textContent),
     ).toEqual([
-      "New Draft",
+      "New change",
       "New Folder",
       "Rename",
       "Move to Folder…",
@@ -709,12 +709,12 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
       expect(entry.querySelector("svg")).not.toBeNull();
 
     // DRP-FR-22: the root has nothing to rename, move, or delete.
-    await userEvent.click(screen.getByRole("button", { name: "Drafts actions" }));
+    await userEvent.click(screen.getByRole("button", { name: "Changes actions" }));
     expect(
       within(screen.getByRole("menu"))
         .getAllByRole("menuitem")
         .map((b) => b.textContent),
-    ).toEqual(["New Draft", "New Folder"]);
+    ).toEqual(["New change", "New Folder"]);
   });
 
 });

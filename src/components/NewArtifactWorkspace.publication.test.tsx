@@ -124,7 +124,7 @@ describe("New Artifact workspace — publishing to GitHub", () => {
       within(menu)
         .getAllByRole("menuitem")
         .map((item) => item.textContent?.trim()),
-    ).toEqual(["Discuss", "Graduate", "Copy as Source", "Publish to GitHub", "Archive"]);
+    ).toEqual(["Discuss", "Implement", "Copy as Source", "Publish to GitHub", "Archive"]);
   });
 
   it("NAW-FR-ZQMX, NAW-FR-VBHT: an archived draft states that it must be restored first", async () => {
@@ -741,7 +741,7 @@ describe("New Artifact workspace — publishing to GitHub", () => {
     });
 
     renderWorkspace();
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
     // Type first, so "changes nothing about the prompt" has something to be
     // true of. Without an edit standing, a zero-save count is true of an
     // implementation that wiped the buffer.
@@ -779,7 +779,7 @@ describe("New Artifact workspace — publishing to GitHub", () => {
 
   it("NAW-FR-GKBP: an unsaved prompt is written before the issue is published", async () => {
     renderWorkspace();
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
     // Type into the prompt and publish at once, without waiting the autosave
     // out. The backend publishes the *saved* prompt, so the write has to land
     // first or the issue carries the previous save.
@@ -924,7 +924,7 @@ describe("New Artifact workspace — publishing to GitHub", () => {
     renderWorkspace();
     let menu = await openActions();
     expect(within(menu).getByRole("menuitem", { name: /Publish to GitHub/ })).toBeEnabled();
-    expect(within(menu).getByRole("menuitem", { name: "Graduate" })).toBeDisabled();
+    expect(within(menu).getByRole("menuitem", { name: "Implement" })).toBeDisabled();
     expect(within(menu).getByRole("menuitem", { name: "Archive" })).toBeDisabled();
 
     cleanup();
@@ -934,13 +934,13 @@ describe("New Artifact workspace — publishing to GitHub", () => {
       graduation: { runId: "run-9", state: "working", locked: true, graduated: false },
       publication: publicationRefused(
         "draft_locked_by_graduation",
-        "A graduation run is working from this draft.",
+        "An implementation run is working from this draft.",
       ),
     });
     renderWorkspace();
     menu = await openActions();
     const entry = within(menu).getByRole("menuitem", { name: /Publish to GitHub/ });
     expect(entry).toBeDisabled();
-    expect(entry).toHaveAttribute("title", "A graduation run is working from this draft.");
+    expect(entry).toHaveAttribute("title", "An implementation run is working from this draft.");
   });
 });

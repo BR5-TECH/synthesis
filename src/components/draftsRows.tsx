@@ -30,7 +30,7 @@ import type { DraftFolder, DraftSummary } from "../types";
 
 /** DRP-FR-NPZO: why an entry of a GitHub-shadow row is disabled. */
 const SHADOW_REASON =
-  "This draft mirrors a GitHub issue, so it cannot be renamed, moved, archived, or deleted";
+  "This change mirrors a GitHub issue, so it cannot be renamed, moved, archived, or deleted";
 
 /** The one floating surface open at a time (DRP-FR-16). */
 export type Overlay =
@@ -243,9 +243,9 @@ export function makeRowRenderers(ctx: DraftRowContext) {
       : "GitHub issue";
     /** DRP-FR-YYZU: why Graduate… is disabled, or null where it is enabled. */
     const graduateBlocked = draft.graduation?.locked
-      ? "A graduation run already holds this draft"
+      ? "An implementation run already holds this change"
       : draft.status === "graduated"
-        ? "This draft has already been graduated"
+        ? "This change has already been implemented"
         : null;
     return (
       // DRP-FR-09: the whole row is the target — its name, its file count, its
@@ -258,18 +258,18 @@ export function makeRowRenderers(ctx: DraftRowContext) {
         role="treeitem"
         aria-level={depth + 1}
         aria-selected={selected === key}
-        aria-label={`Draft ${draft.name}${
+        aria-label={`Change ${draft.name}${
           draft.status === "archived"
             ? ", archived"
             : draft.status === "graduated"
-              ? ", graduated"
+              ? ", implemented"
               : draft.status === "published"
                 ? ", published"
                 : draft.status === "github_shadow"
                   ? ", GitHub task"
                   : ""
         }${shadow ? `, mirrors ${issueLabel}` : ""}${
-          draft.graduation?.locked ? ", graduating" : ""
+          draft.graduation?.locked ? ", implementing" : ""
         }${decompositionSuffix(draft)}`}
         tabIndex={0}
         // DRP-FR-NPZO: a GitHub-shadow row cannot be dragged.
@@ -326,7 +326,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
       >
         <div className="draft-row__head">
           {renaming ? (
-            inlineField("Draft name", closeInline)
+            inlineField("Change name", closeInline)
           ) : (
             <span className="draft-row__name" title={draft.name}>
               <Icon.Diamond size={11} />
@@ -378,7 +378,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
                 className="drafts-tree__badge"
                 data-testid="draft-graduated-marker"
               >
-                Graduated
+                Implemented
               </span>
             )}
           {/* DRP-FR-08: a legacy `published` draft states its own status. It
@@ -428,7 +428,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
             <button
               className="drafts-tree__badge drafts-tree__badge--run"
               data-testid="draft-graduation-marker"
-              title="Go to this draft's graduation run"
+              title="Go to this change's implementation run"
               onClick={(e) => {
                 e.stopPropagation();
                 onOpenRun?.(draft.graduation!.runId);
@@ -448,7 +448,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
               <span
                 className="draft-row__inconsistent"
                 data-testid="draft-row-inconsistent"
-                title="This draft's storage is not the one prompt a draft is, so it cannot be opened"
+                title="This change's storage is not the one prompt a change is, so it cannot be opened"
               >
                 cannot be opened
               </span>
@@ -466,9 +466,9 @@ export function makeRowRenderers(ctx: DraftRowContext) {
               <span
                 className="draft-row__proposal"
                 data-testid="draft-row-proposal"
-                title="An agent has proposed a change to this draft"
+                title="An agent has proposed an edit to this change"
               >
-                <Icon.Diff size={10} /> proposed change
+                <Icon.Diff size={10} /> proposed edit
               </span>
             </>
           )}
@@ -493,7 +493,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
             with a seventh, Go to run, below a divider on a row a graduation
             run holds (DRP-FR-35). */}
         {overlay?.kind === "draft-menu" && overlay.id === draft.id && (
-          <AnchoredMenu anchor={anchor} label={`Draft actions for ${draft.name}`}>
+          <AnchoredMenu anchor={anchor} label={`Change actions for ${draft.name}`}>
             {menuEntry("Open", <Icon.Doc size={12} />, () => {
               setOverlay(null);
               doOpenDraft(draft);
@@ -512,7 +512,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
                 entries that would change the draft are unavailable. */}
             {shadow &&
               menuEntry(
-                "Graduate…",
+                "Implement…",
                 <Icon.Graduate size={12} />,
                 () => {
                   setOverlay(null);
@@ -529,7 +529,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
                 () => openShadowIssue(draft),
                 false,
                 !issue,
-                "This draft names no issue address",
+                "This change names no issue address",
               )}
             {menuEntry(
               "Rename…",
@@ -577,7 +577,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
                     change it wrote, on its stream. */}
                 {draft.graduation.openspecChange &&
                   draft.graduation.state === "completed" &&
-                  menuEntry("Open change", <Icon.Diff size={12} />, () => {
+                  menuEntry("Open OpenSpec change", <Icon.Diff size={12} />, () => {
                     const change = draft.graduation!.openspecChange!;
                     setOverlay(null);
                     openOpenSpecChange(
@@ -700,7 +700,7 @@ export function makeRowRenderers(ctx: DraftRowContext) {
             — exactly as the Library's creation cluster leads its own. */}
         {overlay?.kind === "folder-menu" && overlay.path === folder.path && (
           <AnchoredMenu anchor={anchor} label={`Folder actions for ${name}`}>
-            {menuEntry("New Draft", <Icon.Diamond size={12} />, () =>
+            {menuEntry("New change", <Icon.Diamond size={12} />, () =>
               void doNewDraft(folder.path),
             )}
             {menuEntry("New Folder", <Icon.Folder size={12} />, () => {

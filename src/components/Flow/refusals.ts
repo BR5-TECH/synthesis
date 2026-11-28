@@ -123,7 +123,7 @@ export function refusalMessage(
       text = "A container that holds items cannot become a task or a defect.";
       break;
     case "draft_already_linked":
-      text = `${joinWords(ids.map(nameOf), "and")} already links that draft.`;
+      text = `${joinWords(ids.map(nameOf), "and")} already links that change.`;
       break;
     default:
       text = "The plan does not permit this change.";

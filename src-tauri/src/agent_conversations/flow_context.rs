@@ -42,10 +42,10 @@ pub(super) fn flow_context_text(
             state_word(s.state)
         ));
         if let Some(d) = &s.draft {
-            out.push_str(&format!("; draft \"{}\"", d.name));
+            out.push_str(&format!("; change \"{}\"", d.name));
         }
         if s.draft_missing {
-            out.push_str("; its draft is missing");
+            out.push_str("; its change is missing");
         }
         if !s.blocked_by.is_empty() {
             let by: Vec<String> =
@@ -167,7 +167,10 @@ mod tests {
             text.contains("- t2 \"Form\" (task): not started; blocked by t3 \"Docs\""),
             "{text}"
         );
-        assert!(text.contains("- t3 \"Docs\" (task): not started; its draft is missing"), "{text}");
+        assert!(
+            text.contains("- t3 \"Docs\" (task): not started; its change is missing"),
+            "{text}"
+        );
         assert!(text.contains("- t1 \"Tokenize\" and t2 \"Form\" share src/pay/form.rs"), "{text}");
 
         let quiet = parse_valid(r#"{"version":3}"#).unwrap();

@@ -266,8 +266,8 @@ export interface AttachmentContent {
  */
 export function attachmentName(a: Attachment): string {
   if (a.kind === "blob") return a.filename;
-  if (a.kind === "newDraftProposal" || a.kind === "newDraftSubject") return "Proposed draft";
-  if (a.kind === "newChangeProposal" || a.kind === "newChangeSubject") return "Proposed change";
+  if (a.kind === "newDraftProposal" || a.kind === "newDraftSubject") return "Proposed change";
+  if (a.kind === "newChangeProposal" || a.kind === "newChangeSubject") return "Proposed OpenSpec change";
   if (a.kind === "exportRequest") return a.path;
   if (a.kind === "changeActionRequest") return a.change;
   if (a.kind === "agentSurface") return "Panel";

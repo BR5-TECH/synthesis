@@ -73,10 +73,10 @@ export function ChangesFooter({
             className="btn btn--sm btn--icon changes-actions__rollback"
             // CHG-FR-58: the icon is never the only indication of the action —
             // the accessible name and the tooltip both say it in words.
-            aria-label="Discard selected changes"
+            aria-label="Discard selected files"
             title={
               rollbackReason ??
-              "Discard selected changes, returning these files to HEAD"
+              "Discard selected files, returning them to HEAD"
             }
             disabled={rollingBack || rollbackReason !== null}
             data-busy={preparing || undefined}

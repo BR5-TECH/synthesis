@@ -15,14 +15,14 @@ export function InconsistentDraft({ name }: { name: string }) {
         </span>
       </div>
       <div className="draft-workspace__blocked" role="alert">
-        <h2 className="t-ui-sm">This draft cannot be opened.</h2>
+        <h2 className="t-ui-sm">This change cannot be opened.</h2>
         <p className="t-ui-xs">
-          A draft is one Markdown prompt, and this one’s storage holds
+          A change is one Markdown prompt, and this one’s storage holds
           something else. Nothing in it has been changed, and no file of it has
           been chosen as the prompt.
         </p>
         <p className="t-ui-xs">
-          Delete it from the Drafts panel, which is the one thing left to do
+          Delete it from the Changes panel, which is the one thing left to do
           with it.
         </p>
       </div>

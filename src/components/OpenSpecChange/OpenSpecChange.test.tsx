@@ -359,9 +359,9 @@ describe("a read that fails", () => {
       draw();
       const failure = await screen.findByTestId("openspec-change-failure");
       expect(within(failure).getByRole("alert")).toHaveTextContent(sentence);
-      // OFN-FR-RLSO: the tab of the change offers no Open change, and an
+      // OFN-FR-RLSO: the tab of the change offers no Open OpenSpec change, and an
       // environment failure no Retry.
-      expect(within(failure).queryByRole("button", { name: "Open change" })).toBeNull();
+      expect(within(failure).queryByRole("button", { name: "Open OpenSpec change" })).toBeNull();
       expect(within(failure).queryByRole("button", { name: "Retry" })).toBeNull();
       await userEvent.click(within(failure).getByRole("button", { name: "Open OpenSpec settings" }));
       await waitFor(() =>

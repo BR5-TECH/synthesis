@@ -27,7 +27,7 @@ export function GraduationSettings({
     return (
       <div className="card" style={{ padding: "12px 14px" }} role="alert">
         <div className="t-ui-sm" style={{ color: "var(--danger, #e5484d)" }}>
-          The limit of graduation runs could not be read.
+          The limit of implementation runs could not be read.
         </div>
         <p className="t-ui-xs t-muted" style={{ margin: "6px 0 0" }}>
           {loadError}
@@ -42,7 +42,7 @@ export function GraduationSettings({
   if (load === "loading" || selected === null) {
     return (
       <div className="t-ui-sm t-muted" role="status">
-        Loading the limit of graduation runs…
+        Loading the limit of implementation runs…
       </div>
     );
   }
@@ -57,7 +57,7 @@ export function GraduationSettings({
         htmlFor="graduation-concurrency"
         style={{ fontSize: "var(--fs-ui-md)", fontWeight: 600, color: "var(--fg-1)" }}
       >
-        Concurrent graduation runs
+        Concurrent implementation runs
       </label>
       <div className="t-ui-sm t-muted" style={{ marginBottom: 10 }}>
         The most runs this project works at the same time. Stream runs and

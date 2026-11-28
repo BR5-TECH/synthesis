@@ -263,7 +263,7 @@ fn the_input_holds_each_row_with_its_state() {
     assert!(!input[0].body.contains("Focus:"), "{}", input[0].body);
     for line in [
         "- proposal 1 row \"a\": new issue \"Relay auth\": rejected",
-        "- proposal 1 row \"b\": new draft \"Finish relay\": accepted (draft created)",
+        "- proposal 1 row \"b\": new change \"Finish relay\": accepted (change created)",
         "- proposal 1 row \"c\": change to issue 2 \"Issue 2\": failed (error changed_on_tracker)",
         "- proposal 1 row \"d\": new issue \"Relay tests\": waiting (blocked: row \"a\" is rejected)",
     ] {

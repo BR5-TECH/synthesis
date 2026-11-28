@@ -65,9 +65,11 @@ pub(in crate::agent_conversations) fn new_change_line(
     match attachment {
         comments::Attachment::NewChangeProposal { proposal_id, update, .. } => {
             let verb = match update {
-                Some(comments::NewDraftUpdateAction::Change) => "changed the proposed new change",
+                Some(comments::NewDraftUpdateAction::Change) => {
+                    "changed the proposed new OpenSpec change"
+                }
                 Some(comments::NewDraftUpdateAction::Withdraw) => {
-                    "withdrew the proposed new change"
+                    "withdrew the proposed new OpenSpec change"
                 }
                 None => "proposed a new OpenSpec change",
             };
@@ -78,8 +80,8 @@ pub(in crate::agent_conversations) fn new_change_line(
         }
         comments::Attachment::NewChangeSubject { proposal_id, .. } => {
             match reads.get(proposal_id) {
-                Some(p) => format!("[about the proposed new change: {}]", summary(p)),
-                None => format!("[about the proposed new change {proposal_id}]"),
+                Some(p) => format!("[about the proposed new OpenSpec change: {}]", summary(p)),
+                None => format!("[about the proposed new OpenSpec change {proposal_id}]"),
             }
         }
         _ => String::new(),
@@ -98,7 +100,7 @@ pub(in crate::agent_conversations) fn split_text(
         crate::new_change_proposals::read_new_change_proposals(roots.store, stream_id, change)?;
     let status = if split.confirmed { "confirmed" } else { "not confirmed" };
     let mut text = format!(
-        "\nThe split {} of this change, {status}, every proposed new change oldest first:\n",
+        "\nThe split {} of this OpenSpec change, {status}, every proposed new OpenSpec change oldest first:\n",
         split.set_id
     );
     for p in &split.proposals {
@@ -107,7 +109,7 @@ pub(in crate::agent_conversations) fn split_text(
     if let Some(open) = split.proposals.iter().find(|p| p.state == NewChangeProposalState::Pending)
     {
         text.push_str(&format!(
-            "The proposed new change {} waits on the author. Its files:\n",
+            "The proposed new OpenSpec change {} waits on the author. Its files:\n",
             open.id
         ));
         for file in &split.pending_files {

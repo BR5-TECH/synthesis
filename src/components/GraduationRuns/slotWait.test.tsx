@@ -94,7 +94,7 @@ describe("a queued run that waits for a project slot", () => {
     await select("r3");
     const sentence = await screen.findByTestId("graduation-run-slot-wait");
     expect(sentence).toHaveTextContent(
-      "Waiting for a project slot — the project works 2 of 2 graduation runs.",
+      "Waiting for a project slot — the project works 2 of 2 implementation runs.",
     );
     // The two sentences are never mixed.
     expect(screen.getByTestId("run-progress")).not.toHaveTextContent(
@@ -107,7 +107,7 @@ describe("a queued run that waits for a project slot", () => {
     await open();
     await select("r3");
     expect(await screen.findByTestId("graduation-run-slot-wait")).toHaveTextContent(
-      "the project works 1 of 1 graduation run.",
+      "the project works 1 of 1 implementation run.",
     );
   });
 

@@ -102,7 +102,7 @@ describe("New Artifact workspace — Update on GitHub", () => {
       .map((item) => item.textContent?.trim());
     expect(labels).toEqual([
       "Discuss",
-      "Graduate",
+      "Implement",
       "Copy as Source",
       "Update on GitHub",
       "Archive",

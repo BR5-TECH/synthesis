@@ -215,7 +215,7 @@ fn block<R: tauri::Runtime>(
     );
     let (message, clears_by) = match code {
         change_runs::ERR_PROPOSAL_PENDING => (
-            "A change edit proposal of this change waits for the author's decision, so the result of the rework was not recorded.",
+            "An edit proposal of this OpenSpec change waits for the author's decision, so the result of the rework was not recorded.",
             "Decide the open proposal, then continue the run.",
         ),
         change_runs::ERR_DISCUSSION_RESOLVED => (

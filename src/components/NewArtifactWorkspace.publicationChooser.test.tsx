@@ -532,7 +532,7 @@ describe("Publication chooser — cancellation, focus, and accessibility", () =>
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Publish to GitHub" })).toBeNull());
     expect(calls("publish_draft_to_github")).toHaveLength(0);
     expect(calls("retry_draft_publication")).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "Draft actions" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Change actions" })).toHaveFocus();
   });
 
   it("NAW-FR-VUCK: Escape dismisses the chooser on the same terms", async () => {

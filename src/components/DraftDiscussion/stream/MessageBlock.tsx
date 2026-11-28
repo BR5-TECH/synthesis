@@ -28,7 +28,7 @@ import { Icon } from "../../icons";
 import type { AgentRoster } from "../../agentTags";
 import { stripCitationMarkers } from "../../../text/citationMarkers";
 import { visibleBody } from "../../../text/spokenPart";
-import { participantTitle, type Comment } from "../../../types";
+import { participantTitle, type Comment, type DiscussionTarget } from "../../../types";
 import { useParticipantLabel } from "../../../state/projectIdentity";
 
 export interface MessageBlockProps {
@@ -39,6 +39,8 @@ export interface MessageBlockProps {
   roster: AgentRoster;
   threadId: string;
   draftId?: string;
+  /** PVC-FR-PXOE: the target kind of the conversation, for the saved activity rows. */
+  targetKind?: DiscussionTarget["kind"];
   /**
    * DDS-FR-FKZL: **Quote**, at the trailing end of the author line. Absent where
    * the conversation offers no composer to seed — a locked or resolved thread,
@@ -88,6 +90,7 @@ export function MessageBlock({
   roster,
   threadId,
   draftId,
+  targetKind,
   onQuote,
   firstIndex,
   authorOf,
@@ -204,7 +207,11 @@ export function MessageBlock({
             )}
           />
           {/* CTA-FR-RFQB: the saved activity row follows its comment. */}
-          <SavedActivityRow comment={comment} variant="stream" />
+          <SavedActivityRow
+            comment={comment}
+            variant="stream"
+            targetKind={targetKind}
+          />
         </div>
       ))}
     </div>

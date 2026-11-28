@@ -25,13 +25,13 @@ use crate::logging::{LogBuffer, LogSink, BUFFER};
 use crate::prompt_proposals::HunkState;
 
 /// DCE-FR-QIKC.
-pub const NAME: &str = "decide_change_edits";
+pub const NAME: &str = "decide_openspec_change_edits";
 
 /// DCE-FR-ILCP: the fixed text of the contract surface.
-pub const DESCRIPTION: &str = "Decide hunks of the open proposal of the OpenSpec change under discussion, the proposed new change of its split, or the pending request to apply or rework the change, on the author's explicit instruction in the latest comment. Use this only when the author tells you which hunks or which new change to accept, reject, or discuss, to confirm the split, or to confirm or reject the request, and copy their words into `instruction`. Name a hunk by its id, or by its place counted from 1; name the new change, the split, and the request by the ids your input lists. Confirming a request starts its run. Do not read the decision back and wait for a confirmation. This never creates or changes a hunk, a proposed change, or a request.";
+pub const DESCRIPTION: &str = "Decide hunks of the open proposal of the OpenSpec change under discussion, the proposed new OpenSpec change of its split, or the pending request to apply or rework the OpenSpec change, on the author's explicit instruction in the latest comment. Use this only when the author tells you which hunks or which new OpenSpec change to accept, reject, or discuss, to confirm the split, or to confirm or reject the request, and copy their words into `instruction`. Name a hunk by its id, or by its place counted from 1; name the new OpenSpec change, the split, and the request by the ids your input lists. Confirming a request starts its run. Do not read the decision back and wait for a confirmation. This never creates or changes a hunk, a proposed OpenSpec change, or a request.";
 
 /// The parameter text of `action`.
-const ACTION_DESCRIPTION: &str = "`accept` to write the hunk into its file of the change or to create the proposed new change, `reject` to decline it or to decline the request, `discuss` to open a new discussion about it, or `confirm` with the id of the split to end it or with the id of the request to start its run.";
+const ACTION_DESCRIPTION: &str = "`accept` to write the hunk into its file of the OpenSpec change or to create the proposed new OpenSpec change, `reject` to decline it or to decline the request, `discuss` to open a new discussion about it, or `confirm` with the id of the split to end it or with the id of the request to start its run.";
 
 /// DCE-FR-JCHG / DPC-FR-JEXJ: the typed errors worth a retry.
 const RETRYABLE_ERRORS: [&str; 4] = [
@@ -43,7 +43,7 @@ const RETRYABLE_ERRORS: [&str; 4] = [
 
 /// The `id` of an entry: a hunk, the proposed new change, the split, or the
 /// pending action request.
-const ID_DESCRIPTION: &str = "The id of a hunk of the open proposal, of the proposed new change that waits on the author, of the split, or of the request to apply or rework the change that waits on the author, as your input lists it.";
+const ID_DESCRIPTION: &str = "The id of a hunk of the open proposal, of the proposed new OpenSpec change that waits on the author, of the split, or of the request to apply or rework the OpenSpec change that waits on the author, as your input lists it.";
 
 /// DCE-FR-PHSU: the actions of an entry.
 const ACTIONS: [&str; 4] = ["accept", "reject", "discuss", "confirm"];
@@ -53,7 +53,7 @@ pub fn parameters() -> serde_json::Value {
     decide_changes::parameters_with(ACTION_DESCRIPTION, ID_DESCRIPTION, &ACTIONS)
 }
 
-/// DCE-FR-QIKC: `decide_change_edits` as a `rig` portable tool.
+/// DCE-FR-QIKC: `decide_openspec_change_edits` as a `rig` portable tool.
 pub struct DecideChangeEditsTool<R: tauri::Runtime> {
     app: tauri::AppHandle<R>,
     roots: OwnedRoots,
@@ -252,7 +252,7 @@ where
     tauri::AppHandle<R>: LogSink + Clone + Send + 'static,
 {
     fn file_word(&self) -> &'static str {
-        "the change"
+        "the OpenSpec change"
     }
 
     fn no_open_message(&self) -> &'static str {
@@ -373,7 +373,7 @@ where
         if action == "confirm" && self.split.is_none() && self.request.is_some() {
             let mut row = decide_changes::DecisionRow::new(place, id, action);
             let text =
-                "the id you gave is not a change of the open proposal. Use an id from your input.";
+                "the id you gave is not an edit of the open proposal. Use an id from your input.";
             row.refuse(decide_changes::RefusalCode::UnknownHunk, total, text, None);
             return Some(row);
         }
@@ -418,7 +418,9 @@ where
                 Ok(result) => result,
                 // A panic in the decisions stays a panic of the turn, as it
                 // was when the decisions ran on the turn's own thread.
-                Err(error) => panic!("the decisions of decide_change_edits stopped: {error}"),
+                Err(error) => {
+                    panic!("the decisions of decide_openspec_change_edits stopped: {error}")
+                }
             }
         }
     }

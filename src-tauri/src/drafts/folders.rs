@@ -42,7 +42,7 @@ pub fn rename_drafts_folder_impl(
     name: &str,
 ) -> Result<DraftFolder, String> {
     if path.is_empty() {
-        return Err("the drafts root cannot be renamed".to_string());
+        return Err("the changes root cannot be renamed".to_string());
     }
     if !is_valid_folder_name(name) {
         return Err(format!("invalid folder name: {name:?}"));
@@ -86,7 +86,7 @@ pub fn rename_drafts_folder_impl(
 /// still holds something is reported rather than deleted.
 pub fn delete_drafts_folder_impl(root: &fs::RootFs, path: &str) -> Result<(), String> {
     if path.is_empty() {
-        return Err("the drafts root cannot be deleted".to_string());
+        return Err("the changes root cannot be deleted".to_string());
     }
     let dir = resolve_drafts_folder(root, path)?;
     let parent = folder_parent(path).to_string();
@@ -101,7 +101,7 @@ pub fn delete_drafts_folder_impl(root: &fs::RootFs, path: &str) -> Result<(), St
     // partial result DRS-FR-31 says a caller cannot provoke.
     if let Some(stray) = entries.iter().find(|e| e.kind != fs::EntryKind::Dir) {
         return Err(format!(
-            "{path:?} holds {:?}, which is not a folder or a draft; nothing was moved",
+            "{path:?} holds {:?}, which is not a folder or a change; nothing was moved",
             stray.name
         ));
     }
@@ -166,7 +166,7 @@ pub fn move_draft_to_folder_impl(
         // folder" on the other has been told two different things about one
         // state. The folded name IS the folder here, as it is everywhere else
         // in this module (DRS-FR-30), so the draft is in the folder named.
-        return Err("this draft is already in that folder".to_string());
+        return Err("this change is already in that folder".to_string());
     }
     let dest_dir = resolve_drafts_folder(root, folder)?;
     if name_taken(root, &dest_dir, id) {
@@ -181,7 +181,7 @@ pub fn move_draft_to_folder_impl(
         .drafts
         .into_iter()
         .find(|d| d.id == id)
-        .ok_or_else(|| format!("draft not found: {id}"))
+        .ok_or_else(|| format!("change not found: {id}"))
 }
 
 /// DRS-FR-33: move a folder and its whole subtree into `destination`.
@@ -195,7 +195,7 @@ pub fn move_drafts_folder_impl(
     destination: &str,
 ) -> Result<DraftFolder, String> {
     if path.is_empty() {
-        return Err("the drafts root cannot be moved".to_string());
+        return Err("the changes root cannot be moved".to_string());
     }
     resolve_drafts_folder(root, path)?;
     // A folder is never placed inside itself, at any depth. Checked on the paths

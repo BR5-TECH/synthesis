@@ -165,7 +165,7 @@ describe("flowDiff: items (DFV-FR-33, DFV-FR-RGBK)", () => {
       { label: "Due", status: "added", after: "2027-03-31" },
     ]);
     expect(byKey(list, "item:t1").facts).toEqual([
-      { label: "Draft", status: "changed", before: "dr1", after: "dr2" },
+      { label: "Change", status: "changed", before: "dr1", after: "dr2" },
     ]);
   });
 
@@ -235,7 +235,7 @@ describe("flowDiff: items (DFV-FR-33, DFV-FR-RGBK)", () => {
     );
     expect(byKey(list, "item:x1").facts).toEqual([
       { label: "Kind", status: "changed", before: "defect", after: "feature" },
-      { label: "Draft", status: "removed", before: "dr1" },
+      { label: "Change", status: "removed", before: "dr1" },
     ]);
   });
 
@@ -273,7 +273,7 @@ describe("flowDiff: items (DFV-FR-33, DFV-FR-RGBK)", () => {
       { label: "Description", status: "unchanged", after: "d" },
       { label: "Reference", status: "unchanged", after: "a.md" },
       { label: "Footprint", status: "unchanged", after: "src/" },
-      { label: "Draft", status: "unchanged", after: "dr1" },
+      { label: "Change", status: "unchanged", after: "dr1" },
       { label: "Container", status: "unchanged", after: "Capture" },
     ]);
   });

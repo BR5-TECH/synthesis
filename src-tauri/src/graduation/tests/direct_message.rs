@@ -69,7 +69,7 @@ fn a_direct_runs_abandoned_turn_is_retitled_to_its_own_name() {
     );
     assert_eq!(interrupted.state, GraduationRunState::Interrupted);
     assert_eq!(interrupted.commits.len(), 1, "the abandoned turn is committed");
-    assert!(head_message(&fx.root()).starts_with("Abandoned graduation turn"));
+    assert!(head_message(&fx.root()).starts_with("Abandoned implementation turn"));
     let abandoned = interrupted.commits[0].clone();
 
     let continued = fx.continue_run(&interrupted);
@@ -82,12 +82,59 @@ fn a_direct_runs_abandoned_turn_is_retitled_to_its_own_name() {
     assert_eq!(head_message(&fx.root()), "editor draft");
 }
 
+// GRD-FR-WQTN, PVC-FR-ODXM: an older build titled an abandoned turn
+// "Abandoned graduation turn". A run whose last commit holds that title
+// completes on a `ready` verdict by rewriting that commit, as it does for the
+// current title.
+#[test]
+fn a_runs_abandoned_turn_with_the_legacy_title_is_retitled() {
+    let fx = fixture();
+    let draft = fx.committed_draft("direct");
+    let run = fx.direct("Add the empty state.", &draft);
+
+    let mut interrupted = fx.drive(
+        &run,
+        ScriptedDispatch::new(vec![Turn::answering(Answer::Process(ProcessOutcome::Timeout))
+            .writing("src/panel.ts", "1\n")]),
+    );
+    assert_eq!(interrupted.state, GraduationRunState::Interrupted);
+    assert_eq!(interrupted.commits.len(), 1, "the abandoned turn is committed");
+    // The commit as an older build made it: the same tree, the legacy title.
+    let legacy = {
+        let repo = git2::Repository::open(fx.root()).expect("the repository");
+        let head = repo.head().and_then(|head| head.peel_to_commit()).expect("the head");
+        head.amend(
+            Some("HEAD"),
+            None,
+            None,
+            None,
+            Some("Abandoned graduation turn\n\nstopped"),
+            None,
+        )
+        .expect("amended")
+        .to_string()
+    };
+    assert!(head_message(&fx.root()).starts_with("Abandoned graduation turn"));
+    interrupted.commits[0] = legacy.clone();
+    crate::graduation::save_run(&fx.app, &mut interrupted).expect("a saved run");
+
+    let continued = fx.continue_run(&interrupted);
+    let completed = fx.drive(&continued, ScriptedDispatch::new(vec![Turn::work(), Turn::ready()]));
+
+    assert_eq!(completed.state, GraduationRunState::Completed);
+    assert_eq!(completed.commits.len(), 1, "no second commit was made");
+    assert_ne!(completed.commits[0], legacy, "the rewrite is a revision of its own");
+    assert_eq!(head_id(&fx.root()), completed.commits[0], "the head is the rewrite");
+    assert_eq!(head_message(&fx.root()), "editor draft");
+}
+
 // GRD-FR-PQMX: a direct run's name is one line in its commit message. A line
 // break or any other control character in the name is read as a space, and a
-// name of nothing but those falls back to `Graduation run`.
+// name of nothing but those falls back to `Implementation run`.
 #[test]
 fn a_direct_runs_name_is_one_line_in_its_commit_message() {
-    for (name, expected) in [("  two\nlines\t ", "two lines"), ("\n\u{7}\n", "Graduation run")] {
+    for (name, expected) in [("  two\nlines\t ", "two lines"), ("\n\u{7}\n", "Implementation run")]
+    {
         let fx = fixture();
         let draft = fx.committed_draft("direct");
         let mut run = fx.direct("Add the empty state.", &draft);
@@ -104,14 +151,14 @@ fn a_direct_runs_name_is_one_line_in_its_commit_message() {
     }
 }
 
-// GRD-FR-PQMX: a run that is not direct commits under the first non-empty line
-// of its prompt, with the draft named in the body. A prompt with no usable line
-// falls back to `Graduation run`.
+// GRD-FR-PQMX, PVC-FR-ZQRE, PVC-FR-HMJD: a run that is not direct commits under
+// the first non-empty line of its prompt, with the change named in the body. A
+// prompt with no usable line falls back to `Implementation run`.
 #[test]
 fn a_stream_runs_message_is_its_prompt_line_and_its_draft() {
     for (prompt, title) in [
         ("\n\n# Add the empty state\n\nMore detail.", "Add the empty state"),
-        ("###\n\nbody", "Graduation run"),
+        ("###\n\nbody", "Implementation run"),
     ] {
         let fx = fixture();
         let stream = fx.stream("pqmx");
@@ -127,7 +174,7 @@ fn a_stream_runs_message_is_its_prompt_line_and_its_draft() {
         assert_eq!(head_id(&worktree), run.commits[0], "{prompt:?}");
         assert_eq!(
             head_message(&worktree),
-            format!("{title}\n\nGraduated from the draft \"{}\".", run.input.draft_name),
+            format!("{title}\n\nImplemented from the change \"{}\".", run.input.draft_name),
         );
     }
 }

@@ -143,7 +143,7 @@ export function HunkChip({
       className="dds-chip"
       style={{ top: box.top, left: box.left }}
       role="group"
-      aria-label={`Actions for change ${hunk.position} of ${hunk.total}`}
+      aria-label={`Actions for edit ${hunk.position} of ${hunk.total}`}
       data-testid="hunk-chip"
     >
       <span className="dds-chip__at t-ui-xs">
@@ -162,8 +162,8 @@ export function HunkChip({
         disabled={busy || hunk.lost}
         title={
           hunk.lost
-            ? "The text this change alters is no longer in the prompt"
-            : "Accept this change"
+            ? "The text this edit alters is no longer in the prompt"
+            : "Accept this edit"
         }
         onClick={onAccept}
       >
@@ -173,7 +173,7 @@ export function HunkChip({
         <button
           className="btn btn--sm"
           disabled={busy}
-          title="Reject this change"
+          title="Reject this edit"
           onClick={onReject}
         >
           Reject
@@ -183,7 +183,7 @@ export function HunkChip({
       <button
         className="btn btn--ghost btn--sm"
         disabled={busy}
-        title="Discuss this change in a discussion of its own"
+        title="Discuss this edit in a discussion of its own"
         onClick={onDiscuss}
       >
         Discuss →

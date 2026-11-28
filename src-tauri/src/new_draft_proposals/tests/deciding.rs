@@ -33,7 +33,7 @@ fn an_acceptance_creates_the_draft_in_the_original_folder() {
     let last = f.thread().comments.last().unwrap().clone();
     assert_eq!(Some(last.id.clone()), outcome.comment_id);
     assert!(matches!(last.author, Participant::Human { .. }));
-    assert!(last.body.starts_with("Accepted the proposed draft “relay-auth”, part 1 of 3."));
+    assert!(last.body.starts_with("Accepted the proposed change “relay-auth”, part 1 of 3."));
     assert!(last.body.ends_with("Good split."));
     let causes = f.causes();
     let drafts_at = causes.iter().position(|c| c == "drafts").unwrap();
@@ -59,7 +59,7 @@ fn a_rejection_creates_nothing() {
     assert_eq!(drafts::list_drafts_impl(&f.root).drafts.len(), count);
     assert_eq!(load_body_impl(&f.root, &p.id).unwrap(), "body");
     let last = f.thread().comments.last().unwrap().clone();
-    assert!(last.body.starts_with("Rejected the proposed draft “a”, part 1 of 2."));
+    assert!(last.body.starts_with("Rejected the proposed change “a”, part 1 of 2."));
 }
 
 // DCP-FR-EEDK: a proposal is decided once, and an unknown id names nothing.

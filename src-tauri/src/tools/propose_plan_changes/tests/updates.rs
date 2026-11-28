@@ -81,7 +81,7 @@ fn a_rejected_row_can_be_changed() {
     crate::map_plan::reject_row(&f.plan.app(), &f.plan.discussion_id, &proposal.id, "a").unwrap();
     f.updates(json!([change(
         "a",
-        json!({ "op": "new_draft", "name": "Better", "body": "A better prompt." })
+        json!({ "op": "new_change", "name": "Better", "body": "A better prompt." })
     )]))
     .unwrap();
     assert_eq!(f.row("a").state, RowState::Waiting);
@@ -298,7 +298,7 @@ fn an_update_is_logged_with_counts() {
         "rationale": "ZEBRA-RATIONALE <spoken>x</spoken>",
         "updates": [
             withdraw("a"),
-            add("c", json!({ "op": "new_draft", "name": "ZEBRA-NAME", "body": "ZEBRA-PROMPT" })),
+            add("c", json!({ "op": "new_change", "name": "ZEBRA-NAME", "body": "ZEBRA-PROMPT" })),
         ],
     });
     run(&f.tool().with_buffer(&BUFFER), args).unwrap();
@@ -354,4 +354,32 @@ fn a_failed_row_is_settled() {
     assert_eq!(settled.code, "row_settled");
     assert!(settled.message.starts_with("Update 2 of 2: "), "{}", settled.message);
     assert_eq!(f.keys(), ["a", "b"]);
+}
+
+// PVC-FR-SQAF: the row of an update takes `new_draft` as an alias of
+// `new_change`, for `change` and for `add`. The schema of an update row names
+// `new_change` alone.
+#[test]
+fn an_update_row_takes_the_alias_of_new_change() {
+    let f = Fixture::new();
+    f.rows(json!([draft("a")])).unwrap();
+    f.updates(json!([
+        change("a", json!({ "op": "new_draft", "name": "Better", "body": "A better prompt." })),
+        add("b", json!({ "op": "new_draft", "name": "Second", "body": "Another prompt." })),
+    ]))
+    .unwrap();
+    assert_eq!(f.keys(), ["a", "b"]);
+    for (key, name) in [("a", "Better"), ("b", "Second")] {
+        let RowFields::NewDraft(fields) = f.row(key).fields else {
+            panic!("{key} is a new change")
+        };
+        assert_eq!(fields.name, name);
+    }
+    let schema = super::super::parameters();
+    let row = &schema["properties"]["updates"]["items"]["properties"]["row"];
+    assert_eq!(
+        row["properties"]["op"]["enum"],
+        json!(["create_issue", "modify_issue", "new_change"])
+    );
+    assert!(!row.to_string().contains("new_draft"), "{row}");
 }

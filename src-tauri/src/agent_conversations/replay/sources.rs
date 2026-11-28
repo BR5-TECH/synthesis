@@ -37,7 +37,8 @@ impl Source {
     pub(in crate::agent_conversations) fn label(&self) -> String {
         match self {
             Source::Worktree(path) => path.clone(),
-            Source::DraftPrompt(id) => format!("the prompt of draft {id}"),
+            // PVC-FR-CUAT: a draft is a "change" in the text a model reads.
+            Source::DraftPrompt(id) => format!("the prompt of change {id}"),
         }
     }
 
@@ -60,10 +61,17 @@ fn argument(call: &rig::completion::message::ToolCall, name: &str) -> Option<Str
     (!value.is_empty()).then(|| value.to_string())
 }
 
+/// PVC-FR-SQAF: the id of the change a call names, under `change_id` or one of
+/// the aliases that the tools accept.
+fn change_id(call: &rig::completion::message::ToolCall) -> Option<String> {
+    ["change_id", "draft_id", "changeId", "draftId"].into_iter().find_map(|n| argument(call, n))
+}
+
 /// ERP-FR-NKLF: the source a call reads, where the tool reads one file and its
-/// call names a file. `load_skill` and `read_graduation_file` name a skill and
-/// a file of a graduation run, which this turn does not resolve, so they get no
-/// stamp. Pure.
+/// call names a file. `load_skill` and `read_implementation_file` name a skill
+/// and a file of an implementation run, which this turn does not resolve, so
+/// they get no stamp. A change is named by `change_id`, or by its alias
+/// `draft_id` (PVC-FR-SQAF). Pure.
 pub(in crate::agent_conversations) fn source_of(
     call: &rig::completion::message::ToolCall,
 ) -> Option<Source> {
@@ -71,11 +79,9 @@ pub(in crate::agent_conversations) fn source_of(
         "read_file" => argument(call, "path").map(Source::Worktree),
         "measure_document" => match argument(call, "path") {
             Some(path) => Some(Source::Worktree(path)),
-            None => argument(call, "draft_id").map(Source::DraftPrompt),
+            None => change_id(call).map(Source::DraftPrompt),
         },
-        "read_draft" => argument(call, "draft_id")
-            .or_else(|| argument(call, "draftId"))
-            .map(Source::DraftPrompt),
+        "read_change" => change_id(call).map(Source::DraftPrompt),
         "read_openspec_spec" => argument(call, "capability")
             .filter(|c| !c.contains('/') && !c.contains(".."))
             .map(|c| Source::Worktree(format!("openspec/specs/{c}/spec.md"))),
@@ -121,14 +127,29 @@ mod tests {
             source_of(&call("measure_document", path)),
             Some(Source::Worktree("docs/a.md".into()))
         );
-        let draft = serde_json::json!({ "draft_id": "d1" });
+        // PVC-FR-SQAF: a change is named by `change_id` or by its alias.
+        for draft in [
+            serde_json::json!({ "change_id": "d1" }),
+            serde_json::json!({ "draft_id": "d1" }),
+            serde_json::json!({ "draftId": "d1" }),
+        ] {
+            assert_eq!(
+                source_of(&call(crate::tools::draft_read::NAME, draft.clone())),
+                Some(Source::DraftPrompt("d1".into())),
+                "{draft}"
+            );
+            assert_eq!(
+                source_of(&call(crate::tools::measure_document::NAME, draft.clone())),
+                Some(Source::DraftPrompt("d1".into())),
+                "{draft}"
+            );
+        }
+        // PVC-FR-RWDM: the tool carries its current name, and a live call
+        // never carries the legacy one.
+        assert_eq!(crate::tools::draft_read::NAME, "read_change");
         assert_eq!(
-            source_of(&call("read_draft", draft.clone())),
-            Some(Source::DraftPrompt("d1".into()))
-        );
-        assert_eq!(
-            source_of(&call("measure_document", draft)),
-            Some(Source::DraftPrompt("d1".into()))
+            source_of(&call("read_implementation_file", serde_json::json!({ "path": "a.md" }))),
+            None
         );
         assert_eq!(
             source_of(&call("read_openspec_spec", serde_json::json!({ "capability": "auth" }))),

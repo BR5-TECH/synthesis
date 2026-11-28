@@ -208,7 +208,7 @@ describe("the states of the card (OCW-FR-CTWP)", () => {
     const shown = await card();
     await userEvent.click(await within(shown).findByRole("button", { name: "Confirm" }));
     expect(await within(shown).findByTestId("change-action-refusal")).toHaveTextContent(
-      "The change misses these artifacts: tasks. Complete them before Apply. No run started.",
+      "The OpenSpec change misses these artifacts: tasks. Complete them before Apply. No run started.",
     );
     expect(within(shown).getByRole("button", { name: "Confirm" })).not.toHaveAttribute("aria-disabled");
     expect(calls("dispatch_agent_turn")).toHaveLength(0);

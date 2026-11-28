@@ -81,7 +81,7 @@ export function refusalCode(e: unknown): string {
 
 /** MPV-FR-WKVL: what an applied row did, in one sentence. */
 function appliedSentence(row: MapPlanRow): string {
-  if (row.kind === "new_draft") return "A draft was created.";
+  if (row.kind === "new_draft") return "A change was created.";
   if (row.kind === "create_issue" && row.result?.issueNumber !== undefined) {
     return `Issue #${row.result.issueNumber} was created.`;
   }

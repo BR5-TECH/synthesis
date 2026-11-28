@@ -943,7 +943,7 @@ function LiveEditor({
       onShowProposal={showProposal}
       modeLocked={
         reviewing && isMarkdown
-          ? "A proposed change is under review. Decide it before you switch to raw text."
+          ? "A proposal is under review. Decide it before you switch to raw text."
           : undefined
       }
       hunkOpening={hunkDiscussion.opening}

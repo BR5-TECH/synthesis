@@ -45,27 +45,47 @@ fn only_the_named_abandoned_head_is_rewritten() {
     let fx = Fixture::new();
     let stream = fx.stream("editor");
     let worktree = stream.worktree();
-    let title = "Abandoned graduation turn";
+    let titles = &["Abandoned implementation turn"];
 
-    let abandoned = commit_on(&worktree, "a.txt", "Abandoned graduation turn\n\nstopped");
+    let abandoned = commit_on(&worktree, "a.txt", "Abandoned implementation turn\n\nstopped");
     let other = commit_on(&worktree, "b.txt", "Someone else's commit");
 
     assert_eq!(
-        crate::graduation::retitle_head_commit(&worktree, &abandoned, title, "Graduated").unwrap(),
+        crate::graduation::retitle_head_commit(&worktree, &abandoned, titles, "Graduated").unwrap(),
         None,
         "a head that moved past the run's commit is left alone"
     );
     assert_eq!(
-        crate::graduation::retitle_head_commit(&worktree, &other, title, "Graduated").unwrap(),
+        crate::graduation::retitle_head_commit(&worktree, &other, titles, "Graduated").unwrap(),
         None,
         "a head that is not an abandoned turn is left alone"
     );
     assert_eq!(head_message(&worktree), "Someone else's commit");
 
-    let own = commit_on(&worktree, "c.txt", "Abandoned graduation turn\n\nstopped again");
-    let rewritten = crate::graduation::retitle_head_commit(&worktree, &own, title, "Graduated")
+    let own = commit_on(&worktree, "c.txt", "Abandoned implementation turn\n\nstopped again");
+    let rewritten = crate::graduation::retitle_head_commit(&worktree, &own, titles, "Graduated")
         .unwrap()
         .expect("the run's own abandoned head is rewritten");
     assert_ne!(rewritten, own, "the rewrite makes a revision of its own");
     assert_eq!(head_message(&worktree), "Graduated");
+}
+
+// GRD-FR-WQTN, PVC-FR-ZQRE: an older build titled an abandoned turn
+// "Abandoned graduation turn". The run's own head with that title is rewritten
+// too, so a run that an older build stopped still completes on it.
+#[test]
+fn the_run_s_own_head_with_the_legacy_title_is_rewritten() {
+    let fx = Fixture::new();
+    let stream = fx.stream("editor");
+    let worktree = stream.worktree();
+    let titles = crate::graduation::driver::turns::ABANDONED_TITLES;
+    assert!(titles.contains(&"Abandoned graduation turn"), "{titles:?}");
+
+    let legacy = commit_on(&worktree, "a.txt", "Abandoned graduation turn\n\nstopped");
+    let rewritten =
+        crate::graduation::retitle_head_commit(&worktree, &legacy, titles, "Implemented")
+            .unwrap()
+            .expect("the run's own head with the legacy title is rewritten");
+    assert_ne!(rewritten, legacy, "the rewrite makes a revision of its own");
+    assert_eq!(head_message(&worktree), "Implemented");
 }

@@ -289,7 +289,7 @@ fn a_creation_commits_its_draft_and_nothing_else() {
     }
     let repo = f.repo();
     let head = repo.head().unwrap().peel_to_commit().unwrap();
-    assert_eq!(head.message().unwrap_or_default(), "draft: create \"a prompt\"");
+    assert_eq!(head.message().unwrap_or_default(), "change: create \"a prompt\"");
     // GTC-FR-19: the path the author staged stays staged and uncommitted.
     let status = f.repo().status_file(std::path::Path::new("mine.md")).expect("a status");
     assert!(
@@ -308,7 +308,7 @@ fn a_creation_commits_its_draft_and_nothing_else() {
     );
     let repo = f.repo();
     let head = repo.head().unwrap().peel_to_commit().unwrap();
-    assert_eq!(head.message().unwrap_or_default(), "draft: delete \"a prompt\"");
+    assert_eq!(head.message().unwrap_or_default(), "change: delete \"a prompt\"");
 }
 
 // DRS-FR-23: a draft is created with no `conversation.jsonl`.
@@ -577,7 +577,7 @@ fn a_saved_prompt_waits_for_the_next_draft_event() {
     f.commit_now();
     let repo = f.repo();
     let head = repo.head().and_then(|head| head.peel_to_commit()).expect("a commit");
-    assert_eq!(head.message().unwrap_or_default(), "draft: graduate \"a prompt\"");
+    assert_eq!(head.message().unwrap_or_default(), "change: implement \"a prompt\"");
     let object = head
         .tree()
         .expect("a tree")

@@ -61,10 +61,10 @@ function renderControl(
       <p data-testid="outside">The page</p>
       <ActionControl
         discussions={discussions()}
-        controlLabel="Draft actions"
-        itemNoun="draft"
+        controlLabel="Change actions"
+        itemNoun="change"
         discussionsInRail
-        graduate={host("Graduate")}
+        graduate={host("Implement")}
         copySource={copySource}
         publish={host("Publish to GitHub")}
         archive={host("Archive")}
@@ -75,7 +75,7 @@ function renderControl(
 }
 
 function expand() {
-  fireEvent.click(screen.getByRole("button", { name: "Draft actions" }));
+  fireEvent.click(screen.getByRole("button", { name: "Change actions" }));
   return screen.getByRole("menu");
 }
 
@@ -102,7 +102,7 @@ describe("Copy as Source in the action control", () => {
       screen.getAllByRole("menuitem").map((e) => e.textContent?.trim()),
     ).toEqual([
       "Discuss",
-      "Graduate",
+      "Implement",
       "Copy as Source",
       "Publish to GitHub",
       "Archive",
@@ -165,7 +165,7 @@ describe("Copy as Source in the action control", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Copy as Source" }));
     await settle();
     expect(screen.getByRole("menuitem", { name: "Copied" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Close draft actions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close change actions" }));
     expect(screen.queryByRole("menu")).toBeNull();
     expect(screen.getByRole("status")).toHaveTextContent("");
   });
@@ -247,7 +247,7 @@ describe("Copy as Source in the action control", () => {
     await settle();
     act(() => vi.advanceTimersByTime(COPIED_LABEL_MS));
     expect(screen.queryByRole("menu")).toBeNull();
-    expect(screen.getByRole("button", { name: "Draft actions" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Change actions" })).toHaveFocus();
   });
 
   it("ACT-FR-HPIX: a copy that ends after the column was closed and opened again changes nothing in it", async () => {

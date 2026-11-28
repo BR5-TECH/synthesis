@@ -296,7 +296,7 @@ fn the_description_says_how_to_confirm_and_to_quote_the_author() {
     assert!(text.contains("give the id of the decomposition with `confirm`"));
     assert!(text.contains("Copy into `instruction` the words of the author's latest comment"));
     assert!(text.contains("wait until the comment of the speech arrives"));
-    assert!(text.contains("propose_new_draft"));
+    assert!(text.contains("propose_new_change"));
 }
 
 // DDC-FR-GGWO: one call that names a hunk of the open change proposal and the
@@ -347,7 +347,7 @@ fn a_call_with_a_hunk_and_a_new_draft_runs_both() {
     .unwrap();
     let last = thread.comments.last().unwrap();
     assert!(matches!(last.author, Participant::Human { .. }));
-    assert!(last.body.starts_with("Accepted the proposed draft “a”"));
+    assert!(last.body.starts_with("Accepted the proposed change “a”"));
     assert!(last.body.ends_with("\n\nDecided by arch on the author's instruction: “arch”"));
     assert_eq!(last.body.matches("\n\n").count(), 1);
 }
@@ -375,7 +375,7 @@ fn a_confirm_entry_with_the_decomposition_id_confirms_it() {
     assert_eq!(record.superseded.expect("marker").set_id, f.set_id());
     let last = f.thread().comments.last().cloned().unwrap();
     assert!(matches!(last.author, Participant::Human { .. }));
-    assert!(last.body.starts_with("Decomposition confirmed. This draft is superseded by"));
+    assert!(last.body.starts_with("Decomposition confirmed. This change is superseded by"));
     assert!(last
         .body
         .ends_with("\n\nDecided by arch on the author's instruction: “confirm the decomposition”"));
@@ -399,7 +399,7 @@ fn confirm_and_the_decomposition_id_go_together() {
     assert!(first.message.starts_with("Decision 1 of 2: "));
     assert!(first
         .message
-        .contains("is not a change of the open proposal. Use an id from your input."));
+        .contains("is not an edit of the open proposal. Use an id from your input."));
     let second = out.decisions[1].refusal.as_ref().unwrap();
     assert_eq!(second.code, RefusalCode::InvalidAction);
     assert!(second.message.contains("`confirm` for the decomposition"));

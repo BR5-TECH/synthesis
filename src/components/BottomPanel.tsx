@@ -537,7 +537,7 @@ export function BottomPanel({
                 }
                 onClick={() => setSection("graduation")}
               >
-                Graduation{queued > 0 ? ` · ${queued}` : ""}
+                Implementation{queued > 0 ? ` · ${queued}` : ""}
               </button>
               <button
                 type="button"

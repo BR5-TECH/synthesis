@@ -111,7 +111,7 @@ describe("a merge run in the agent output section (RUN-FR-02, RUN-FR-LQDT, RUN-F
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("tab", { name: /Graduation · 1/ })).toBeInTheDocument(),
+      expect(screen.getByRole("tab", { name: /Implementation · 1/ })).toBeInTheDocument(),
     );
     // Two sections only: graduation and agent output.
     expect(screen.getAllByRole("tab")).toHaveLength(2);

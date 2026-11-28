@@ -86,14 +86,14 @@ function statementFor(
     // DCR-FR-AMLR: talking about a proposed draft decides nothing.
     return {
       lead: `This begins a discussion about part ${hunk.position} of ${hunk.total} of the decomposition.`,
-      hint: "The proposed draft is not decided by this discussion. Accept or reject it on its card.",
+      hint: "The proposed change is not decided by this discussion. Accept or reject it on its card.",
     };
   }
   if (state === "hunk" && hunk?.reference.kind === "newChangeSubject") {
-    // OCW-FR-BGDN: talking about a proposed change decides nothing.
+    // OCW-FR-BGDN: talking about a proposed OpenSpec change decides nothing.
     return {
       lead: `This begins a discussion about part ${hunk.position} of ${hunk.total} of the split.`,
-      hint: "The proposed change is not decided by this discussion. Accept or reject it on its card.",
+      hint: "The proposed OpenSpec change is not decided by this discussion. Accept or reject it on its card.",
     };
   }
   if (state === "hunk") {
@@ -101,11 +101,11 @@ function statementFor(
     // says that talking about it decides nothing.
     const which =
       hunk !== null && hunk.position > 0
-        ? `change ${hunk.position} of ${hunk.total}`
-        : "one proposed change";
+        ? `edit ${hunk.position} of ${hunk.total}`
+        : "one proposed edit";
     return {
       lead: `This begins a discussion about ${which}.`,
-      hint: "The change is not decided by this discussion. Accept or reject it in the document.",
+      hint: "The edit is not decided by this discussion. Accept or reject it in the document.",
     };
   }
   if (state === "fragment") {

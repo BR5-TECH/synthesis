@@ -93,9 +93,12 @@ export function noticeSentence(
   fallbackChange?: string | null,
 ): string | null {
   const code = classifyingCode(failure);
-  // A change with no name reads as "this change", with no quotes.
+  // PVC-FR-NEXL: these notices show outside the OpenSpec change tab too, so
+  // they name an "OpenSpec change". A change with no name reads as
+  // "this OpenSpec change", with no quotes.
   const change = failure.change || fallbackChange;
-  const name = change ? quoted(change) : "this change";
+  const name = change ? quoted(change) : "this OpenSpec change";
+  const subject = change ? `The OpenSpec change ${name}` : "This OpenSpec change";
   const state = cliStateOf(failure);
   switch (code) {
     case "openspec_mode_inactive":
@@ -123,24 +126,24 @@ export function noticeSentence(
     case "cli_failed":
       return "The OpenSpec CLI stopped before it answered, also after one more try.";
     case "cli_rejected":
-      return "OpenSpec reported a problem in the OpenSpec files of this change.";
+      return "OpenSpec reported a problem in the files of this OpenSpec change.";
     case "change_not_ready": {
       const artifacts = (failure.detail ?? "")
         .split(",")
         .map((a) => a.trim())
         .filter(Boolean)
         .join(", ");
-      return `The change misses these artifacts: ${artifacts || "unknown"}. Complete them before Apply.`;
+      return `The OpenSpec change misses these artifacts: ${artifacts || "unknown"}. Complete them before Apply.`;
     }
     case "tasks_incomplete":
     case "archive_tasks_incomplete":
-      return `The change ${name} has tasks that are not done.`;
+      return `${subject} has tasks that are not done.`;
     case "archive_spec_update_failed":
       return `The deltas of ${name} do not apply to the live specifications.`;
     case "archive_spec_validation_failed":
       return `The live specifications are not valid after the deltas of ${name}.`;
     case "archive_validation_failed":
-      return `The change ${name} is not valid.`;
+      return `${subject} is not valid.`;
     case "archive_target_exists":
       return `An archive folder for ${name} with the date of today exists already.`;
     default:
@@ -167,14 +170,14 @@ const IMAGE_REFUSALS: ReadonlySet<string> = new Set([
  * repair run, or null where the failure names none.
  */
 export function repairSentence(failure: OpenSpecFailure): string | null {
-  if (failure.repairRunId) return "A rework run started to repair the change.";
+  if (failure.repairRunId) return "A rework run started to repair the OpenSpec change.";
   const refusal = failure.repairRefusal;
   if (!refusal) return null;
   if (refusal === "proposal_pending") {
-    return "No repair run started: the change holds a pending edit proposal.";
+    return "No repair run started: the OpenSpec change holds a pending edit proposal.";
   }
   if (refusal === "openspec_run_active") {
-    return "No repair run started: a run of the change is active.";
+    return "No repair run started: a run of the OpenSpec change is active.";
   }
   if (IMAGE_REFUSALS.has(refusal)) {
     return "No repair run started: the agent image is not ready.";

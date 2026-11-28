@@ -176,7 +176,7 @@ export function GithubPublicationSettingsGroup() {
       data-testid="settings-github-publication"
     >
       <div style={{ fontSize: "var(--fs-ui-md)", fontWeight: 600, color: "var(--fg-1)" }}>
-        Publishing drafts as issues
+        Publishing changes as issues
       </div>
       <div className="t-ui-sm t-muted" style={{ marginBottom: 12 }}>
         Publish to GitHub can create a root issue, or a sub-issue of an open
@@ -367,7 +367,7 @@ export function GithubPublicationSettingsGroup() {
             </select>
             <span className="t-ui-xs t-muted">
               The Type control of Publish to GitHub on a note starts on this Type. It does not
-              change the Types of drafts.
+              change the Types of changes.
             </span>
           </div>
         </div>

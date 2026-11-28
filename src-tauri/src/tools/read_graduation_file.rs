@@ -30,10 +30,10 @@ use crate::logging::{LogBuffer, BUFFER};
 // ---------------------------------------------------------------------------
 
 /// RGF-FR-01.
-pub const NAME: &str = "read_graduation_file";
+pub const NAME: &str = "read_implementation_file";
 
 /// RGF-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Read a file from the working copy this graduation is being written in, and get its text back. Use it on the paths the change set names, to see whether what was written actually answers the prompt, and on any other file in the project to check that it is consistent with what is already there. Give the path relative to the project root, exactly as the change set reports it. Returns the file's full text by default; pass `offset` and `limit` to read a range of lines instead, which is what you want for a file too large to be worth reading whole. This working copy already holds every change made so far, so what you read is what would be published. This tool reads one file and returns it as written — it does not list a folder, does not search, does not summarise what it returns, and can neither reach outside this working copy nor change anything anywhere.";
+pub const DESCRIPTION: &str = "Read a file from the working copy this implementation is being written in, and get its text back. Use it on the paths the change set names, to see whether what was written actually answers the prompt, and on any other file in the project to check that it is consistent with what is already there. Give the path relative to the project root, exactly as the change set reports it. Returns the file's full text by default; pass `offset` and `limit` to read a range of lines instead, which is what you want for a file too large to be worth reading whole. This working copy already holds every change made so far, so what you read is what would be published. This tool reads one file and returns it as written — it does not list a folder, does not search, does not summarise what it returns, and can neither reach outside this working copy nor change anything anywhere.";
 
 const PATH_DESCRIPTION: &str = "The file to read, as a path relative to the project root. For example: 'specifications/ui/ABC-thing.md'. A path outside this working copy cannot be read.";
 

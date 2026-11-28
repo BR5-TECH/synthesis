@@ -120,7 +120,7 @@ fn modify(key: &str, number: i64, fields: Value) -> Value {
 }
 
 fn draft(key: &str) -> Value {
-    json!({ "key": key, "op": "new_draft", "name": "Finish relay", "body": "Finish the relay." })
+    json!({ "key": key, "op": "new_change", "name": "Finish relay", "body": "Finish the relay." })
 }
 
 /// The refusal of a call, or a failure of the test.
@@ -196,7 +196,7 @@ fn the_description_and_the_schema_are_fixed() {
     assert_eq!(row["required"], json!(["key", "op"]));
     assert_eq!(
         row["properties"]["op"]["enum"],
-        json!(["create_issue", "modify_issue", "new_draft"])
+        json!(["create_issue", "modify_issue", "new_change"])
     );
     assert_eq!(row["properties"]["close_reason"]["enum"], json!(["completed", "not_planned"]));
     assert_eq!(
@@ -271,8 +271,8 @@ fn a_call_carries_one_to_twenty_rows_with_their_own_keys() {
         json!([draft(" "), draft("b")]),
         json!([{ "key": "a", "op": "rename_issue" }]),
         json!([{ "key": "a" }]),
-        json!([{ "key": "a", "op": "new_draft", "name": "n", "body": "b", "number": 2 }]),
-        json!([{ "op": "new_draft", "name": "n", "body": "b" }]),
+        json!([{ "key": "a", "op": "new_change", "name": "n", "body": "b", "number": 2 }]),
+        json!([{ "op": "new_change", "name": "n", "body": "b" }]),
     ];
     for rows in cases {
         let refusal = refused(f.rows(rows.clone()));
@@ -546,10 +546,10 @@ fn a_status_must_be_an_option_of_the_project() {
 fn a_new_draft_needs_a_name_and_a_prompt_and_no_github() {
     let f = Fixture::new();
     for (row, message) in [
-        (json!({ "key": "a", "op": "new_draft", "body": "b" }), rows::BLANK_NAME),
-        (json!({ "key": "a", "op": "new_draft", "name": "  ", "body": "b" }), rows::BLANK_NAME),
-        (json!({ "key": "a", "op": "new_draft", "name": "n" }), rows::BLANK_BODY),
-        (json!({ "key": "a", "op": "new_draft", "name": "n", "body": " \n" }), rows::BLANK_BODY),
+        (json!({ "key": "a", "op": "new_change", "body": "b" }), rows::BLANK_NAME),
+        (json!({ "key": "a", "op": "new_change", "name": "  ", "body": "b" }), rows::BLANK_NAME),
+        (json!({ "key": "a", "op": "new_change", "name": "n" }), rows::BLANK_BODY),
+        (json!({ "key": "a", "op": "new_change", "name": "n", "body": " \n" }), rows::BLANK_BODY),
     ] {
         let refusal = refused(f.rows(json!([row])));
         assert_eq!(refusal.kind, ToolErrorKind::InvalidArgs);
@@ -568,6 +568,26 @@ fn a_new_draft_needs_a_name_and_a_prompt_and_no_github() {
         }
         other => panic!("a draft row, found {other:?}"),
     }
+}
+
+// PVC-FR-SQAF, PVC-FR-ODXM: the earlier `op` value `new_draft` is read as
+// `new_change`. The schema names `new_change` alone, and the stored row kind
+// is still `NewDraft`.
+#[test]
+fn the_op_new_draft_is_an_alias_of_new_change() {
+    let f = Fixture::new();
+    let row = json!({ "key": "a", "op": "new_draft", "name": "Finish relay", "body": "Finish the relay." });
+    f.rows(json!([row])).unwrap();
+    assert!(matches!(f.only_row().fields, RowFields::NewDraft(_)));
+    let schema = super::parameters();
+    let ops = &schema["properties"]["rows"]["items"]["properties"]["op"]["enum"];
+    assert!(!ops.as_array().expect("an enum").iter().any(|op| op == "new_draft"), "{ops}");
+    let decoded: super::PlanRowArg =
+        serde_json::from_value(json!({ "key": "b", "op": "new_draft" })).expect("decodes");
+    assert_eq!(decoded.op, "new_change");
+    let other: super::PlanRowArg =
+        serde_json::from_value(json!({ "key": "b", "op": "rewrite" })).expect("decodes");
+    assert_eq!(other.op, "rewrite", "another value stays as the model sent it");
 }
 
 // PPT-FR-AYQT, MPR-FR-SBYA: a call with `rows` while a row waits is refused. A call is
@@ -729,8 +749,8 @@ fn each_call_is_logged_without_content() {
     let rationale = "ZEBRA-RATIONALE <spoken>x</spoken>";
     let rows = json!([
         { "key": "a", "op": "create_issue", "title": "ZEBRA-TITLE", "body": "ZEBRA-BODY", "labels": ["docs"] },
-        { "key": "b", "op": "new_draft", "name": "ZEBRA-NAME", "body": "ZEBRA-PROMPT" },
-        { "key": "c", "op": "new_draft", "name": "ZEBRA-NAME-2", "body": "ZEBRA-PROMPT" },
+        { "key": "b", "op": "new_change", "name": "ZEBRA-NAME", "body": "ZEBRA-PROMPT" },
+        { "key": "c", "op": "new_change", "name": "ZEBRA-NAME-2", "body": "ZEBRA-PROMPT" },
     ]);
     let args = json!({ "rationale": rationale, "rows": rows });
     run(&f.tool().with_buffer(&BUFFER), args.clone()).unwrap();
@@ -780,7 +800,7 @@ fn a_call_reads_only_what_it_needs_and_carries_no_credential() {
     f.rows(json!([
         { "key": "a", "op": "create_issue", "title": "T", "type": "Task", "labels": ["docs"] },
         modify("b", 2, json!({ "status": "Done", "milestone": "Milestone 1" })),
-        { "key": "c", "op": "new_draft", "name": "n", "body": "b" },
+        { "key": "c", "op": "new_change", "name": "n", "body": "b" },
     ]))
     .unwrap();
     let mut calls = f.plan.h.fake.calls();

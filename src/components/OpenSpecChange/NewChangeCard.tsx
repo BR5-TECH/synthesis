@@ -129,7 +129,7 @@ export function NewChangeCard({
   if (!proposal) {
     return (
       <div className="dds-newdraft-ref" data-testid="new-change-card-unread">
-        <TypeChip kind="newDraft" /> Proposed change
+        <TypeChip kind="newDraft" /> Proposed OpenSpec change
       </div>
     );
   }
@@ -141,10 +141,10 @@ export function NewChangeCard({
   if (newestReferenceOf(comments, proposal.id) !== comment.id) {
     const verb =
       reference.update === "change"
-        ? "Changed the proposed change"
+        ? "Changed the proposed OpenSpec change"
         : reference.update === "withdraw"
-          ? "Withdrew the proposed change"
-          : "Proposed a change";
+          ? "Withdrew the proposed OpenSpec change"
+          : "Proposed an OpenSpec change";
     return (
       <div className="dds-newdraft-ref" data-testid="new-change-reference">
         <TypeChip kind="newDraft" /> {verb} · {place} · {proposal.name}
@@ -200,7 +200,7 @@ export function NewChangeCard({
       className="dds-question dds-newdraft openspec-newchange"
       data-testid="new-change-card"
       data-state={proposal.state}
-      aria-label={`Proposed change, part ${proposal.position} of ${proposal.total}, ${proposal.name}, ${state.word}`}
+      aria-label={`Proposed OpenSpec change, part ${proposal.position} of ${proposal.total}, ${proposal.name}, ${state.word}`}
     >
       <div className="dds-question__head">
         <TypeChip kind="newDraft" />
@@ -228,7 +228,7 @@ export function NewChangeCard({
       {/* OCW-FR-IJAI: the created change opens its tab. */}
       {proposal.state === "accepted" && created !== null && (
         <p className="dds-newdraft__created">
-          Created change{" "}
+          Created OpenSpec change{" "}
           <button
             type="button"
             className="btn btn--ghost btn--sm openspec-newchange__created"

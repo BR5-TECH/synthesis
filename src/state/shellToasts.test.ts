@@ -45,13 +45,13 @@ describe("the draft toasts (NTF-FR-DRFT)", () => {
     showDraftOpenFailed("draft_not_found");
     expect(byKey("draft-create-failed")[0]).toMatchObject({
       level: "Error",
-      title: "Draft not created",
+      title: "Change not created",
       body: "drafts store is malformed",
       address: null,
     });
     expect(byKey("draft-open-failed")[0]).toMatchObject({
       level: "Error",
-      title: "Draft not opened",
+      title: "Change not opened",
       body: "draft_not_found",
       address: null,
     });

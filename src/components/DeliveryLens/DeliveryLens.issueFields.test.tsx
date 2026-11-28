@@ -121,7 +121,7 @@ describe("the header (MIV-FR-POMI)", () => {
       expect(callsOf(b, "open_tracker_link")[0].url).toBe("https://github.com/acme/payments/issues/53"),
     );
     expect(within(head).getByTestId("flow-card-status")).toHaveTextContent("in progress");
-    expect(within(head).getByRole("button", { name: "Claim and graduate" })).toBeInTheDocument();
+    expect(within(head).getByRole("button", { name: "Claim and implement" })).toBeInTheDocument();
     expect(within(head).queryByTestId("miv-pending")).toBeNull();
     await userEvent.click(within(head).getByRole("button", { name: "Discuss" }));
     await waitFor(() => expect(r.store.snapshot().discussion.node).toMatchObject({ kind: "item", id: "t2" }));
@@ -139,7 +139,7 @@ describe("the header (MIV-FR-POMI)", () => {
     await openFile();
     const file = await viewOf("t2");
     expect(within(file).queryByTestId("flow-tracker-tag")).toBeNull();
-    expect(within(file).queryByRole("button", { name: "Claim and graduate" })).toBeNull();
+    expect(within(file).queryByRole("button", { name: "Claim and implement" })).toBeNull();
   });
 
   it("MIV-FR-POMI, MDL-FR-PUCM: a pending edit shows the pending mark in the header", async () => {
@@ -255,7 +255,7 @@ describe("the sidebar (MIV-FR-VHDP, MIV-FR-NBHF, MIV-FR-PGEC)", () => {
       "Milestone",
       "Kind",
       "Blocked by",
-      "Draft",
+      "Change",
       "Footprint",
       "References",
     ]);
@@ -267,8 +267,8 @@ describe("the sidebar (MIV-FR-VHDP, MIV-FR-NBHF, MIV-FR-PGEC)", () => {
 
   it.each([
     ["an issue with no assignee", "t3", { has: ["Assignees"], none: ["Due", "Blocked by"] }],
-    ["a milestone", "m1", { has: ["Due"], none: ["Assignees", "Labels", "Milestone", "Draft", "Footprint"] }],
-    ["a feature", "f1", { has: ["Labels"], none: ["Draft", "Footprint", "Due"] }],
+    ["a milestone", "m1", { has: ["Due"], none: ["Assignees", "Labels", "Milestone", "Change", "Footprint"] }],
+    ["a feature", "f1", { has: ["Labels"], none: ["Change", "Footprint", "Due"] }],
   ])("MIV-FR-NBHF: for %s the fields that apply show and the others are absent", async (_, id, fields) => {
     await openGithub();
     const view = await viewOf(id);

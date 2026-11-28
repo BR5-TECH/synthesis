@@ -47,6 +47,6 @@ export function slotWaitSentence(capacity: GraduationCapacity): string {
   const runs = capacity.limit === 1 ? "run" : "runs";
   return (
     `${SLOT_WAIT_HEADLINE} — the project works ${capacity.inUse} of ` +
-    `${capacity.limit} graduation ${runs}.`
+    `${capacity.limit} implementation ${runs}.`
   );
 }

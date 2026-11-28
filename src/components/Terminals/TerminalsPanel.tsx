@@ -313,8 +313,8 @@ export function TerminalsPanel({
                         {session.busyRunId && (
                           <span
                             className="terminal-busy"
-                            title="A graduation run is working in this target"
-                            aria-label="A graduation run is working in this target"
+                            title="An implementation run is working in this target"
+                            aria-label="An implementation run is working in this target"
                           >
                             <Icon.AlertTriangle size={11} aria-hidden="true" />
                           </span>

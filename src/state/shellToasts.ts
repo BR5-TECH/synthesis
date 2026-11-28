@@ -16,7 +16,7 @@ export const WORKTREE_FALLBACK_KEY = "worktree-fallback";
 export function showDraftCreateFailed(body: string): void {
   // The author just acted, so the toast takes the next free slot.
   showToast(
-    { key: DRAFT_CREATE_FAILED_KEY, level: "Error", title: "Draft not created", body, address: null },
+    { key: DRAFT_CREATE_FAILED_KEY, level: "Error", title: "Change not created", body, address: null },
     { priority: true },
   );
 }
@@ -24,7 +24,7 @@ export function showDraftCreateFailed(body: string): void {
 /** NTF-FR-DRFT: an Error toast for a draft that did not open. */
 export function showDraftOpenFailed(body: string): void {
   showToast(
-    { key: DRAFT_OPEN_FAILED_KEY, level: "Error", title: "Draft not opened", body, address: null },
+    { key: DRAFT_OPEN_FAILED_KEY, level: "Error", title: "Change not opened", body, address: null },
     { priority: true },
   );
 }

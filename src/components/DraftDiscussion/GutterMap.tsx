@@ -25,7 +25,7 @@ export function GutterMap({
     <div
       className="dds-gutter"
       role="group"
-      aria-label="Proposed changes in this document"
+      aria-label="Proposed edits in this document"
       data-testid="hunk-gutter-map"
     >
       {hunks.map((hunk) => {

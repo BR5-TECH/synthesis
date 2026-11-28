@@ -26,7 +26,7 @@ function mount(
   document.body.append(host);
   const teardown = mountProposedText(host, markdown, {
     editable: true,
-    label: "Proposed text of change 1 of 1",
+    label: "Proposed text of edit 1 of 1",
     onChange: () => {},
     ...over,
   });
@@ -125,7 +125,7 @@ describe("the proposed text is edited in place (DCR-FR-24)", () => {
     expect(doc.getAttribute("contenteditable")).toBe("true");
     expect(doc.getAttribute("role")).toBe("textbox");
     expect(doc.getAttribute("aria-multiline")).toBe("true");
-    expect(doc.getAttribute("aria-label")).toBe("Proposed text of change 1 of 1");
+    expect(doc.getAttribute("aria-label")).toBe("Proposed text of edit 1 of 1");
     expect(doc.hasAttribute("aria-readonly")).toBe(false);
   });
 
@@ -136,7 +136,7 @@ describe("the proposed text is edited in place (DCR-FR-24)", () => {
     const { doc } = mount("Body.", over);
     expect(doc.getAttribute("contenteditable")).toBe("false");
     expect(doc.getAttribute("aria-readonly")).toBe("true");
-    expect(doc.getAttribute("aria-label")).toBe("Proposed text of change 1 of 1");
+    expect(doc.getAttribute("aria-label")).toBe("Proposed text of edit 1 of 1");
   });
 
   it("DCR-FR-24: an undo in the proposed text reverses the edit made to it", () => {

@@ -202,3 +202,33 @@ describe("CTA-FR-ZBIB, CTA-FR-GCKO, CTA-FR-KDTM: the saved row and the foot row"
     expect(screen.getAllByTestId("saved-activity-row")).toHaveLength(1);
   });
 });
+
+describe("PVC-FR-LGYT, PVC-FR-PXOE, PVC-FR-JBPC: a saved call with a legacy name", () => {
+  const onTarget = (target: Discussion["target"], tool: string): Discussion => ({
+    ...discussion(agentComment("c2", "arch", [{ tool, keyInput: null, state: "done" }])),
+    target,
+  });
+  const shownTool = (): string => {
+    fireEvent.click(screen.getByTestId("saved-activity-row-toggle"));
+    return screen.getByTestId("tool-call-entry").querySelector(".tool-calls__name")!.textContent!;
+  };
+  const DRAFT = { kind: "draft", draftId: "dr1" } as const;
+  const CHANGE = { kind: "change", streamId: "s1", change: "add-voice" } as const;
+
+  for (const variant of ["card", "stream"] as const) {
+    it(`${variant}: on a change target, saved read_draft shows read_change`, () => {
+      render(surface(onTarget(DRAFT, "read_draft"), { variant }));
+      expect(shownTool()).toBe("read_change");
+    });
+
+    it(`${variant}: on an OpenSpec change target, saved propose_change_edits shows propose_openspec_change_edits`, () => {
+      render(surface(onTarget(CHANGE, "propose_change_edits"), { variant }));
+      expect(shownTool()).toBe("propose_openspec_change_edits");
+    });
+
+    it(`${variant}: on a change target, saved propose_change_edits keeps its name`, () => {
+      render(surface(onTarget(DRAFT, "propose_change_edits"), { variant }));
+      expect(shownTool()).toBe("propose_change_edits");
+    });
+  }
+});

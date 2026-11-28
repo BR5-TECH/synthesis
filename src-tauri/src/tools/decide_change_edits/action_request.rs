@@ -1,4 +1,4 @@
-//! The entries of `decide_change_edits` that name the pending change action
+//! The entries of `decide_openspec_change_edits` that name the pending change action
 //! request of the change (`DCE-decide-change-edits-tool.md` DCE-FR-UZDN,
 //! DCE-FR-IZTA, DCE-FR-UVUT, DCE-FR-QUKG).
 //!
@@ -11,7 +11,7 @@ use crate::tools::decide_changes::{DecisionRow, Outcome, RefusalCode};
 
 /// The `invalid_action` text of an action request entry.
 pub const INVALID_REQUEST_ACTION: &str =
-    "the action must be `confirm` or `reject` for a request to apply or rework the change.";
+    "the action must be `confirm` or `reject` for a request to apply or rework the OpenSpec change.";
 
 /// DCE-FR-IZTA / DCE-FR-UVUT: run one entry that names the pending request.
 pub(super) fn entry<R: tauri::Runtime>(

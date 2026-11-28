@@ -82,7 +82,7 @@ export function ReviewBar({
   const total = reviewedHunkTotal(proposal);
   const left = undecidedCount(proposal.counts);
   return (
-    <div className="dds-review" role="region" aria-label="Proposed changes">
+    <div className="dds-review" role="region" aria-label="Proposed edits">
       {/* The bar stands at the foot of the column, so it is read upward: what
           the author is being told first, and the row they act on last, nearest
           the hand. */}
@@ -107,7 +107,7 @@ export function ReviewBar({
           taking the actions away. */}
       {undrawn && (
         <p className="dds-review__undrawn t-ui-xs" role="status" aria-live="polite">
-          This change is not shown in the document. You can still accept or
+          This edit is not shown in the document. You can still accept or
           reject it.
         </p>
       )}
@@ -139,19 +139,19 @@ export function ReviewBar({
           data-testid="review-counter"
         >
           {position > 0
-            ? `reviewing change ${position} of ${total}`
-            : `${left} of ${total} ${left === 1 ? "change" : "changes"} still to decide`}
+            ? `reviewing edit ${position} of ${total}`
+            : `${left} of ${total} ${left === 1 ? "edit" : "edits"} still to decide`}
         </span>
         {/* DCR-FR-11: the two controls stand with the counter they move —
             which change of how many, and how to change it. Each names the
             accelerator of DCR-FR-30 that does the same thing, in the same
             treatment the chip gives its own keys, so the key is learned here
             and recognised there. */}
-        <div className="dds-review__nav" role="group" aria-label="Move through the changes">
+        <div className="dds-review__nav" role="group" aria-label="Move through the edits">
           <button
             className="btn btn--ghost btn--sm"
             disabled={busy || !canPrevious}
-            title="Go to the previous change"
+            title="Go to the previous edit"
             onClick={onPrevious}
           >
             Previous <kbd className="dds-review__key">⌥↑</kbd>
@@ -159,7 +159,7 @@ export function ReviewBar({
           <button
             className="btn btn--ghost btn--sm"
             disabled={busy || !canNext}
-            title="Go to the next change"
+            title="Go to the next edit"
             onClick={onNext}
           >
             Next <kbd className="dds-review__key">⌥↓</kbd>

@@ -9,10 +9,10 @@ use super::*;
 /// DST-FR-01: the tool is a `rig` portable tool under the documented name, and
 /// nothing about it is a Tauri command.
 #[test]
-fn is_a_portable_tool_named_search_drafts() {
+fn is_a_portable_tool_named_search_changes() {
     let fixture = DraftFixture::new();
     let tool = fixture.tool();
-    assert_eq!(NAME, "search_drafts");
+    assert_eq!(NAME, "search_changes");
     assert_eq!(<DraftSearchTool<tauri::test::MockRuntime> as PortableTool>::NAME, NAME);
     assert_eq!(rig::tool::tool_definition(&tool).name, NAME);
 
@@ -106,4 +106,14 @@ fn definition_is_the_fixed_contract_surface() {
     assert!(LIMIT_DESCRIPTION.contains(&MAX_LIMIT.to_string()));
     assert_eq!(normalize_limit(None), DEFAULT_LIMIT as usize);
     assert_eq!(normalize_limit(Some(i64::MAX)), MAX_LIMIT as usize);
+}
+
+// PVC-FR-ODXM, PVC-FR-CUAT: the output keeps the stored status `graduated`, so
+// the description tells the model what it means. The description is the quote
+// of the spec, byte for byte.
+#[test]
+fn the_description_says_what_the_stored_status_means_and_is_the_spec_quote() {
+    const SPEC: &str = include_str!("../../../../../specifications/tools/DST-draft-search-tool.md");
+    assert!(DESCRIPTION.contains("A status of `graduated` means the change is implemented."));
+    assert!(SPEC.contains(&format!("\n> {DESCRIPTION}\n")), "the DST quote differs");
 }

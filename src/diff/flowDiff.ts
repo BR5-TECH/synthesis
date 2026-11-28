@@ -181,7 +181,7 @@ function itemFacts(
   facts.push(fact("Description", before?.description, after?.description, paired));
   facts.push(...listFacts("Reference", before?.artifactIds, after?.artifactIds, paired));
   facts.push(...listFacts("Footprint", before?.footprint, after?.footprint, paired));
-  facts.push(fact("Draft", before?.draftId, after?.draftId, paired));
+  facts.push(fact("Change", before?.draftId, after?.draftId, paired));
   facts.push(fact("Due", before?.due, after?.due, paired));
   if (paired) {
     if (before.parentId !== after.parentId) {

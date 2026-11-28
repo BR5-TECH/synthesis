@@ -203,7 +203,7 @@ describe("the window renders its own settings and nothing of the shell (SWN-FR-0
 
   it("SWN-FR-02, SET-FR-03: renders the Project group, and reads the project behind it", async () => {
     renderProject();
-    await screen.findByText("Draft template");
+    await screen.findByText("Change template");
     await waitFor(() =>
       expect(calls("get_settings_window_context")).toHaveLength(1),
     );
@@ -236,7 +236,7 @@ describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-
     ]);
     expect(rowsOf("Project")).toEqual([
       "Project",
-      "Draft template",
+      "Change template",
       "OpenSpec",
       "Target repo bindings",
       "GitHub Project settings",
@@ -246,7 +246,7 @@ describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-
       "Plugins",
       "Project Agents",
       "Docker",
-      "Graduation",
+      "Implementation",
       "Indexing",
     ]);
     const global = screen.getByTestId("settings-group-global");
@@ -329,7 +329,7 @@ describe("one side nav, two labelled groups (SWN-FR-QXTV / SWN-FR-MRNB / SWN-FR-
     // Absent, not disabled: no list, no label, no divider, no row.
     expect(screen.queryByRole("tablist", { name: "Project" })).toBeNull();
     expect(screen.queryByTestId("settings-group-project")).toBeNull();
-    expect(screen.queryByText("Draft template")).toBeNull();
+    expect(screen.queryByText("Change template")).toBeNull();
   });
 
   it("SWN-FR-16: no route presents a Project section while no project is open", async () => {
@@ -820,9 +820,9 @@ describe("both groups in one window (SWN-FR-06 / SWN-FR-08 / SWN-FR-11 / SWN-FR-
     });
 
     expect(
-      await screen.findByRole("heading", { name: "Graduation" }),
+      await screen.findByRole("heading", { name: "Implementation" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Graduation" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Implementation" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -886,7 +886,7 @@ describe("both groups in one window (SWN-FR-06 / SWN-FR-08 / SWN-FR-11 / SWN-FR-
       expect(screen.getByText(/Unsaved theme change/)).toBeInTheDocument(),
     );
 
-    await userEvent.click(screen.getByRole("tab", { name: "Graduation" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Implementation" }));
     await screen.findByTestId("project-settings");
 
     await requestSaveAndClose();

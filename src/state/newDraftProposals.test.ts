@@ -127,7 +127,7 @@ describe("the new-draft raise", () => {
     for (const cause of ["recorded", "updated"] as const) {
       const raise = newDraftProposalRaise({ draftId: "d1", proposal: proposal(), cause }, root);
       expect(raise?.level).toBe("Info");
-      expect(raise?.title).toBe("@arch proposed a new draft");
+      expect(raise?.title).toBe("@arch proposed a new change");
       expect(raise?.body).toBe("Part 1 of 3 · relay-auth");
       expect(raise?.address).toContain("d1");
     }

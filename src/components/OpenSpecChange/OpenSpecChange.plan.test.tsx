@@ -254,7 +254,7 @@ describe("the strip of a plan rest (OCW-FR-YRZK, OCW-FR-ZPDC)", () => {
     await userEvent.keyboard("{Enter}");
     const refusal = await within(shown).findByTestId("openspec-run-strip-refusal");
     expect(refusal.textContent).toBe(
-      "Decide the plan edits in the change discussion first, or their commit is still owed. Then continue the run.",
+      "Decide the plan edits in the discussion of the OpenSpec change first, or their commit is still owed. Then continue the run.",
     );
     expect(button).not.toHaveAttribute("aria-disabled");
     expect(document.activeElement).toBe(button);
@@ -267,7 +267,7 @@ describe("the strip of a plan rest (OCW-FR-YRZK, OCW-FR-ZPDC)", () => {
     const refusal = await within(shown).findByTestId("openspec-run-strip-refusal");
     expect(refusal).toHaveAttribute("role", "alert");
     expect(refusal).toHaveTextContent(
-      "Answer the questions in the change discussion first, then continue the run.",
+      "Answer the questions in the discussion of the OpenSpec change first, then continue the run.",
     );
     expect(within(shown).getByTestId("openspec-run-strip-state")).toHaveTextContent(
       "waiting for plan decisions",
@@ -499,7 +499,7 @@ describe("the plan thread (OCW-FR-QSZP, OCW-FR-KZDG, DQA-FR-XFEE)", () => {
     drawChange({ file: "proposal.md" });
     await userEvent.click(within(await openedStripAfterDraw()).getByRole("button", { name: "Show thread" }));
     const hint = await screen.findByTestId("dds-plan-hint");
-    expect(hint).toHaveTextContent("Decide these edits with the chips in the change, or by voice or comment");
+    expect(hint).toHaveTextContent("Decide these edits with the chips in the document, or by voice or comment");
     expect(hint).toHaveTextContent("“@arch accept the first two edits”");
     expect(screen.getAllByTestId("dds-plan-hint")).toHaveLength(1);
   });

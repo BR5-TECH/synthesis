@@ -32,8 +32,8 @@ export const STATUS_POSITIONS: SelectorPosition<DraftsStatusFilter>[] = [
   // archive — a draft a graduation has already turned into specifications is
   // neither being worked on nor retired (DRS-FR-20). It admits `graduated`
   // alone: a publication to GitHub leaves a draft in the active position.
-  { value: "graduated", tag: "Graduated", title: "Graduated" },
-  { value: "all", tag: "All", title: "All drafts" },
+  { value: "graduated", tag: "Implemented", title: "Implemented" },
+  { value: "all", tag: "All", title: "All changes" },
   // DRP-FR-GBVS: the drafts published to GitHub, on any status.
   { value: "published", tag: "Published", title: "Published to GitHub" },
 ];
@@ -167,7 +167,7 @@ export function toMatchMap(hits: DraftMatch[]): Map<string, DraftMatch["matchedI
  */
 export function countPhrase(drafts: number, folders: number): string {
   const parts: string[] = [];
-  if (drafts > 0) parts.push(`${drafts} ${drafts === 1 ? "draft" : "drafts"}`);
+  if (drafts > 0) parts.push(`${drafts} ${drafts === 1 ? "change" : "changes"}`);
   if (folders > 0)
     parts.push(`${folders} ${folders === 1 ? "folder" : "folders"}`);
   if (parts.length === 0) return "Nothing it holds moves";

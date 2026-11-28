@@ -304,7 +304,7 @@ describe("the graduation start dialog (GSD-FR-YSMC)", () => {
       <GraduationStart draftId="d-1" draftName="artifact" onClose={vi.fn()} onStarted={onStarted} />,
     );
     const section = await screen.findByTestId("main-branch-write-section");
-    expect(section).toHaveTextContent("You asked to start a graduation.");
+    expect(section).toHaveTextContent("You asked to start an implementation.");
     expect(reads.reads[0]).toEqual({ branch: null, refresh: false });
     const graduate = screen.getByTestId("graduation-start-confirm");
     await waitFor(() => expect(screen.getByRole("combobox", { name: "Work stream" })).toBeInTheDocument());

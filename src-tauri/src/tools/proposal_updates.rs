@@ -2,6 +2,9 @@
 //! (`PDC-propose-draft-changes-tool.md` PDC-FR-GMWR, PDC-FR-UOBH, PDC-FR-SNUK;
 //! `PPC-propose-prompt-changes-tool.md` PPC-FR-RVKS).
 //!
+//! `propose_change_edits` says "edit" for a hunk and the prompt-file tool says
+//! "change" (PVC-FR-VBPY), so each text has the two forms of [`HunkWord`].
+//!
 //! An update of an open proposal is a list of entries, each a `change`, an
 //! `add`, or a `withdraw`. This module reads the entries the model composed,
 //! refuses a malformed one with its place, and holds the refusal texts the two
@@ -31,6 +34,30 @@ pub const UPDATE_NAMED_TWICE: &str =
 
 /// DCP-FR-GMYT: a `change` or a `withdraw` of a diagram change, sent to the text tool.
 pub const UPDATE_CHANGE_IS_DIAGRAM: &str = "The change you named is a diagram change, so this tool can not update it. Update it with `propose_diagram_changes`.";
+
+/// PDC contract surface, PVC-FR-VBPY: the texts above as `propose_change_edits`
+/// says them. A proposed hunk of a change is an "edit". The prompt-file tools
+/// keep the texts above (PPC contract surface).
+pub const UPDATE_MALFORMED_EDIT: &str =
+    "Each update gives `action`: `change` or `withdraw` with the `id` of an edit, or `add` with no `id`.";
+pub const UPDATE_NO_SUCH_EDIT: &str =
+    "The `id` you gave is not an edit of your open proposal. Name an edit of it, or use `add` for a new edit.";
+pub const UPDATE_EDIT_SETTLED: &str =
+    "The edit you named is accepted or withdrawn, so it can not be updated. Use `add` for a new edit.";
+pub const UPDATE_EDIT_NAMED_TWICE: &str =
+    "Two of your updates name the same edit. Put what you want for it in one update.";
+pub const UPDATE_EDIT_IS_DIAGRAM: &str = "The edit you named is a diagram edit, so this tool can not update it. Update it with `propose_diagram_changes`.";
+
+/// The word a tool uses for one proposed hunk in the text of `updates`.
+///
+/// PVC-FR-VBPY: a hunk of a proposal to the prompt of a change is an "edit".
+/// A hunk of a proposal to a Prompt file or a project document stays a
+/// "change" (PPC contract surface).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HunkWord {
+    Change,
+    Edit,
+}
 
 /// One entry of `updates`, as the model composed it.
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -93,8 +120,22 @@ pub fn to_entries(args: &[UpdateArg]) -> Result<Vec<UpdateEntry>, ToolRefusal> {
 /// As [`to_entries`], for the tool of one subject: `diagram` is true for the
 /// diagram tool, and every entry then names a diagram hunk (DCP-FR-GMYT).
 pub fn to_entries_for(args: &[UpdateArg], diagram: bool) -> Result<Vec<UpdateEntry>, ToolRefusal> {
+    to_entries_worded(args, diagram, HunkWord::Change)
+}
+
+/// As [`to_entries_for`], with the malformed-entry text in the tool's own
+/// word for a hunk (PVC-FR-VBPY).
+pub fn to_entries_worded(
+    args: &[UpdateArg],
+    diagram: bool,
+    word: HunkWord,
+) -> Result<Vec<UpdateEntry>, ToolRefusal> {
     let of = args.len();
-    let malformed = |at: usize| ToolRefusal::InvalidUpdateAt { message: UPDATE_MALFORMED, at, of };
+    let message = match word {
+        HunkWord::Change => UPDATE_MALFORMED,
+        HunkWord::Edit => UPDATE_MALFORMED_EDIT,
+    };
+    let malformed = |at: usize| ToolRefusal::InvalidUpdateAt { message, at, of };
     args.iter()
         .enumerate()
         .map(|(index, arg)| {
@@ -128,13 +169,23 @@ pub fn action_counts(args: &[UpdateArg]) -> (usize, usize, usize) {
 /// turn sends stays small; `with_note` adds the one-change note a draft's hunk
 /// carries.
 pub fn schema(description: &str, with_note: bool) -> serde_json::Value {
+    schema_worded(description, with_note, HunkWord::Change)
+}
+
+/// As [`schema`], with the entry texts in the tool's own word for a hunk
+/// (PVC-FR-VBPY).
+pub fn schema_worded(description: &str, with_note: bool, word: HunkWord) -> serde_json::Value {
+    let (entry, action, id) = match word {
+        HunkWord::Change => (ENTRY_DESCRIPTION, ACTION_DESCRIPTION, ID_DESCRIPTION),
+        HunkWord::Edit => (ENTRY_DESCRIPTION_EDIT, ACTION_DESCRIPTION_EDIT, ID_DESCRIPTION_EDIT),
+    };
     let mut properties = serde_json::json!({
         "action": {
             "type": "string",
             "enum": ["change", "add", "withdraw"],
-            "description": ACTION_DESCRIPTION,
+            "description": action,
         },
-        "id": { "type": "string", "description": ID_DESCRIPTION },
+        "id": { "type": "string", "description": id },
         "before": { "type": "string", "description": "As in `hunks`: the exact existing text." },
         "after": { "type": "string", "description": "As in `hunks`: the exact new text." },
         "after_text": {
@@ -156,7 +207,7 @@ pub fn schema(description: &str, with_note: bool) -> serde_json::Value {
         "minItems": 1,
         "items": {
             "type": "object",
-            "description": ENTRY_DESCRIPTION,
+            "description": entry,
             "properties": properties,
             "required": ["action"],
         },
@@ -168,6 +219,13 @@ const ENTRY_DESCRIPTION: &str = "One update of your open proposal: `change` an e
 const ACTION_DESCRIPTION: &str = "`change` replaces the change named by `id` with the fields you give; `add` offers a new change and takes no `id`; `withdraw` takes back the change named by `id`.";
 
 const ID_DESCRIPTION: &str = "For `change` and `withdraw`: the id of a change of your open proposal. Leave it out for `add`.";
+
+const ENTRY_DESCRIPTION_EDIT: &str = "One update of your open proposal: `change` an existing edit, `add` a new one, or `withdraw` one you no longer offer.";
+
+const ACTION_DESCRIPTION_EDIT: &str = "`change` replaces the edit named by `id` with the fields you give; `add` offers a new edit and takes no `id`; `withdraw` takes back the edit named by `id`.";
+
+const ID_DESCRIPTION_EDIT: &str =
+    "For `change` and `withdraw`: the id of an edit of your open proposal. Leave it out for `add`.";
 
 #[cfg(test)]
 mod tests {

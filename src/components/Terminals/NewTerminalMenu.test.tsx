@@ -476,10 +476,10 @@ describe("New terminal menu", () => {
     serve("list_terminal_targets", [target({ busyRunId: "run-1" }), stream, alpha]);
     renderMenu();
     await screen.findByRole("group", { name: "repo" });
-    expect(within(activeSection()).getByRole("note")).toHaveTextContent("A graduation run is working in this target.");
+    expect(within(activeSection()).getByRole("note")).toHaveTextContent("An implementation run is working in this target.");
     fireEvent.mouseEnter(submenuEntry(/^auth/));
     const sub = screen.getByRole("menu", { name: "auth" });
-    expect(within(sub).getByRole("note")).toHaveTextContent("A graduation run is working in this target.");
+    expect(within(sub).getByRole("note")).toHaveTextContent("An implementation run is working in this target.");
     for (const kind of within(sub).getAllByRole("menuitem")) expect(kind).not.toHaveAttribute("aria-disabled");
     const note = within(sub).getByRole("note");
     const firstKind = within(sub).getAllByRole("menuitem")[0];

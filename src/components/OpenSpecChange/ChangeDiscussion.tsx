@@ -334,7 +334,7 @@ export function ChangeDiscussionSplit({
         hidden={split.view.hidden}
         column={discussion.column}
         target={discussion.target}
-        noun="change"
+        noun="OpenSpec change"
         material="change"
         testId="openspec-change-discussion"
         discussions={discussion.columnDiscussions}

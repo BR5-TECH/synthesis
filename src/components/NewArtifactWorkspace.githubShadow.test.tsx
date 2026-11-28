@@ -72,7 +72,7 @@ describe("New Artifact workspace — a GitHub-shadow draft", () => {
     renderWorkspace();
     const banner = await screen.findByTestId("draft-github-shadow-banner");
     expect(banner).toHaveTextContent(
-      "This draft mirrors the GitHub issue acme/platform#9 and cannot be edited.",
+      "This change mirrors the GitHub issue acme/platform#9 and cannot be edited.",
     );
     // The surface takes no keystroke, so no write is scheduled.
     await waitFor(() =>
@@ -96,7 +96,7 @@ describe("New Artifact workspace — a GitHub-shadow draft", () => {
     const name = screen.getByRole("button", { name: /artifact-window/ });
     expect(name).toHaveAttribute("title", expect.stringMatching(/cannot be renamed/));
     await userEvent.click(name);
-    expect(screen.queryByLabelText("Draft name")).toBeNull();
+    expect(screen.queryByLabelText("Change name")).toBeNull();
     expect(calls("rename_draft")).toHaveLength(0);
   });
 
@@ -105,7 +105,7 @@ describe("New Artifact workspace — a GitHub-shadow draft", () => {
     renderWorkspace();
     await screen.findByTestId("draft-github-shadow-banner");
     await openActions();
-    expect(screen.getByRole("menuitem", { name: "Graduate" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Implement" })).toBeEnabled();
     expect(screen.getByRole("menuitem", { name: "Copy as Source" })).toBeEnabled();
     const discuss = screen.getByRole("menuitem", { name: /Discuss/ });
     expect(discuss).toBeDisabled();
@@ -124,7 +124,7 @@ describe("New Artifact workspace — a GitHub-shadow draft", () => {
     await screen.findByTestId("draft-github-shadow-banner");
     await openActions();
     await waitFor(() =>
-      expect(screen.getByRole("menuitem", { name: "Graduate" })).toBeDisabled(),
+      expect(screen.getByRole("menuitem", { name: "Implement" })).toBeDisabled(),
     );
   });
 
@@ -133,9 +133,9 @@ describe("New Artifact workspace — a GitHub-shadow draft", () => {
     renderWorkspace();
     await screen.findByTestId("draft-github-shadow-banner");
     await openActions();
-    await userEvent.click(screen.getByRole("menuitem", { name: "Graduate" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Implement" }));
     expect(
-      await screen.findByRole("dialog", { name: /Graduate .artifact-window./ }),
+      await screen.findByRole("dialog", { name: /Implement .artifact-window./ }),
     ).toBeInTheDocument();
   });
 
@@ -176,8 +176,8 @@ describe("New Artifact workspace — a GitHub-shadow draft", () => {
     renderWorkspace();
     await screen.findByTestId("draft-github-shadow-banner");
     await openActions();
-    const graduate = screen.getByRole("menuitem", { name: "Graduate" });
+    const graduate = screen.getByRole("menuitem", { name: "Implement" });
     expect(graduate).toBeDisabled();
-    expect(graduate).toHaveAttribute("title", "This draft has already been graduated");
+    expect(graduate).toHaveAttribute("title", "This change has already been implemented");
   });
 });

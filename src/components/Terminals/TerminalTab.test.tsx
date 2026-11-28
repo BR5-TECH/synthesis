@@ -203,7 +203,7 @@ describe("Terminal tab", () => {
   it("TRM-FR-XVFQ: a busy target shows a persistent warning and input still goes through", async () => {
     await seed([session({ id: "a", busyRunId: "run-1" })]);
     await mount();
-    expect(screen.getByRole("note")).toHaveTextContent("A graduation run is working in this target.");
+    expect(screen.getByRole("note")).toHaveTextContent("An implementation run is working in this target.");
     act(() => fakeTerminals[0].type("y"));
     expect(commands("write_terminal_input")).toHaveLength(1);
   });

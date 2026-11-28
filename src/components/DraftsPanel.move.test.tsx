@@ -83,7 +83,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     await screen.findByText("scratch");
 
     for (const row of [
-      screen.getByRole("treeitem", { name: /Draft artifact-window/ }),
+      screen.getByRole("treeitem", { name: /Change artifact-window/ }),
       folderRow("backend"),
     ]) {
       const setData = vi.fn();
@@ -106,7 +106,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     const { onDraftChanged } = renderPanel({ expanded: ["UI"] });
     await screen.findByText("scratch");
 
-    const row = screen.getByRole("treeitem", { name: /Draft artifact-window/ });
+    const row = screen.getByRole("treeitem", { name: /Change artifact-window/ });
     const target = folderRow("backend");
 
     fireEvent.dragStart(row);
@@ -134,7 +134,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel({ expanded: ["UI"] });
     await screen.findByText("scratch");
 
-    const row = screen.getByRole("treeitem", { name: /Draft artifact-window/ });
+    const row = screen.getByRole("treeitem", { name: /Change artifact-window/ });
     fireEvent.dragStart(row);
     fireEvent.dragOver(folderRow("UI"));
     expect(folderRow("UI")).not.toHaveAttribute("data-drop-target");
@@ -192,7 +192,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel({ expanded: ["UI"] });
     await screen.findByText("scratch");
 
-    const row = screen.getByRole("treeitem", { name: /Draft artifact-window/ });
+    const row = screen.getByRole("treeitem", { name: /Change artifact-window/ });
     const body = document.querySelector(".vpanel__body") as HTMLElement;
     fireEvent.dragStart(row);
     fireEvent.dragOver(body);
@@ -318,7 +318,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel({ expanded: ["UI"] });
     await screen.findByText("scratch");
 
-    const row = screen.getByRole("treeitem", { name: /Draft artifact-window/ });
+    const row = screen.getByRole("treeitem", { name: /Change artifact-window/ });
     fireEvent.dragStart(row);
     fireEvent.dragOver(folderRow("backend"));
     fireEvent.drop(folderRow("backend"));
@@ -341,7 +341,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel({ expanded: ["UI"] });
     await screen.findByText("scratch");
 
-    const row = screen.getByRole("treeitem", { name: /Draft artifact-window/ });
+    const row = screen.getByRole("treeitem", { name: /Change artifact-window/ });
     fireEvent.dragStart(row);
     fireEvent.dragOver(folderRow("backend"));
     fireEvent.drop(folderRow("backend"));
@@ -393,7 +393,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel({ expanded: ["UI"] });
     await screen.findByText("scratch");
 
-    const row = screen.getByRole("treeitem", { name: /Draft artifact-window/ });
+    const row = screen.getByRole("treeitem", { name: /Change artifact-window/ });
     fireEvent.dragStart(row);
     fireEvent.dragOver(folderRow("backend"));
     fireEvent.drop(folderRow("backend"));
@@ -422,9 +422,9 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     await screen.findByText("artifact-window");
     // The draft is the author's current selection, which is the state DRP-FR-30
     // says must survive.
-    fireEvent.focus(screen.getByRole("treeitem", { name: /Draft artifact-window/ }));
+    fireEvent.focus(screen.getByRole("treeitem", { name: /Change artifact-window/ }));
     expect(
-      screen.getByRole("treeitem", { name: /Draft artifact-window/ }),
+      screen.getByRole("treeitem", { name: /Change artifact-window/ }),
     ).toHaveAttribute("aria-selected", "true");
 
     // Another surface moved the draft.
@@ -443,7 +443,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     expect(folderRow("UI")).toHaveAttribute("aria-expanded", "true");
     // DRP-FR-30: and it is still the selection.
     expect(
-      within(backend).getByRole("treeitem", { name: /Draft artifact-window/ }),
+      within(backend).getByRole("treeitem", { name: /Change artifact-window/ }),
     ).toHaveAttribute("aria-selected", "true");
   });
 

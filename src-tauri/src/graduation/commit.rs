@@ -151,20 +151,21 @@ pub fn commit_run_work(
 }
 
 /// GRD-FR-WQTN: rewrite the message of the branch head, where the head is the
-/// named revision and its message opens with `title`, and answer the revision
-/// the rewrite made.
+/// named revision and its message opens with one of `titles`, and answer the
+/// revision the rewrite made.
 ///
 /// The tree and the parents are kept, so the branch holds the same work under
 /// the message the run completes with.
 pub fn retitle_head_commit(
     worktree: &Path,
     revision: &str,
-    title: &str,
+    titles: &[&str],
     message: &str,
 ) -> Result<Option<String>, String> {
     let repo = git2::Repository::open(worktree).map_err(|e| e.to_string())?;
     let head = repo.head().and_then(|h| h.peel_to_commit()).map_err(|e| e.to_string())?;
-    if head.id().to_string() != revision || !head.message().unwrap_or_default().starts_with(title) {
+    let head_message = head.message().unwrap_or_default();
+    if head.id().to_string() != revision || !titles.iter().any(|t| head_message.starts_with(t)) {
         return Ok(None);
     }
     // GTC-FR-19: the rewrite moves `HEAD`, so it takes the index hold.

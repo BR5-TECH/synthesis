@@ -191,7 +191,7 @@ describe("the frame (SMP-FR-MNZW, SMP-FR-KVKD, SMP-FR-KBXW)", () => {
     });
     const notice = screen.getByTestId("spec-map-notice");
     expect(notice).toHaveTextContent(
-      "The OpenSpec validation could not run, so no requirement shows as a gap. OpenSpec reported a problem in the OpenSpec files of this change.",
+      "The OpenSpec validation could not run, so no requirement shows as a gap. OpenSpec reported a problem in the files of this OpenSpec change.",
     );
     // The line holds the sentence once, and no action but Details.
     expect(screen.getAllByText(/OpenSpec reported a problem/)).toHaveLength(1);
@@ -204,7 +204,7 @@ describe("the frame (SMP-FR-MNZW, SMP-FR-KVKD, SMP-FR-KBXW)", () => {
     // OFN-FR-ONNF: the sentence alone is live; the line and its Details are not.
     expect(notice).not.toHaveAttribute("role");
     const live = within(notice).getAllByRole("status").find((el) => el.tagName === "SPAN" && !el.closest(".ofn"));
-    expect(live).toHaveTextContent("OpenSpec reported a problem in the OpenSpec files of this change.");
+    expect(live).toHaveTextContent("OpenSpec reported a problem in the files of this OpenSpec change.");
     expect(live!.contains(within(notice).getByTestId("openspec-failure-details"))).toBe(false);
     expect(within(notice).getByTestId("openspec-failure-details")).toHaveAttribute("aria-live", "off");
   });
@@ -394,7 +394,7 @@ describe("the inspector (SMI)", () => {
     });
   });
 
-  it("SMI-FR-ZMZB, SMI-FR-UKIV: a click on a change chip shows the change, its location, its capability and its issues, with Open change as its one action", async () => {
+  it("SMI-FR-ZMZB, SMI-FR-UKIV: a click on a change chip shows the change, its location, its capability and its issues, with Open OpenSpec change as its one action", async () => {
     const { store } = await renderMap({ index: openspecIndex() });
     setView(store, { level: 2 });
     fireEvent.click(nodeButton("change add-logout, active worktree, on Authentication"));
@@ -404,25 +404,25 @@ describe("the inspector (SMI)", () => {
     expect(within(pane).getByTestId("spec-map-change-holder")).toHaveTextContent("Authentication");
     expect(within(pane).getByRole("note")).toHaveTextContent("ERROR — delta has no scenario");
     const actions = pane.querySelector(".smap-actions")!;
-    expect([...actions.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Open change"]);
+    expect([...actions.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Open OpenSpec change"]);
 
     fireEvent.click(nodeButton("change add-logout, editor-work, on Authentication"));
     expect(within(inspector()).getByTestId("spec-map-change-location")).toHaveTextContent("editor-work");
     expect(within(inspector()).queryByRole("note")).toBeNull();
   });
 
-  it("SMI-FR-UKIV, OCW-FR-DMGL: Open change opens the change in the location of its chip", async () => {
+  it("SMI-FR-UKIV, OCW-FR-DMGL: Open OpenSpec change opens the change in the location of its chip", async () => {
     const { store } = await renderMap({ index: openspecIndex() });
     setView(store, { level: 2 });
     fireEvent.click(nodeButton("change add-logout, editor-work, on Authentication"));
-    fireEvent.click(within(inspector()).getByRole("button", { name: "Open change" }));
+    fireEvent.click(within(inspector()).getByRole("button", { name: "Open OpenSpec change" }));
     expect(openRoute).toHaveBeenLastCalledWith(
       { kind: "stream", streamId: "s-1" },
       "add-logout",
       { streamName: "editor-work" },
     );
     fireEvent.click(nodeButton("change add-logout, active worktree, on Authentication"));
-    fireEvent.click(within(inspector()).getByRole("button", { name: "Open change" }));
+    fireEvent.click(within(inspector()).getByRole("button", { name: "Open OpenSpec change" }));
     expect(openRoute).toHaveBeenLastCalledWith({ kind: "active_worktree" }, "add-logout", {});
   });
 

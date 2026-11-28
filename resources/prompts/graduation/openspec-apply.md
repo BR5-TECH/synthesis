@@ -26,16 +26,16 @@
 
 ## This run implements an OpenSpec change
 
-This project uses OpenSpec. The task of this run is the tasks of the change `openspec/changes/{{ change-name }}/`. The captured prompt names the change, and the change says what to build.
+This project uses OpenSpec. The task of this run is the tasks of the OpenSpec change `openspec/changes/{{ change-name }}/`. The captured prompt names the OpenSpec change, and the OpenSpec change says what to build.
 
-- Run `openspec instructions apply --change {{ change-name }} --json` to read the tasks, the files of the change to read first, and the progress. Read the proposal, the deltas below `specs/`, and the design before you write code.
+- Run `openspec instructions apply --change {{ change-name }} --json` to read the tasks, the files of the OpenSpec change to read first, and the progress. Read the proposal, the deltas below `specs/`, and the design before you write code.
 - Implement the tasks in the order they are given. Each task that you complete, mark done in `tasks.md` at once: change its `- [ ]` to `- [x]`.
-- Change no file of the change folder other than `tasks.md`. Do not edit the proposal, the deltas, the design, or the tasks that are written there.
+- Change no file of the folder of the OpenSpec change other than `tasks.md`. Do not edit the proposal, the deltas, the design, or the tasks that are written there.
 - Where the proposal, a delta, the design, or the tasks are wrong, or cannot be built as they are written, do not edit them and do not work around them. Give a plan update, and say which requirement or task stops you.
 
 ## How to give a plan update
 
-A plan update asks the author to change the plan of the change. The author reads it, answers its questions, and accepts or rejects each edit you propose.
+A plan update asks the author to change the plan of the OpenSpec change. The author reads it, answers its questions, and accepts or rejects each edit you propose.
 
 - Write each planning file that you propose to change, whole, at `.synthesis-plan/openspec/changes/{{ change-name }}/<file>`. For example, the new text of `openspec/changes/{{ change-name }}/design.md` goes to `.synthesis-plan/openspec/changes/{{ change-name }}/design.md`. A file that you do not write there stays as it is.
 - Write only text files, and only below that folder. Do not write an empty file: a plan update cannot delete a file.
@@ -48,12 +48,12 @@ A plan update asks the author to change the plan of the change. The author reads
 
 ## This review verifies an implemented OpenSpec change
 
-This run implements the OpenSpec change `openspec/changes/{{ change-name }}/`. Verify the work against the change, not against the captured prompt alone.
+This run implements the OpenSpec change `openspec/changes/{{ change-name }}/`. Verify the work against the OpenSpec change, not against the captured prompt alone.
 
-- **Completeness**: every task of the change is done, and every requirement of each delta below `specs/` is implemented.
+- **Completeness**: every task of the OpenSpec change is done, and every requirement of each delta below `specs/` is implemented.
 - **Correctness**: the code does what each requirement and each of its scenarios states.
-- **Coherence**: the code follows the design of the change, where the change has one.
-- A file of the change folder that the work changed, other than `tasks.md`, is a finding.
+- **Coherence**: the code follows the design of the OpenSpec change, where it has one.
+- A file of the folder of the OpenSpec change that the work changed, other than `tasks.md`, is a finding.
 - Give each issue you find a severity: a CRITICAL issue is a finding of severity `critical`, a WARNING is `major`, and a SUGGESTION is `minor`.
 - Give each finding a `kind`. Where the proposal, a delta, the design, or the tasks are wrong, or cannot be built as they are written, the finding is `kind: "plan"`, and its correction says how the plan must change. Every other finding is `kind: "work"`.
-- `input.openspec_apply_progress` is the task progress that `openspec instructions apply --change {{ change-name }} --json` gives on the tree you judge, and `input.openspec_validation` is the result of `openspec validate {{ change-name }} --strict` on it. Do not run either yourself, and run no check. A task that is not done, and a change that does not validate, each mean the work is not ready.
+- `input.openspec_apply_progress` is the task progress that `openspec instructions apply --change {{ change-name }} --json` gives on the tree you judge, and `input.openspec_validation` is the result of `openspec validate {{ change-name }} --strict` on it. Do not run either yourself, and run no check. A task that is not done, and an OpenSpec change that does not validate, each mean the work is not ready.

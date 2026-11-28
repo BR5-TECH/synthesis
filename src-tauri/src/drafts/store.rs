@@ -26,7 +26,7 @@ pub(super) fn read_record_at(
 ) -> Result<DraftRecord, String> {
     let path = dir.join(RECORD_FILE);
     let mut record =
-        root.read_toml::<DraftRecord>(&path).map_err(|_| format!("draft not found: {id}"))?;
+        root.read_toml::<DraftRecord>(&path).map_err(|_| format!("change not found: {id}"))?;
     // DRS-FR-16: `prompt_path` is the one path in this module that comes from a
     // file rather than from a caller, and `draft.toml` is an ordinary file an
     // author can edit. A pointer that is not a draft-relative path names no file

@@ -26,17 +26,18 @@ use crate::new_change_proposals::{
 };
 
 /// PNC-FR-RTSB.
-pub const NAME: &str = "propose_new_change";
+pub const NAME: &str = "propose_new_openspec_change";
 
 /// PNC-FR-SODJ: the fixed text of the contract surface.
-pub const DESCRIPTION: &str = "Propose one new OpenSpec change that takes over a part of the change under discussion, when the author has decided to split this change into two or more changes on the same work stream. Use it only after the author asked for a split and you understand how they want it split; ask them first where you are not sure. Each call proposes **one** change. Give its `name` in kebab-case, every file of its folder in `files` (at least `proposal.md`, and the `specs/`, `design.md`, and `tasks.md` files it needs), its `position` counted from 1, and the `total` number of new changes you expect now. Nothing is created until the author accepts. Remove the moved parts from this change with `propose_change_edits` in a later turn. To change or withdraw your open proposal, call again with `update`. Your turn ends when the proposal is recorded.";
+pub const DESCRIPTION: &str = "Propose one new OpenSpec change that takes over a part of the OpenSpec change under discussion, when the author has decided to split this OpenSpec change into two or more OpenSpec changes on the same work stream. Use it only after the author asked for a split and you understand how they want it split; ask them first where you are not sure. Each call proposes **one** OpenSpec change. Give its `name` in kebab-case, every file of its folder in `files` (at least `proposal.md`, and the `specs/`, `design.md`, and `tasks.md` files it needs), its `position` counted from 1, and the `total` number of new OpenSpec changes you expect now. Nothing is created until the author accepts. Remove the moved parts from this OpenSpec change with `propose_openspec_change_edits` in a later turn. To change or withdraw your open proposal, call again with `update`. Your turn ends when the proposal is recorded.";
 
-const RATIONALE_DESCRIPTION: &str = "Why this change is the right next part, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud.";
-const NAME_DESCRIPTION: &str = "The name of the new change, in kebab-case: lower-case letters and digits in groups joined by `-`. With `update` and `change`, give it only to replace the name.";
-const FILES_DESCRIPTION: &str = "Every file of the new change folder: each a `path` relative to the folder, for example `proposal.md` or `specs/auth/spec.md`, and its full `text`. `proposal.md` is required. With `update` and `change`, give them only to replace every file.";
-const POSITION_DESCRIPTION: &str = "The place of this change in the sequence, counted from 1.";
+const RATIONALE_DESCRIPTION: &str = "Why this OpenSpec change is the right next part, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud.";
+const NAME_DESCRIPTION: &str = "The name of the new OpenSpec change, in kebab-case: lower-case letters and digits in groups joined by `-`. With `update` and `change`, give it only to replace the name.";
+const FILES_DESCRIPTION: &str = "Every file of the new OpenSpec change folder: each a `path` relative to the folder, for example `proposal.md` or `specs/auth/spec.md`, and its full `text`. `proposal.md` is required. With `update` and `change`, give them only to replace every file.";
+const POSITION_DESCRIPTION: &str =
+    "The place of this OpenSpec change in the sequence, counted from 1.";
 const TOTAL_DESCRIPTION: &str =
-    "The number of new changes you expect the split to have now. It can change in a later call.";
+    "The number of new OpenSpec changes you expect the split to have now. It can change in a later call.";
 const UPDATE_DESCRIPTION: &str = "Changes your proposal that is still open. `change` replaces the fields you give. `withdraw` takes the proposal back and gives no other field.";
 
 /// The arguments, as the model composed them (PNC contract surface).
@@ -119,25 +120,25 @@ fn denied(message: &'static str, code: &'static str, retryable: bool) -> ToolRef
 fn refusal_for(code: &str) -> ToolRefusal {
     match code {
         ncp::ERR_PROPOSAL_PENDING => denied(
-            "A new change you proposed is still waiting on the author. Wait for their decision, or change it with `update`. Nothing was proposed.",
+            "A new OpenSpec change you proposed is still waiting on the author. Wait for their decision, or change it with `update`. Nothing was proposed.",
             "new_change_proposal_pending",
             true,
         ),
         ncp::ERR_SPLIT_CONFIRMED => denied(
-            "The author confirmed the split of this change, so it takes no new proposals. Tell the author; asking again will not succeed.",
+            "The author confirmed the split of this OpenSpec change, so it takes no new proposals. Tell the author; asking again will not succeed.",
             "split_confirmed",
             false,
         ),
         ncp::ERR_DISCUSSION_RESOLVED => ToolRefusal::ProposalConversationResolved,
         ncp::ERR_CHANGE_EXISTS => invalid(
-            "A change of that name already exists on this stream or is already proposed. Choose another name.",
+            "An OpenSpec change of that name already exists on this stream or is already proposed. Choose another name.",
             "openspec_change_exists",
         ),
         ncp::ERR_INVALID_CHANGE_NAME => invalid(
             "`name` must be kebab-case: lower-case letters and digits in groups joined by `-`, and not `archive`.",
             "invalid_change_name",
         ),
-        ncp::ERR_BLANK_NAME => invalid("Give the new change a name.", "blank_name"),
+        ncp::ERR_BLANK_NAME => invalid("Give the new OpenSpec change a name.", "blank_name"),
         ncp::ERR_BAD_POSITION => {
             invalid("`position` starts at 1 and can not be more than `total`.", "bad_position")
         }
@@ -145,7 +146,7 @@ fn refusal_for(code: &str) -> ToolRefusal {
             invalid("`files` must hold `proposal.md`.", "missing_proposal_file")
         }
         ncp::ERR_PATH_OUTSIDE_CHANGE => invalid(
-            "A `path` in `files` is not inside the new change folder. Give paths relative to it, with no `..` segment.",
+            "A `path` in `files` is not inside the new OpenSpec change folder. Give paths relative to it, with no `..` segment.",
             "path_outside_change",
         ),
         ncp::ERR_DUPLICATE_PATH => {
@@ -153,7 +154,7 @@ fn refusal_for(code: &str) -> ToolRefusal {
         }
         ncp::ERR_BLANK_FILE => invalid("A file in `files` has no text. Give its full text.", "blank_file"),
         ncp::ERR_NO_OPEN_PROPOSAL => invalid(
-            "No new change you proposed is open on this change, so there is nothing to update. Propose a new change without `update`.",
+            "No new OpenSpec change you proposed is open on this OpenSpec change, so there is nothing to update. Propose a new OpenSpec change without `update`.",
             "no_open_proposal",
         ),
         ncp::ERR_NO_CHANGE => invalid(
@@ -162,7 +163,7 @@ fn refusal_for(code: &str) -> ToolRefusal {
         ),
         ncp::ERR_UNKNOWN_STREAM | ncp::ERR_CHANGE_NOT_FOUND => ToolRefusal::Fixed {
             kind: FixedKind::NotFound,
-            message: "The OpenSpec change of this conversation is no longer in its work stream, so no new change can be proposed. Tell the author.",
+            message: "The OpenSpec change of this conversation is no longer in its work stream, so no new OpenSpec change can be proposed. Tell the author.",
             code: "change_not_found",
             retryable: false,
         },
@@ -170,7 +171,7 @@ fn refusal_for(code: &str) -> ToolRefusal {
     }
 }
 
-/// PNC-FR-RTSB: `propose_new_change` as a `rig` portable tool.
+/// PNC-FR-RTSB: `propose_new_openspec_change` as a `rig` portable tool.
 pub struct ProposeNewChangeTool<R: tauri::Runtime> {
     app: tauri::AppHandle<R>,
     roots: OwnedRoots,
@@ -236,14 +237,14 @@ where
         require_open_project(&self.app)?;
         let Some((stream_id, change)) = self.origin.target.change_owner() else {
             return Err(denied(
-                "This conversation is not about an OpenSpec change, so there is no change here to split. Say how you would split it instead; asking again will not succeed.",
+                "This conversation is not about an OpenSpec change, so there is no OpenSpec change here to split. Say how you would split it instead; asking again will not succeed.",
                 "not_a_change_conversation",
                 false,
             ));
         };
         if args.rationale.trim().is_empty() {
             return Err(invalid(
-                "Say why this change is the right next part. The author reads this beside the proposal.",
+                "Say why this OpenSpec change is the right next part. The author reads this beside the proposal.",
                 "blank_rationale",
             ));
         }
@@ -272,7 +273,7 @@ where
                     to_u32(args.total),
                 ) else {
                     return Err(invalid(
-                        "Give `name`, `files`, `position`, and `total` to propose a new change, or `update` to change your open proposal.",
+                        "Give `name`, `files`, `position`, and `total` to propose a new OpenSpec change, or `update` to change your open proposal.",
                         "fields_missing",
                     ));
                 };

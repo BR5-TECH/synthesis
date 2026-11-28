@@ -50,9 +50,13 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+// PVC-FR-VBPY: this tool says "edit" for a hunk, so it takes the edit forms
+// of the shared update texts.
 use super::proposal_updates::{
-    self, updates_or_none, UpdateArg, UPDATE_CHANGE_IS_DIAGRAM, UPDATE_CHANGE_SETTLED,
-    UPDATE_MALFORMED, UPDATE_NAMED_TWICE, UPDATE_NONE, UPDATE_NO_SUCH_CHANGE,
+    self, updates_or_none, HunkWord, UpdateArg, UPDATE_EDIT_IS_DIAGRAM as UPDATE_CHANGE_IS_DIAGRAM,
+    UPDATE_EDIT_NAMED_TWICE as UPDATE_NAMED_TWICE, UPDATE_EDIT_SETTLED as UPDATE_CHANGE_SETTLED,
+    UPDATE_MALFORMED_EDIT as UPDATE_MALFORMED, UPDATE_NONE,
+    UPDATE_NO_SUCH_EDIT as UPDATE_NO_SUCH_CHANGE,
 };
 use super::{
     log_tool_refusal_with, log_tool_success, require_open_project, ToolRefusal, PROPOSAL_NO_CHANGE,
@@ -74,29 +78,29 @@ mod tests;
 // ---------------------------------------------------------------------------
 
 /// PDC-FR-01.
-pub const NAME: &str = "propose_draft_changes";
+pub const NAME: &str = "propose_change_edits";
 
 /// PDC-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Propose changes to the prompt of the draft under discussion, when you can see how its text would be better and want the author to decide. A draft is one prompt, so this is the one file there is to propose changes to. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Pass a list of changes. Each one names, in `before`, the exact text it changes, copied character for character from the prompt as you read it, and gives in `after` the text that should stand in its place. To insert new text, give `after` alone and put the exact text it follows in `after_text`. To delete, give `before` alone. You do not need the whole prompt in front of you: read only the parts you change, with `offset` and `limit` on `read_draft`. The text you name must appear once in the prompt. Where it can appear more than once, put the exact text immediately before it in `lead`, or the exact text immediately after it in `trail`, up to 200 characters each; only `before` changes. A change whose text is not found, or not found once, is refused and you are told which change to correct. Say why the changes are worth making, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. They say what matters, and where the written text holds more detail they end with an offer to read it. A rationale with no tag is refused. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decisions, and whatever they said about them, in front of you. The author decides each change separately, so send the changes you believe in together rather than holding some back. Offer the changes for the whole prompt one time, rather than a small improvement each time you read it. A change to a Mermaid diagram never goes in a change of this tool, and never in the same call as one: offer it with `propose_diagram_changes`, in a call of its own. When your proposal is still open and the discussion asks for a different change, send `updates` in place of `hunks`. Each update gives `action`: `change` with the `id` of a change and its new fields, `add` with the fields of a new change, or `withdraw` with the `id` of a change you no longer offer. One call can hold several updates, and it also takes a `rationale`. It reaches only the draft you were asked about, and it changes nothing — the prompt is not rewritten unless the author accepts.";
+pub const DESCRIPTION: &str = "Propose edits to the prompt of the change under discussion, when you can see how its text would be better and want the author to decide. A change is one prompt, so this is the one file there is to propose edits to. Reach for it instead of describing the improvement in prose, and instead of asking permission to make one. Pass a list of edits. Each one names, in `before`, the exact text it edits, copied character for character from the prompt as you read it, and gives in `after` the text that should stand in its place. To insert new text, give `after` alone and put the exact text it follows in `after_text`. To delete, give `before` alone. You do not need the whole prompt in front of you: read only the parts you edit, with `offset` and `limit` on `read_change`. The text you name must appear once in the prompt. Where it can appear more than once, put the exact text immediately before it in `lead`, or the exact text immediately after it in `trail`, up to 200 characters each; only `before` edits. An edit whose text is not found, or not found once, is refused and you are told which edit to correct. Say why the edits are worth making, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. They say what matters, and where the written text holds more detail they end with an offer to read it. A rationale with no tag is refused. Your proposal is posted as your own comment in this conversation and your turn ends there — this call brings you no answer back, and you will be asked again later with the author's decisions, and whatever they said about them, in front of you. The author decides each edit separately, so send the edits you believe in together rather than holding some back. Offer the edits for the whole prompt one time, rather than a small improvement each time you read it. An edit to a Mermaid diagram never goes in an edit of this tool, and never in the same call as one: offer it with `propose_diagram_changes`, in a call of its own. When your proposal is still open and the discussion asks for a different edit, send `updates` in place of `hunks`. Each update gives `action`: `change` with the `id` of an edit and its new fields, `add` with the fields of a new edit, or `withdraw` with the `id` of an edit you no longer offer. One call can hold several updates, and it also takes a `rationale`. It reaches only the change you were asked about, and it edits nothing — the prompt is not rewritten unless the author accepts.";
 
-const PATH_DESCRIPTION: &str = "The draft-relative path of the draft's prompt, which is the one file a draft holds and the only thing you can propose changes to.";
+const PATH_DESCRIPTION: &str = "The change-relative path of the change's prompt, which is the one file a change holds and the only thing you can propose edits to.";
 
-const HUNKS_DESCRIPTION: &str = "The changes, in the order they should be read. In each, `before` is the exact existing text you are changing, copied character for character from the prompt, and `after` is what should stand in its place. For an insertion give `after` and put the exact text it follows in `after_text`; for a deletion give `before` alone. The text you name must appear only once in the prompt. When it does not, give `lead`, the exact text immediately before it, or `trail`, the exact text immediately after it, or both, up to 200 characters each: the text `lead` + `before` + `trail` must then appear once, and only `before` changes. For an insertion, `lead` and `trail` stand around `after_text`. Leave it out when you pass `updates`.";
+const HUNKS_DESCRIPTION: &str = "The edits, in the order they should be read. In each, `before` is the exact existing text you are changing, copied character for character from the prompt, and `after` is what should stand in its place. For an insertion give `after` and put the exact text it follows in `after_text`; for a deletion give `before` alone. The text you name must appear only once in the prompt. When it does not, give `lead`, the exact text immediately before it, or `trail`, the exact text immediately after it, or both, up to 200 characters each: the text `lead` + `before` + `trail` must then appear once, and only `before` edits. For an insertion, `lead` and `trail` stand around `after_text`. Leave it out when you pass `updates`.";
 
 /// PDC-FR-GMWR: the parameter text of `updates`.
-const UPDATES_DESCRIPTION: &str = "Changes to your proposal that is still open, in place of `hunks`. Each update gives `action`. `change` gives the `id` of a change and its new `before`, `after`, `after_text`, `lead`, and `trail`, with the rules of `hunks`; the change keeps its id and the author decides it again. `add` gives the fields of a new change and no `id`. `withdraw` gives the `id` of a change you no longer offer. A change that is accepted or withdrawn can not be updated. Updates must not cover the same text as each other or as another change still standing.";
+const UPDATES_DESCRIPTION: &str = "Edits to your proposal that is still open, in place of `hunks`. Each update gives `action`. `change` gives the `id` of an edit and its new `before`, `after`, `after_text`, `lead`, and `trail`, with the rules of `hunks`; the edit keeps its id and the author decides it again. `add` gives the fields of a new edit and no `id`. `withdraw` gives the `id` of an edit you no longer offer. An edit that is accepted or withdrawn can not be updated. Updates must not cover the same text as each other or as another edit still standing.";
 
 /// PDC-FR-GPLQ: `hunks` and `updates` together.
 pub const PROPOSAL_NOT_ONE_FORM: &str =
     "Pass `hunks` for a new proposal or `updates` for your open proposal, not both.";
 /// PDC-FR-LGWJ: `updates` where no proposal is open.
 pub const PROPOSAL_NO_OPEN: &str =
-    "No proposal is open on this draft, so there is nothing to update. Send your changes as a new proposal in `hunks`.";
+    "No proposal is open on this change, so there is nothing to update. Send your edits as a new proposal in `hunks`.";
 
 /// PDC-FR-TZKQ: the refusals record-time placement produces, each naming the
 /// correction the model has to make.
 pub const PROPOSAL_NO_HUNKS: &str =
-    "Pass at least one change. An empty proposal has nothing for the author to decide.";
+    "Pass at least one edit. An empty proposal has nothing for the author to decide.";
 pub const PROPOSAL_TEXT_NOT_FOUND: &str =
     "The text you gave in `before` is not in the prompt. Copy it character for character from the prompt as you read it.";
 /// PDC-FR-YSKV: the same refusal with and without `lead` and `trail`, and it
@@ -123,13 +127,13 @@ pub(super) fn context_too_long(side: ContextSide) -> &'static str {
 }
 
 pub const PROPOSAL_HUNKS_OVERLAP: &str =
-    "Two of your changes cover the same text. Combine them into one change.";
+    "Two of your edits cover the same text. Combine them into one edit.";
 
-const HUNK_DESCRIPTION: &str = "One change to the prompt. A replacement gives `before` and `after`; an insertion gives `after` and `after_text`; a deletion gives `before` alone. Never send an empty change.";
+const HUNK_DESCRIPTION: &str = "One edit to the prompt. A replacement gives `before` and `after`; an insertion gives `after` and `after_text`; a deletion gives `before` alone. Never send an empty edit.";
 
-const KIND_DESCRIPTION: &str = "What this change does: `replace` puts `after` in place of `before`, `del` removes `before`, `add` inserts `after` immediately following `after_text`. The fields you send are what decide, so give the fields that match what you mean: a rewrite gives `before` and `after` together, and calling it `add` does not make it one.";
+const KIND_DESCRIPTION: &str = "What this edit does: `replace` puts `after` in place of `before`, `del` removes `before`, `add` inserts `after` immediately following `after_text`. The fields you send are what decide, so give the fields that match what you mean: a rewrite gives `before` and `after` together, and calling it `add` does not make it one.";
 
-const BEFORE_DESCRIPTION: &str = "The exact existing text this change replaces or deletes, copied character for character from the prompt as you read it — including its punctuation and its capitals. It must appear only once in the prompt; where it does not, add `lead` or `trail`. Leave it out for an insertion.";
+const BEFORE_DESCRIPTION: &str = "The exact existing text this edit replaces or deletes, copied character for character from the prompt as you read it — including its punctuation and its capitals. It must appear only once in the prompt; where it does not, add `lead` or `trail`. Leave it out for an insertion.";
 
 const AFTER_DESCRIPTION: &str = "The exact text that should stand in place of `before`, or the text to insert. Leave it out for a deletion.";
 
@@ -139,7 +143,7 @@ const LEAD_DESCRIPTION: &str = "Optional. The exact text immediately before `bef
 
 const TRAIL_DESCRIPTION: &str = "Optional. The exact text immediately after `before` (for an insertion, immediately after `after_text`), copied character for character, up to 200 characters. Give it when the text you change appears more than once, so that `lead` + `before` + `trail` appears once. It is not changed.";
 
-const NOTE_DESCRIPTION: &str = "What this one change is for, in a few words. Optional; the author reads the rationale for the proposal as a whole.";
+const NOTE_DESCRIPTION: &str = "What this one edit is for, in a few words. Optional; the author reads the rationale for the proposal as a whole.";
 
 /// PDC-FR-18 / TLC-FR-14: which of this tool's invalid-argument refusals fired,
 /// as a stable code.
@@ -186,7 +190,7 @@ fn refusal_code(refusal: &ToolRefusal) -> Option<&'static str> {
     })
 }
 
-const RATIONALE_DESCRIPTION: &str = "Why the changes are worth making, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud.";
+const RATIONALE_DESCRIPTION: &str = "Why the edits are worth making, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud.";
 
 /// CVL-FR-15: what a second proposal in one reply is told.
 ///
@@ -194,7 +198,7 @@ const RATIONALE_DESCRIPTION: &str = "Why the changes are worth making, in a sent
 /// of one. It exists for the reason `ask_user_comment`'s twin does: a reply *can*
 /// propose twice, and were the second carried out after the first refused, one
 /// turn would make two contributions (AGC-FR-01).
-pub const ONE_AT_A_TIME: &str = "Only one change can be proposed at a time, so this one was not recorded. Propose the single change that matters most, in one call.";
+pub const ONE_AT_A_TIME: &str = "Only one proposal can be made at a time, so this one was not recorded. Propose the edits that matter most, in one call.";
 
 /// PDC-FR-18: how much of `path` reaches a log record.
 ///
@@ -336,7 +340,7 @@ pub fn parameters() -> serde_json::Value {
         "properties": {
             "path": { "type": "string", "description": PATH_DESCRIPTION },
             "rationale": { "type": "string", "description": RATIONALE_DESCRIPTION },
-            "updates": proposal_updates::schema(UPDATES_DESCRIPTION, true),
+            "updates": proposal_updates::schema_worded(UPDATES_DESCRIPTION, true, HunkWord::Edit),
             "hunks": {
                 "type": "array",
                 "description": HUNKS_DESCRIPTION,
@@ -418,7 +422,7 @@ pub(super) fn target_for<'a>(
     }
     let found = comments::locate_discussion_of(store, &origin.target, thread_id)
         .and_then(|d| d.fragment_target.map(|f| f.path))
-        .ok_or(ToolRefusal::ProposalNotRecorded)?;
+        .ok_or(ToolRefusal::NotRecordedWith(super::EDIT_PROPOSAL_NOT_RECORDED))?;
     *file_rel = found;
     Ok(ThreadRef::draft_file(draft_id, file_rel))
 }
@@ -448,7 +452,9 @@ fn refusal_for(refusal: RecordRefusal) -> ToolRefusal {
             ToolRefusal::InvalidArgumentsAt { message: context_too_long(side), at, of }
         }
         RecordRefusal::ThreadResolved => ToolRefusal::ProposalConversationResolved,
-        RecordRefusal::NotRecorded => ToolRefusal::ProposalNotRecorded,
+        RecordRefusal::NotRecorded => {
+            ToolRefusal::NotRecordedWith(super::EDIT_PROPOSAL_NOT_RECORDED)
+        }
     }
 }
 
@@ -662,7 +668,7 @@ impl<R: tauri::Runtime> ProposeDraftChangesTool<R> {
             return Err(ToolRefusal::InvalidArguments(RATIONALE_NO_SPOKEN_PART));
         }
         // PDC-FR-UOBH: a malformed entry is refused with its place.
-        let entries = proposal_updates::to_entries(updates)?;
+        let entries = proposal_updates::to_entries_worded(updates, false, HunkWord::Edit)?;
 
         let mut file_rel = String::new();
         let target =
@@ -711,7 +717,9 @@ fn update_refusal_for(refusal: UpdateRefusal) -> ToolRefusal {
         UpdateRefusal::HunkOverlap { at: n, of } => at(PROPOSAL_HUNKS_OVERLAP, n, of),
         UpdateRefusal::HunkContextTooLong { at: n, of, side } => at(context_too_long(side), n, of),
         UpdateRefusal::ThreadResolved => ToolRefusal::ProposalConversationResolved,
-        UpdateRefusal::NotRecorded => ToolRefusal::ProposalNotRecorded,
+        UpdateRefusal::NotRecorded => {
+            ToolRefusal::NotRecordedWith(super::EDIT_PROPOSAL_NOT_RECORDED)
+        }
     }
 }
 

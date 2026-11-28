@@ -154,21 +154,21 @@ export function BoardMarks({
           <span
             className="badge badge--warn"
             role="img"
-            aria-label={`Draft ${item.draftId} is missing`}
-            title={`Draft ${item.draftId} is missing`}
+            aria-label={`Change ${item.draftId} is missing`}
+            title={`Change ${item.draftId} is missing`}
             data-testid="flow-draft-missing"
           >
-            draft missing
+            change missing
           </span>
         ) : (
           <span
             className="badge"
             role="img"
-            aria-label={`Draft ${draftName}`}
-            title={`Draft ${draftName}`}
+            aria-label={`Change ${draftName}`}
+            title={`Change ${draftName}`}
             data-testid="flow-draft-glyph"
           >
-            draft
+            change
           </span>
         ))}
     </span>

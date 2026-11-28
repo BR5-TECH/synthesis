@@ -15,7 +15,7 @@ The Terminals panel and the terminal tab let the author open an interactive term
 5. **TRM-FR-DYKW** A pinned row shows a pinned marker, in space that every row reserves, so a pin change moves no label.
 6. **TRM-FR-QFYS** A row of a persistent session (`persistent = true`, per `../core/TRS-terminal-sessions.md` TRS-FR-FKVW) shows a persistent marker, in space that every row reserves, with the tooltip "Survives IDE restart". The marker and the row's accessible name carry that text. Its icon is not the pinned icon, and it does not depend on colour alone.
 7. **TRM-FR-QSRZ** A restored session needs no extra action. Its row, its tab, and its close act as for any other session in its state.
-8. **TRM-FR-CTGK** A row whose target is busy (`busy_run_id` is not null) shows a busy mark with the tooltip "A graduation run is working in this target".
+8. **TRM-FR-CTGK** A row whose target is busy (`busy_run_id` is not null) shows a busy mark with the tooltip "An implementation run is working in this target".
 9. **TRM-FR-QSTC** With no session, the panel shows the empty state of `SNV-shell-navigation.md` SNV-FR-60: "No terminals", one sentence that says a terminal is a shell or an agent CLI session in a worktree or a work stream, and the **New terminal** action.
 10. **TRM-FR-OXKC** The panel header holds a **New terminal** button. While the project holds 16 sessions (per `../core/TRS-terminal-sessions.md` TRS-FR-AYCY), the button and the empty-state action are disabled, and the tooltip says that the limit is reached.
 11. **TRM-FR-PZJI** A click on a row, or Enter on the focused row, opens the session's tab, or focuses that tab where it is open (per `TAB-tabs.md` TAB-FR-VKPS). The row becomes the selected row.
@@ -33,7 +33,7 @@ The Terminals panel and the terminal tab let the author open an interactive term
 21. **TRM-FR-JZPT** Escape in the menu closes it, and the focus goes back to the button that opened it. An activation outside the menu and its submenu closes both. A closed menu creates nothing.
 22. **TRM-FR-FYYB** A click, or Enter, on an available kind entry calls `"create terminal (target, kind, vendor, start folder)"` with that entry's target and no start folder. While the call runs, the menu ignores other choices. On success the menu closes, the new row appears, and its tab opens and takes focus.
 23. **TRM-FR-YVPJ** A create that fails keeps the menu open, shows the error under the kind entries of the chosen target, and emits a `WARN` record.
-24. **TRM-FR-IVGX** While a target is busy, its section or its submenu shows the line "A graduation run is working in this target." above its kind entries. The line disables no entry.
+24. **TRM-FR-IVGX** While a target is busy, its section or its submenu shows the line "An implementation run is working in this target." above its kind entries. The line disables no entry.
 
 ### Row context menu
 25. **TRM-FR-EUMZ** A right-click on a row, or the context-menu key or Shift+F10 on the focused row, opens the row's context menu. It opens no tab. It is a floating overlay of `SNV-shell-navigation.md` SNV-FR-56, and it closes on a choice, on Escape (the focus goes back to the row), and on any activation outside it. The arrow keys move, and Enter chooses.
@@ -85,7 +85,7 @@ The Terminals panel and the terminal tab let the author open an interactive term
 47. **TRM-FR-FFPL** When the session is `exited`, the tab shows a line under the output with the exit code, or the error line of a failed start, and sends no more input.
 48. **TRM-FR-XVJT** When the target is gone, the tab stays open and shows a **Target gone** banner. The tab is a read-only view of the history until the user closes it.
 49. **TRM-FR-HQDM** A tab opened for an exited session that has no history shows the exit line of TRM-FR-FFPL and the text "The output of this terminal is gone."
-50. **TRM-FR-XVFQ** While the target is busy, the tab shows a persistent warning, "A graduation run is working in this target." Input still goes to the session.
+50. **TRM-FR-XVFQ** While the target is busy, the tab shows a persistent warning, "An implementation run is working in this target." Input still goes to the session.
 51. **TRM-FR-RCCE** When a terminal tab becomes the active tab, the panel selects its row on the terms of `SNV-shell-navigation.md` SNV-FR-64 and SNV-FR-66.
 51. **TRM-FR-MOVS** **Rename terminal** in the tab's context menu (per `TAB-tabs.md` TAB-FR-YUOZ) replaces the tab's label with the label field of TRM-FR-SHKD, on the terms of TRM-FR-LIRN. A click in the field does not activate the tab. **Theme** in that menu opens the submenu of TRM-FR-QXIY.
 52. **TRM-FR-DURY** The tab's **Pin tab** and **Unpin tab** set the session's pinned state, and the tab shows the pinned marker while the session is pinned (per `TAB-tabs.md` TAB-FR-KIIW).
@@ -127,8 +127,8 @@ The New terminal menu under the panel header's **New terminal** button, with the
 │ main · main · active worktree       │
 │   Host shell                  host  │
 │   Container shell           docker  │┌─────────────────────────────────┐
-│   Microsandbox shell                ││ A graduation run is working in  │
-│     No VM runs for this target      ││ this target.                    │
+│   Microsandbox shell                ││ An implementation run is        │
+│     No VM runs for this target      ││ working in this target.         │
 │   Claude Code               docker  ││   Host shell              host  │
 │   Codex                       host  ││   Container shell       docker  │
 │ ─────────────────────────────────── ││   Microsandbox shell        vm  │

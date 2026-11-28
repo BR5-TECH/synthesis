@@ -133,7 +133,7 @@ describe("a proposed change (NAW-FR-35)", () => {
     // The marker is about the draft rather than the selection, and the file the
     // proposal names is not the one the tab opens on.
     const marker = await screen.findByTestId("draft-pending-proposal");
-    expect(marker).toHaveTextContent(/proposed change/i);
+    expect(marker).toHaveTextContent(/proposed edit/i);
   });
 
   it("renders no marker when the draft carries no undecided proposal", async () => {
@@ -156,8 +156,8 @@ describe("a proposed change (NAW-FR-35)", () => {
 
     // DCR-FR-11: the review bar is above the page from the moment the tab knows
     // there is a proposal — the author activates nothing to get it.
-    const bar = await screen.findByRole("region", { name: "Proposed changes" });
-    expect(bar).toHaveTextContent(/reviewing change 1 of 1/);
+    const bar = await screen.findByRole("region", { name: "Proposed edits" });
+    expect(bar).toHaveTextContent(/reviewing edit 1 of 1/);
     expect(within(bar).getByRole("button", { name: "Accept all" })).toBeEnabled();
     expect(within(bar).getByRole("button", { name: "Reject all" })).toBeEnabled();
 
@@ -183,7 +183,7 @@ describe("a proposed change (NAW-FR-35)", () => {
     renderWorkspace();
     await screen.findByText("artifact-window");
     expect(
-      screen.queryByRole("region", { name: "Proposed changes" }),
+      screen.queryByRole("region", { name: "Proposed edits" }),
     ).toBeNull();
     // DCR-FR-08: a draft holding no proposal costs no read of any changes.
     expect(
@@ -194,8 +194,8 @@ describe("a proposed change (NAW-FR-35)", () => {
 
     act(() => noteProposalChanged({ draftId: "d1", proposal: PROPOSAL as never }));
 
-    const bar = await screen.findByRole("region", { name: "Proposed changes" });
-    expect(bar).toHaveTextContent(/change 1 of 1/);
+    const bar = await screen.findByRole("region", { name: "Proposed edits" });
+    expect(bar).toHaveTextContent(/edit 1 of 1/);
     expect(screen.getByTestId("draft-pending-proposal")).toBeInTheDocument();
     // DCR-FR-01: still nothing opened over the tab.
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -213,7 +213,7 @@ describe("a proposed change (NAW-FR-35)", () => {
       expect(screen.queryByTestId("draft-pending-proposal")).toBeNull(),
     );
     expect(
-      screen.queryByRole("region", { name: "Proposed changes" }),
+      screen.queryByRole("region", { name: "Proposed edits" }),
     ).toBeNull();
 
     // And one that was never seen at all, arriving already decided, is the same.
@@ -224,7 +224,7 @@ describe("a proposed change (NAW-FR-35)", () => {
       }),
     );
     expect(
-      screen.queryByRole("region", { name: "Proposed changes" }),
+      screen.queryByRole("region", { name: "Proposed edits" }),
     ).toBeNull();
   });
 
@@ -288,7 +288,7 @@ describe("a proposed change (NAW-FR-35)", () => {
 
     // DCR-FR-11 / DCR-FR-CXZG: accepted from the review bar, which is above the
     // page rather than in a surface that had to be opened.
-    const bar = await screen.findByRole("region", { name: "Proposed changes" });
+    const bar = await screen.findByRole("region", { name: "Proposed edits" });
     const loadsBefore = invokeMock.mock.calls.filter(
       (c) => c[0] === "load_draft_file_contents",
     ).length;

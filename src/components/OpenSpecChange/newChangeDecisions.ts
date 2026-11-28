@@ -19,29 +19,29 @@ import { refusalCode, runHoldingStream } from "./decisions";
 /** OCW-FR-BGDN: a typed refusal of a new-change decision or of a confirmation, in words. */
 export function newChangeMessage(code: string): string {
   const E = NEW_CHANGE_ERRORS;
-  if (code.includes(E.alreadyDecided)) return "This proposed change has already been decided.";
-  if (code.includes(E.notFound)) return "This proposed change is no longer available.";
+  if (code.includes(E.alreadyDecided)) return "This proposed OpenSpec change has already been decided.";
+  if (code.includes(E.notFound)) return "This proposed OpenSpec change is no longer available.";
   if (code.includes(E.changeExists)) {
-    return "A change of this name is already on the stream, so it was not created. Nothing was changed.";
+    return "An OpenSpec change of this name is already on the stream, so it was not created. Nothing was changed.";
   }
   if (code.includes(E.changeNotFound)) {
-    return "The original change is no longer on its stream. Nothing was changed.";
+    return "The original OpenSpec change is no longer on its stream. Nothing was changed.";
   }
   if (code.includes(E.unknownStream)) return "The work stream is gone. Nothing was changed.";
   if (code.includes(E.splitConfirmed)) {
-    return "The split of this change is confirmed, so nothing more is decided in it.";
+    return "The split of this OpenSpec change is confirmed, so nothing more is decided in it.";
   }
   if (code.includes(E.pending)) {
-    return "A proposed change is still waiting for a decision. Decide it first.";
+    return "A proposed OpenSpec change is still waiting for a decision. Decide it first.";
   }
   if (code.includes(E.nothingAccepted)) {
-    return "No proposed change is accepted, so there is no split to confirm.";
+    return "No proposed OpenSpec change is accepted, so there is no split to confirm.";
   }
   if (code.includes(E.discussionResolved)) {
     return "The discussion this proposal was posted in is resolved. Reopen it to decide. Nothing was changed.";
   }
   if (code.includes(E.writeFailed)) return "The files could not be written. Nothing was changed.";
-  return "The proposed change could not be decided. Nothing was changed.";
+  return "The proposed OpenSpec change could not be decided. Nothing was changed.";
 }
 
 /**
@@ -50,8 +50,8 @@ export function newChangeMessage(code: string): string {
  */
 export async function newChangeBusyMessage(streamId: string): Promise<string> {
   const title = await runHoldingStream(streamId);
-  const who = title !== "" ? `The run “${title}”` : "A graduation run";
-  return `${who} holds this stream, so the change was not created. Try again when the run stops working.`;
+  const who = title !== "" ? `The run “${title}”` : "An implementation run";
+  return `${who} holds this stream, so the OpenSpec change was not created. Try again when the run stops working.`;
 }
 
 /**
@@ -102,7 +102,7 @@ export function raiseAcceptanceToast(outcome: NewChangeDecisionOutcome): void {
     showToast({
       key,
       level: "Info",
-      title: `Change ${name} added`,
+      title: `OpenSpec change ${name} added`,
       body: "Its files are in one commit on the stream branch.",
       address: null,
     });
@@ -117,7 +117,7 @@ export function raiseAcceptanceToast(outcome: NewChangeDecisionOutcome): void {
     {
       key,
       level: "Error",
-      title: `Change ${name} is not committed`,
+      title: `OpenSpec change ${name} is not committed`,
       body: "Its files are written on the stream, but the commit failed.",
       address: null,
       link: { label: "Retry", onActivate: () => retryNewChangeCommit(proposal) },

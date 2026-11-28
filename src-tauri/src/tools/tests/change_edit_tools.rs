@@ -211,7 +211,7 @@ fn pce_is_a_portable_tool_with_its_fixed_text_and_schema() {
     let tool = f.proposer(&QUIET);
     assert_eq!(
         <ProposeChangeEditsTool<tauri::test::MockRuntime> as PortableTool>::NAME,
-        "propose_change_edits"
+        "propose_openspec_change_edits"
     );
     assert_eq!(tool.description(), propose_change_edits::DESCRIPTION);
     let schema = tool.parameters();
@@ -435,7 +435,7 @@ fn pce_logs_ids_and_counts_and_no_text() {
         .records;
     let info = records.iter().find(|r| r.level == LogLevel::Info).expect("info");
     let fields = serde_json::to_value(&info.fields).expect("fields");
-    assert_eq!(fields["tool"], "propose_change_edits");
+    assert_eq!(fields["tool"], "propose_openspec_change_edits");
     assert_eq!(fields["streamId"], STREAM);
     assert_eq!(fields["change"], CHANGE);
     assert_eq!(fields["hunks"], 2);
@@ -456,7 +456,7 @@ fn dce_is_a_portable_tool_with_the_fixed_text_and_the_shared_schema() {
     let tool = f.decider(f.sites(), &QUIET);
     assert_eq!(
         <DecideChangeEditsTool<tauri::test::MockRuntime> as PortableTool>::NAME,
-        "decide_change_edits"
+        "decide_openspec_change_edits"
     );
     assert_eq!(tool.description(), decide_change_edits::DESCRIPTION);
     assert_eq!(
@@ -604,7 +604,7 @@ fn dce_logs_the_stream_the_change_and_the_counts() {
         .records;
     let info = records.iter().find(|r| r.level == LogLevel::Info).expect("info");
     let fields = serde_json::to_value(&info.fields).expect("fields");
-    assert_eq!(fields["tool"], "decide_change_edits");
+    assert_eq!(fields["tool"], "decide_openspec_change_edits");
     assert_eq!(fields["streamId"], STREAM);
     assert_eq!(fields["change"], CHANGE);
     assert_eq!(fields["rejected"], 1);

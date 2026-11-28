@@ -8373,7 +8373,7 @@ function publicationView(draftId: string): any {
       ? {
           publishable: false,
           reasonCode: "draft_archived",
-          reason: "An archived draft cannot be published.",
+          reason: "Restore this change before you publish it.",
           localAssets: [],
         }
       : {

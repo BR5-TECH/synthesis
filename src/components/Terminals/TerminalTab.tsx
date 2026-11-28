@@ -54,7 +54,7 @@ export function TerminalTab({ terminalId }: { terminalId: string }) {
         // TRM-FR-XVFQ: a persistent warning; input still goes to the session.
         <div className="terminal-banner terminal-banner--busy" role="note">
           <Icon.AlertTriangle size={12} aria-hidden="true" />
-          <span>A graduation run is working in this target.</span>
+          <span>An implementation run is working in this target.</span>
         </div>
       )}
       <div className="terminal-tab__surface">

@@ -253,10 +253,10 @@ pub(super) fn asks(question: &str) -> ScriptedReply {
 
 /// CVL-FR-08: the tenth on a draft origin.
 ///
-/// `search_drafts`, `read_draft`, and `search_notes` are deliberately *not*
+/// `search_changes`, `read_change`, and `search_notes` are deliberately *not*
 /// here: reading what the project has planned and what its author has noted are
 /// moves every origin has, and only offering a rewrite is bound to one.
-pub(super) const DRAFT_ONLY_TOOL: &str = "propose_draft_changes";
+pub(super) const DRAFT_ONLY_TOOL: &str = "propose_change_edits";
 
 // The nine every turn gets, in the order `conversation_tools` names them.
 //
@@ -696,8 +696,8 @@ impl CompletionSeam for ToolThenGated {
 pub(super) const EXPECTED_TOOLS: [&str; 14] = [
     "search_specifications",
     "read_file",
-    "search_drafts",
-    "read_draft",
+    "search_changes",
+    "read_change",
     "search_notes",
     "search_documents",
     "get_document",

@@ -91,7 +91,7 @@ export function DraftChrome({
             ? "Version history"
             : `${versionCount} ${
                 versionCount === 1 ? "version" : "versions"
-              } of this draft`
+              } of this change`
         }
         onClick={onToggleRail}
       >
@@ -104,7 +104,7 @@ export function DraftChrome({
         <span className="draft-workspace__rename">
           <input
             className="input input--sm"
-            aria-label="Draft name"
+            aria-label="Change name"
             autoFocus
             value={rename.nameText}
             onChange={(e) => rename.edit(e.target.value)}
@@ -131,8 +131,8 @@ export function DraftChrome({
           aria-disabled={shadow || undefined}
           title={
             shadow
-              ? "This draft mirrors a GitHub issue, so it cannot be renamed"
-              : "Rename this draft"
+              ? "This change mirrors a GitHub issue, so it cannot be renamed"
+              : "Rename this change"
           }
         >
           <Icon.Diamond size={12} /> {name}
@@ -154,7 +154,7 @@ export function DraftChrome({
         <button
           className="draft-workspace__graduation t-ui-xs"
           data-testid="draft-graduation-state"
-          title="Go to this draft's graduation run"
+          title="Go to this change's implementation run"
           onClick={() => onOpenRun(graduation.runId)}
         >
           <Icon.Diamond size={11} /> {stateLabel(graduation.state)}
@@ -174,7 +174,7 @@ export function DraftChrome({
               openOpenSpecChange({ kind: "stream", streamId: change.streamId }, change.name);
             }}
           >
-            <Icon.Diff size={11} /> Open change
+            <Icon.Diff size={11} /> Open OpenSpec change
           </button>
         )}
       {/* NAW-FR-CBUJ: the draft's publication, as a tag beside the draft's
@@ -203,7 +203,7 @@ export function DraftChrome({
         <button
           className="draft-workspace__proposal t-ui-xs"
           data-testid="draft-pending-proposal"
-          title={`Review the ${undecidedCount(pendingProposal.counts)} change${
+          title={`Review the ${undecidedCount(pendingProposal.counts)} edit${
             undecidedCount(pendingProposal.counts) === 1 ? "" : "s"
           } proposed to ${pendingProposal.path}`}
           onClick={() => {
@@ -214,7 +214,7 @@ export function DraftChrome({
         >
           <span className="dot dot--live" aria-hidden="true" />
           {undecidedCount(pendingProposal.counts)} proposed{" "}
-          {undecidedCount(pendingProposal.counts) === 1 ? "change" : "changes"}
+          {undecidedCount(pendingProposal.counts) === 1 ? "edit" : "edits"}
         </button>
       )}
 

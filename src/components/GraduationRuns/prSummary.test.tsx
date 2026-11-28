@@ -180,12 +180,12 @@ describe("what a PR summary run renders as its end (GRU-FR-DQSA)", () => {
 });
 
 describe("what a PR summary run offers (GRU-FR-LJUY)", () => {
-  it("GRU-FR-LJUY: a working run offers Pause and Discard run, and no Open draft", async () => {
+  it("GRU-FR-LJUY: a working run offers Pause and Discard run, and no Open change", async () => {
     await serve(makePrSummaryRun("p1", "working"));
 
     expect(within(region()).getByRole("button", { name: /Pause/ })).toBeInTheDocument();
     expect(within(region()).getByRole("button", { name: /Discard run/ })).toBeInTheDocument();
-    expect(within(region()).queryByRole("button", { name: /Open draft/ })).toBeNull();
+    expect(within(region()).queryByRole("button", { name: /Open change/ })).toBeNull();
   });
 
   it("GRU-FR-LJUY: an interrupted run offers Continue", async () => {

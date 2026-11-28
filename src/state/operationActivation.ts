@@ -40,7 +40,7 @@ export function destinationOf(operation: Operation): Activation | null {
 export function targetPhrase(activation: Activation): string {
   switch (activation.type) {
     case "graduation_run":
-      return "open graduation run";
+      return "open implementation run";
     case "discussion":
       return "open discussion";
     case "git_push":

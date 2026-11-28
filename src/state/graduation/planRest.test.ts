@@ -69,16 +69,16 @@ describe("plan rests", () => {
     }
   });
 
-  it("GRU-FR-TCSM: a plan_update rest says that the run asks to change the plan and where the author answers it", () => {
+  it("GRU-FR-TCSM, PVC-FR-NEXL: a plan_update rest says that the run asks to change the plan of its OpenSpec change and where the author answers it", () => {
     const statement = planRestStatement(planRestOf(applyRun(UPDATE))!);
-    expect(statement).toContain("The run asks to change the plan of its change.");
-    expect(statement).toContain("Answer its questions and decide its edits in the change discussion");
+    expect(statement).toContain("The run asks to change the plan of its OpenSpec change.");
+    expect(statement).toContain("Answer its questions and decide its edits in the discussion of the OpenSpec change");
   });
 
   it("GRU-FR-TVDF: a plan_findings rest counts the plan findings alone, a finding with no kind being work", () => {
     expect(planFindingCount(FINDINGS)).toBe(2);
     expect(planRestStatement(planRestOf(applyRun(FINDINGS))!)).toContain(
-      "The review found that the plan of the change is wrong: 2 plan findings.",
+      "The review found that the plan of the OpenSpec change is wrong: 2 plan findings.",
     );
     const one = { ...FINDINGS, findings: [finding("plan")] };
     expect(planRestStatement(planRestOf(applyRun(one))!)).toContain("1 plan finding.");
@@ -87,7 +87,7 @@ describe("plan rests", () => {
 
   it("GRU-FR-PZJY: a plan_update_invalid rest says why, with one sentence for each cause", () => {
     expect(planRestStatement(planRestOf(applyRun(INVALID))!)).toBe(
-      "The run gave a plan update that the application refused. It proposed to delete a file of the change, and a plan update cannot delete a file.",
+      "The run gave a plan update that the application refused. It proposed to delete a file of the OpenSpec change, and a plan update cannot delete a file.",
     );
     const causes = ["plan_path_outside_change", "plan_file_not_text", "plan_deletes_file", "plan_update_empty"] as const;
     expect(new Set(causes.map(planUpdateCauseSentence)).size).toBe(causes.length);
@@ -117,10 +117,10 @@ describe("plan rests", () => {
 
   it("GRU-FR-BPNJ: a refused Continue of a plan rest is stated in words, and another code is not a plan refusal", () => {
     expect(planContinueMessage("plan_questions_pending")).toBe(
-      "Answer the questions in the change discussion first, then continue the run.",
+      "Answer the questions in the discussion of the OpenSpec change first, then continue the run.",
     );
     expect(planContinueMessage("proposal_pending")).toBe(
-      "Decide the plan edits in the change discussion first, or their commit is still owed. Then continue the run.",
+      "Decide the plan edits in the discussion of the OpenSpec change first, or their commit is still owed. Then continue the run.",
     );
     // OFN-FR-QZEC: the sentence of the notice of its cause.
     expect(planContinueMessage("openspec_validation_unavailable: cli_failed")).toBe(
@@ -144,7 +144,7 @@ describe("plan rests", () => {
       "The run could not be made ready to continue. Nothing changed; try Continue again.",
     );
     expect(continueRefusalMessage(atPlanRest, "proposal_pending")).toBe(
-      "Decide the plan edits in the change discussion first, or their commit is still owed. Then continue the run.",
+      "Decide the plan edits in the discussion of the OpenSpec change first, or their commit is still owed. Then continue the run.",
     );
     for (const run of [working, atChecksRest]) {
       expect(continueRefusalMessage(run, "proposal_pending")).toBe("proposal_pending");
@@ -162,10 +162,10 @@ describe("plan rests", () => {
       expect(raiseStatement(run)).toContain("add-logout");
     }
     expect(raiseStatement(applyRun(UPDATE))).toBe(
-      "“Apply add-logout” asks to change the plan of add-logout. Decide it in the change discussion.",
+      "“Apply add-logout” asks to change the plan of add-logout. Decide it in the discussion of the OpenSpec change.",
     );
     expect(raiseStatement(applyRun(FINDINGS))).toBe(
-      "The review of “Apply add-logout” found the plan of add-logout wrong. Decide it in the change discussion.",
+      "The review of “Apply add-logout” found the plan of add-logout wrong. Decide it in the discussion of the OpenSpec change.",
     );
     expect(raiseStatement(applyRun(INVALID))).toBe(
       "“Apply add-logout” gave a plan update for add-logout that was refused.",

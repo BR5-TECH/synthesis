@@ -86,7 +86,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     expect(screen.getByRole("menu")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "Delete draft" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Delete change" })).toBeInTheDocument();
 
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -110,18 +110,18 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("DRP-FR-06, DRP-FR-29, DRP-FR-15, SNV-FR-60, SNV-FR-61: a worktree holding neither draft nor folder is the first-class empty state", async () => {
+  it("PVC-FR-HMJD, DRP-FR-06, DRP-FR-29, DRP-FR-15, SNV-FR-60, SNV-FR-61: a worktree holding neither draft nor folder is the first-class empty state, in the words of a change", async () => {
     invokeMock.mockImplementation(async (cmd) =>
       cmd === "list_drafts" ? { folders: [], drafts: [] } : undefined,
     );
     const { onCreateDraft } = renderPanel();
-    await screen.findByText("No drafts yet.");
+    await screen.findByText("No changes yet.");
 
-    expect(screen.queryByLabelText("Draft status")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Filter drafts")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Change status")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Filter changes")).not.toBeInTheDocument();
     // One button to activate, not the same action twice.
-    expect(screen.getAllByRole("button", { name: /draft/i })).toHaveLength(1);
-    await userEvent.click(screen.getByRole("button", { name: "New draft" }));
+    expect(screen.getAllByRole("button", { name: /change/i })).toHaveLength(1);
+    await userEvent.click(screen.getByRole("button", { name: "New change" }));
     expect(onCreateDraft).toHaveBeenCalled();
   });
 
@@ -134,8 +134,8 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel();
     await screen.findByRole("treeitem", { name: "Folder UI" });
 
-    expect(screen.queryByText("No drafts yet.")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Draft status")).toBeInTheDocument();
+    expect(screen.queryByText("No changes yet.")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Change status")).toBeInTheDocument();
   });
 
   it("DRP-FR-06, DRP-FR-29, DRP-FR-15, SNV-FR-60, SNV-FR-61: a filter matching nothing keeps both controls and stays in the tree's region", async () => {
@@ -147,13 +147,13 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel();
     await screen.findByText("artifact-window");
 
-    await userEvent.type(screen.getByLabelText("Filter drafts"), "nothing");
+    await userEvent.type(screen.getByLabelText("Filter changes"), "nothing");
     expect(
-      await screen.findByText("No draft matches this filter."),
+      await screen.findByText("No change matches this filter."),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Draft status")).toBeInTheDocument();
-    expect(screen.getByLabelText("Filter drafts")).toHaveValue("nothing");
-    expect(screen.queryByText("No drafts yet.")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Change status")).toBeInTheDocument();
+    expect(screen.getByLabelText("Filter changes")).toHaveValue("nothing");
+    expect(screen.queryByText("No changes yet.")).not.toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
@@ -166,12 +166,12 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
 
     await act(async () => void openDraftMenu("artifact-window"));
     await userEvent.click(screen.getByRole("menuitem", { name: "Rename…" }));
-    const field = screen.getByLabelText("Draft name");
+    const field = screen.getByLabelText("Change name");
     await userEvent.clear(field);
     await userEvent.type(field, "renamed{Escape}");
 
     expect(calls("rename_draft")).toHaveLength(0);
-    expect(screen.queryByLabelText("Draft name")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Change name")).not.toBeInTheDocument();
     expect(screen.getByText("artifact-window")).toBeInTheDocument();
   });
 
@@ -187,7 +187,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
 
     await act(async () => void openDraftMenu("artifact-window"));
     await userEvent.click(screen.getByRole("menuitem", { name: "Rename…" }));
-    const field = screen.getByLabelText("Draft name");
+    const field = screen.getByLabelText("Change name");
     await userEvent.clear(field);
     await userEvent.type(field, "renamed{Enter}");
 
@@ -210,12 +210,12 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
 
     await act(async () => void openDraftMenu("artifact-window"));
     await userEvent.click(screen.getByRole("menuitem", { name: "Rename…" }));
-    const field = screen.getByLabelText("Draft name");
+    const field = screen.getByLabelText("Change name");
     await userEvent.clear(field);
     await userEvent.type(field, "notes{Enter}");
 
     expect(await screen.findByRole("alert")).toHaveTextContent("notes.md");
-    expect(screen.getByLabelText("Draft name")).toHaveValue("notes");
+    expect(screen.getByLabelText("Change name")).toHaveValue("notes");
   });
 
   it("DRP-FR-12: Delete confirms first, then removes the draft and its tab", async () => {
@@ -227,7 +227,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     expect(calls("delete_draft")).toHaveLength(0);
 
     await userEvent.click(
-      within(screen.getByRole("dialog", { name: "Delete draft" })).getByRole(
+      within(screen.getByRole("dialog", { name: "Delete change" })).getByRole(
         "button",
         { name: "Delete" },
       ),
@@ -358,15 +358,15 @@ describe("the status filter's toggle row (DRP-FR-07)", () => {
     await screen.findByText("editor-tweaks");
 
     // The default position: the archived draft is one position away, not gone.
-    expect(selectorValue("Draft status")).toBe("active");
+    expect(selectorValue("Change status")).toBe("active");
     expect(screen.queryByText("artifact-window")).not.toBeInTheDocument();
 
-    await pickSelector("Draft status", "archived");
-    expect(selectorValue("Draft status")).toBe("archived");
+    await pickSelector("Change status", "archived");
+    expect(selectorValue("Change status")).toBe("archived");
     expect(await screen.findByText("artifact-window")).toBeInTheDocument();
     expect(screen.queryByText("editor-tweaks")).not.toBeInTheDocument();
 
-    await pickSelector("Draft status", "all");
+    await pickSelector("Change status", "all");
     expect(await screen.findByText("artifact-window")).toBeInTheDocument();
     expect(screen.getByText("editor-tweaks")).toBeInTheDocument();
   });
@@ -379,8 +379,8 @@ describe("the status filter's toggle row (DRP-FR-07)", () => {
     await screen.findByText("editor-tweaks");
 
     const controls = document.querySelector(".panel-controls")!;
-    const text = screen.getByLabelText("Filter drafts");
-    const status = screen.getByRole("radiogroup", { name: "Draft status" });
+    const text = screen.getByLabelText("Filter changes");
+    const status = screen.getByRole("radiogroup", { name: "Change status" });
     const body = document.querySelector(".vpanel__body")!;
 
     expect(controls).toContainElement(text);

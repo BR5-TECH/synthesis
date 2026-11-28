@@ -156,7 +156,7 @@ function DiagramComparisonOverlay({ request }: { request: ComparisonRequest }) {
             type="button"
             className="btn btn--primary btn--sm"
             disabled={off || blocked !== null}
-            title={blocked ?? "Accept this change"}
+            title={blocked ?? "Accept this edit"}
             onClick={() => void decide("accept")}
           >
             Accept
@@ -166,7 +166,7 @@ function DiagramComparisonOverlay({ request }: { request: ComparisonRequest }) {
               type="button"
               className="btn btn--sm"
               disabled={off}
-              title="Reject this change"
+              title="Reject this edit"
               onClick={() => void decide("reject")}
             >
               Reject

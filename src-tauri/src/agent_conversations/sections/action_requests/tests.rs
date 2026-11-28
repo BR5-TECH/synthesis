@@ -128,7 +128,8 @@ fn the_history_lists_the_ten_newest_requests() {
     car::set_test_run_state("run-42", "working");
 
     let history = c.history();
-    let at = history.find("The requests to apply or rework this change").expect("the section");
+    let at =
+        history.find("The requests to apply or rework this OpenSpec change").expect("the section");
     let lines: Vec<&str> =
         history[at..].lines().skip(1).take_while(|line| line.starts_with("  ")).collect();
     assert_eq!(lines.len(), 10, "{history}");
@@ -146,8 +147,10 @@ fn the_history_lists_the_ten_newest_requests() {
 
     // CMS-FR-QVZP: a comment's `change_action_request` names the action and
     // the request.
-    assert!(history
-        .contains(&format!("[asked the author to rework this change: request {}]", pending.id)));
+    assert!(history.contains(&format!(
+        "[asked the author to rework this OpenSpec change: request {}]",
+        pending.id
+    )));
 }
 
 // AGC-FR-KRMV / AGC-FR-JNOS: the requests stand before the split.

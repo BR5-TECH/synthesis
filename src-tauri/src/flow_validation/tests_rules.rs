@@ -238,6 +238,10 @@ fn duplicate_draft_links() {
     let got: Vec<_> =
         report.violations.iter().map(|v| (v.code, v.element_id.clone().unwrap())).collect();
     assert_eq!(got, vec![("duplicate_draft_link", "t2".to_string())]);
+    // PVC-FR-CUAT, PVC-FR-ODXM: the code keeps its internal name, and the
+    // message that a model reads calls the draft a change.
+    let message = &report.violations[0].message;
+    assert!(message.contains("links the change `dr1`"), "{message}");
 }
 
 /// FGV-FR-01: a valid document reads into the typed model.

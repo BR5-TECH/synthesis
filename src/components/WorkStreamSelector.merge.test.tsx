@@ -648,6 +648,6 @@ describe("the commit route and the typed refusals (WSS-FR-TQBN, WSS-FR-NPXC, WSS
     expect(await within(r).findByRole("alert")).toHaveTextContent(/not committed/i);
     expect(within(r).getByText("a.ts")).toBeInTheDocument();
     expect(within(r).getByText("b/c.md")).toBeInTheDocument();
-    expect(within(r).getByRole("button", { name: "Open Changes" })).toBeInTheDocument();
+    expect(within(r).getByRole("button", { name: "Open Commits" })).toBeInTheDocument();
   });
 });

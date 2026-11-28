@@ -233,7 +233,7 @@ export function MovePicker({
           // The root's id cannot be the empty string: that is what the select
           // reads as "nothing selected".
           id: path === ROOT ? ROOT_OPTION : path,
-          label: path === ROOT ? "Drafts (root)" : path,
+          label: path === ROOT ? "Changes (root)" : path,
           disabled: refusal !== null,
           hint: refusal ?? undefined,
         };

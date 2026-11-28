@@ -81,7 +81,8 @@ fn a_refusal_about_one_of_several_changes_names_which_one() {
         .unwrap_err();
 
     let message = refused.to_string();
-    assert!(message.starts_with("Change 2 of 5: "), "the refusal names the change: {message}",);
+    // PVC-FR-VBPY: the refusal calls one hunk an edit.
+    assert!(message.starts_with("Edit 2 of 5: "), "the refusal names the change: {message}",);
     assert!(message.contains(PROPOSAL_TEXT_NOT_FOUND), "{message}");
 
     // And the record says which, so a reader can tell a model that is one
@@ -157,7 +158,7 @@ fn every_placement_refusal_names_the_change_it_is_about() {
             hunks,
         })
         .unwrap_err();
-    assert_eq!(refused.to_string(), format!("Change 3 of 5: {PROPOSAL_TEXT_NOT_UNIQUE}"),);
+    assert_eq!(refused.to_string(), format!("Edit 3 of 5: {PROPOSAL_TEXT_NOT_UNIQUE}"),);
 
     // And two changes covering the same text, which names the later of them.
     let f = Fixture::new();
@@ -188,7 +189,7 @@ fn every_placement_refusal_names_the_change_it_is_about() {
             ],
         })
         .unwrap_err();
-    assert_eq!(refused.to_string(), format!("Change 2 of 2: {PROPOSAL_HUNKS_OVERLAP}"),);
+    assert_eq!(refused.to_string(), format!("Edit 2 of 2: {PROPOSAL_HUNKS_OVERLAP}"),);
 }
 
 // TLC-FR-10 / TLC-FR-11: a refusal that names a change is still an argument
@@ -319,7 +320,7 @@ fn the_description_states_the_rule_of_the_spoken_part() {
 #[test]
 fn the_description_sends_a_diagram_change_to_the_diagram_tool() {
     assert!(DESCRIPTION.contains(
-        "A change to a Mermaid diagram never goes in a change of this tool, and never in the same call as one: offer it with `propose_diagram_changes`, in a call of its own."
+        "An edit to a Mermaid diagram never goes in an edit of this tool, and never in the same call as one: offer it with `propose_diagram_changes`, in a call of its own."
     ));
 }
 

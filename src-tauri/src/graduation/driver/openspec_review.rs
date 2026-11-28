@@ -72,7 +72,7 @@ pub async fn validation<R: tauri::Runtime>(
                 run,
                 &error,
                 format!("The OpenSpec change {change} could not be validated: {}.", error.code()),
-                "Continue the run to validate the change and review it again.",
+                "Continue the run to validate the OpenSpec change and review it again.",
             );
             Err(())
         }

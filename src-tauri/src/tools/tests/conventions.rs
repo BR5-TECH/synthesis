@@ -181,7 +181,7 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
             // GDT-FR-GNCR: the answer to "what do I get back" is the text of the
             // document, whole unless a range was asked for.
             n if n == document_get::NAME => "Returns the whole text by default",
-            n if n == draft_read::NAME => "It returns the draft's stable metadata",
+            n if n == draft_read::NAME => "It returns the change's stable metadata",
             n if n == skill_list::NAME => "Each entry gives",
             // LOS-FR-UPKL, ROS-FR-AZNY, LOC-FR-YVDP: what each OpenSpec read
             // returns.
@@ -320,15 +320,16 @@ fn every_description_addresses_the_model_and_names_no_implementation() {
             // subject is the questions, and "several" is what tells it apart
             // from `ask_user_comment`'s one on that sentence alone.
             n if n == ask_discussion_questions::NAME => "several questions",
-            n if n == propose_draft_changes::NAME => "draft",
-            n if n == crate::tools::propose_new_draft::NAME => "new draft",
-            n if n == draft_search::NAME || n == draft_read::NAME => "draft",
+            // PVC-FR-HMJD: a draft is a "change" in agent-facing text.
+            n if n == propose_draft_changes::NAME => "change",
+            n if n == crate::tools::propose_new_draft::NAME => "new change",
+            n if n == draft_search::NAME || n == draft_read::NAME => "change",
             n if n == note_search::NAME => "notes",
             n if n == document_search::NAME => "documents",
             n if n == document_get::NAME => "document",
             n if n == read_graduation_file::NAME => "file",
             // ESU-FR-19: its first sentence is "Stop and ask the person who
-            // started this graduation what you cannot answer yourself." — the
+            // started this implementation what you cannot answer yourself." — the
             // subject is the asking rather than the noun, the questions
             // themselves being what the sentence after it is about.
             n if n == escalate_to_user::NAME => "ask",
@@ -708,7 +709,9 @@ fn the_one_data_with_document_output_is_a_json_object_carrying_its_document() {
     // The document sits under a named field beside the metadata it cannot be
     // acted on without — which is the whole justification for the exception.
     assert_eq!(json["content"], serde_json::json!(body));
-    assert_eq!(json["draft_id"], serde_json::json!(created.draft.id));
+    // PVC-FR-TKJW, RDT-FR-01: the id of the change is `change_id` on the wire.
+    assert_eq!(json["change_id"], serde_json::json!(created.draft.id));
+    assert!(json.get("draft_id").is_none());
     assert!(json.get("name").is_some() && json.get("status").is_some());
 }
 

@@ -57,19 +57,18 @@ mod tests;
 
 /// DST-FR-01.
 ///
-/// Shares a spelling with `crate::drafts`' Tauri command of the same name
-/// (DRS-FR-17), which is the Drafts panel's substring filter. The two are
-/// different operations on different surfaces and neither is reachable from the
-/// other; TLC-FR-02 requires a tool's name to be unique within this group, which
-/// this is.
-pub const NAME: &str = "search_drafts";
+/// PVC-FR-RWDM: the agent-facing name. The internal name of the tool stays
+/// `draft_search`, and the Tauri command `search_drafts` of `crate::drafts`
+/// (DRS-FR-17) is a different operation on a different surface. TLC-FR-02
+/// requires a tool's name to be unique within this group, which this is.
+pub const NAME: &str = "search_changes";
 
 /// DST-FR-02: the fixed text the model reads, compiled into the binary.
-pub const DESCRIPTION: &str = "Find planned drafts relevant to a topic, ranked by how well each current live prompt matches what you describe. Use this to discover related draft work when you do not already know its draft ID. Results are best first and include the draft ID to pass unchanged to `read_draft`, its name and status, an informational draft-relative prompt path, a matching excerpt, and a score that orders this result set. Only current live prompts are searched: accepted history and other snapshots are never searched. This does not read a complete prompt, modify a draft, or make its path usable with `read_file`. An empty result means no current readable draft matched.";
+pub const DESCRIPTION: &str = "Find planned changes relevant to a topic, ranked by how well each current live prompt matches what you describe. Use this to discover related change work when you do not already know its change ID. Results are best first and include the change ID to pass unchanged to `read_change`, its name and status, an informational change-relative prompt path, a matching excerpt, and a score that orders this result set. A status of `graduated` means the change is implemented. Only current live prompts are searched: accepted history and other snapshots are never searched. This does not read a complete prompt, modify a change, or make its path usable with `read_file`. An empty result means no current readable change matched.";
 
-const QUERY_DESCRIPTION: &str = "A plain description of the planned work or topic to find in current draft prompts. Do not supply a file path.";
+const QUERY_DESCRIPTION: &str = "A plain description of the planned work or topic to find in current change prompts. Do not supply a file path.";
 
-const LIMIT_DESCRIPTION: &str = "How many distinct drafts to return, best match first. Defaults to 10. Values below 1 or above 20 are clamped into that range.";
+const LIMIT_DESCRIPTION: &str = "How many distinct changes to return, best match first. Defaults to 10. Values below 1 or above 20 are clamped into that range.";
 
 /// DST-FR-06. Stated in [`LIMIT_DESCRIPTION`] as TLC-FR-06 requires.
 ///
@@ -127,17 +126,20 @@ fn lenient_limit<'de, D: serde::Deserializer<'de>>(
 
 /// One ranked draft (DST-FR-10).
 ///
-/// Exactly `draft_id`, `name`, `status`, `prompt_path`, `excerpt`, and `score`.
+/// Exactly `change_id`, `name`, `status`, `prompt_path`, `excerpt`, and `score`.
 /// The `index` the underlying hit carries is constant across every match this
 /// tool can return, its `path` is the record's own `prompt_path` said twice, and
 /// a model can act on neither `node_id` nor `chunk_ordinal`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct DraftSearchMatch {
+    /// The DST contract surface names this field `change_id` (PVC-FR-HMJD).
+    /// The Rust field keeps its internal name (PVC-FR-ODXM).
+    #[serde(rename = "change_id")]
     pub draft_id: String,
     pub name: String,
     pub status: DraftStatus,
     /// DST-FR-11: draft-relative and informational. Not a path `read_file`
-    /// resolves to this prompt — what the model carries forward is `draft_id`.
+    /// resolves to this prompt — what the model carries forward is `change_id`.
     pub prompt_path: String,
     pub excerpt: String,
     pub score: f32,
@@ -146,6 +148,9 @@ pub struct DraftSearchMatch {
 /// TLC-FR-08: a JSON object with the collection under a named field.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct DraftSearchOutput {
+    /// PVC-FR-TKJW, DST-FR-01: the model reads this list as `changes`. The
+    /// Rust field keeps its internal name (PVC-FR-ODXM).
+    #[serde(rename = "changes")]
     pub drafts: Vec<DraftSearchMatch>,
 }
 
@@ -318,7 +323,7 @@ fn logged_arguments(args: &DraftSearchArgs) -> Fields {
 // The tool (TLC-FR-01)
 // ---------------------------------------------------------------------------
 
-/// DST-FR-01: `search_drafts` as a `rig` portable tool.
+/// DST-FR-01: `search_changes` as a `rig` portable tool.
 ///
 /// Holds the app handle rather than the indexes or a root, so a project opened
 /// after the tool was constructed is visible to it and one closed since is not

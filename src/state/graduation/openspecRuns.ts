@@ -35,20 +35,21 @@ export function changeRunTitle(run: GraduationRun): string | null {
 
 /**
  * GOB-FR-CAXV / GRU-FR-SOFY: the stages of an apply run. The ids and the order
- * are the ordinary ones; only the words are an apply run's.
+ * are the ordinary ones; only the words are an apply run's. PVC-FR-NEXL: the
+ * descriptions say "OpenSpec change", because the same row shows draft runs.
  */
 export const APPLY_STAGES: ProgressStage[] = [
   { id: "queued", label: "Queued", description: "Waiting for the work stream" },
-  { id: "working", label: "Tasks", description: "Implementing the tasks of the change" },
-  { id: "review", label: "Verify", description: "Verifying the work against the change" },
+  { id: "working", label: "Tasks", description: "Implementing the tasks of the OpenSpec change" },
+  { id: "review", label: "Verify", description: "Verifying the work against the OpenSpec change" },
   { id: "done", label: "Landed", description: "Committed on the work stream" },
 ];
 
 /** GOB-FR-CAXV / GRU-FR-SOFY: the stages of a rework run. */
 export const REWORK_STAGES: ProgressStage[] = [
   { id: "queued", label: "Queued", description: "Waiting for the work stream" },
-  { id: "working", label: "Reworking", description: "Revising the change on your instruction" },
-  { id: "review", label: "Reviewing", description: "Judging the revised change" },
+  { id: "working", label: "Reworking", description: "Revising the OpenSpec change on your instruction" },
+  { id: "review", label: "Reviewing", description: "Judging the revised OpenSpec change" },
   { id: "done", label: "Proposed", description: "Given to you as a proposal" },
 ];
 
@@ -118,7 +119,7 @@ export function checkStateOf(run: GraduationRun): string | null {
 /** GRU-FR-NGQE: why the finish of a rework run could not record its proposal. */
 const REWORK_FINISH_SENTENCES: Record<string, string> = {
   proposal_pending:
-    "The change holds a pending edit proposal, so the result of the rework could not be recorded. Decide that proposal first, then continue the run.",
+    "The OpenSpec change holds a pending edit proposal, so the result of the rework could not be recorded. Decide that proposal first, then continue the run.",
   discussion_resolved:
     "The request thread of the rework is resolved, so the result could not be recorded there. Reopen the thread, then continue the run.",
   write_failed: "The proposal could not be written.",
@@ -139,10 +140,10 @@ export function changeRunOutcome(run: GraduationRun): string | null | undefined 
   switch (run.state) {
     case "completed":
       return run.openspec?.proposalId
-        ? "The result is a proposal in the discussion of the change."
+        ? "The result is a proposal in the discussion of the OpenSpec change."
         : "The rework pass found nothing to change.";
     case "discarded":
-      return "Discarded. Nothing was written to the change.";
+      return "Discarded. Nothing was written to the OpenSpec change.";
     case "failed":
       return run.failure?.message ?? "The run failed.";
     default:

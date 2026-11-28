@@ -53,11 +53,11 @@ An Editor tab on `prompts/review.md` with a proposal of three hunks, the second 
 │    ┌─[ 2/3  [ Accept ] [ Reject ]  Discuss → ]─┐  │┃│ three things in one        │
 │  ┃+  Read the file.                            │  │┃│ sentence. I have split     │
 │  ┃+  Summarise it, then file a note.           │  │┃│ them.                      │
-│    └───────────────────────────────────────────┘ ▍│┃│ [ 3 changes  +2 −1 ]       │
+│    └───────────────────────────────────────────┘ ▍│┃│ [ 3 edits  +2 −1 ]         │
 │                                                  │┃│                            │
 │  ┃+  ## Output                          (pending) ▍│┃│                            │
 ├──────────────────────────────────────────────────┤┃├────────────────────────────┤
-│  ‹ ⌥↑   Change 2 of 3   ⌥↓ ›    [ Reject all ] [ Accept all ] │ Write a comment…   │
+│  ‹ ⌥↑   Edit 2 of 3     ⌥↓ ›    [ Reject all ] [ Accept all ] │ Write a comment…   │
 └──────────────────────────────────────────────────┴─┴────────────────────────────┘
 ```
 

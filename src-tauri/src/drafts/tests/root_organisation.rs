@@ -105,7 +105,7 @@ fn ts24_folder_names_are_validated_and_siblings_may_not_collide() {
 
     // A parent that does not exist is the typed "not found".
     let err = create_drafts_folder_impl(root, "nowhere", "x").unwrap_err();
-    assert!(err.contains("no such drafts folder"), "got {err}");
+    assert!(err.contains("no such changes folder"), "got {err}");
     assert_eq!(folder_paths(root), vec!["UI".to_string()]);
 
     // DRS-FR-30: a draft, by contrast, never collides — its folder is named
@@ -293,7 +293,7 @@ fn ts27_moving_a_draft_changes_only_the_path_its_directory_sits_at() {
 
     // A destination that does not exist is the typed "not found".
     let err = move_draft_to_folder_impl(root, &id, "nowhere").unwrap_err();
-    assert!(err.contains("no such drafts folder"), "got {err}");
+    assert!(err.contains("no such changes folder"), "got {err}");
     assert_eq!(folder_of(root, &id), "backend");
 }
 
@@ -307,7 +307,7 @@ fn ts27_a_draft_folder_is_never_a_move_destination() {
     let moving = draft(root, "moving");
 
     let err = move_draft_to_folder_impl(root, &moving, &host).unwrap_err();
-    assert!(err.contains("no such drafts folder"), "got {err}");
+    assert!(err.contains("no such changes folder"), "got {err}");
     assert_eq!(folder_of(root, &moving), "");
 }
 
@@ -354,7 +354,7 @@ fn ts29_a_stale_path_is_a_typed_not_found() {
     rename_drafts_folder_impl(root, "UI", "Interface").unwrap();
 
     let err = rename_drafts_folder_impl(root, "UI", "x").unwrap_err();
-    assert!(err.contains("no such drafts folder"), "got {err}");
+    assert!(err.contains("no such changes folder"), "got {err}");
     assert!(!root.join(".synthesis/drafts/UI").exists(), "and nothing was created in its place");
     assert_eq!(folder_paths(root), vec!["Interface".to_string()]);
 }
@@ -734,7 +734,7 @@ fn a_stale_path_is_a_typed_not_found_for_every_operation() {
         create_drafts_folder_impl(root, "UI", "x").unwrap_err(),
         create_draft_impl(root, Some("d2"), Some("UI")).unwrap_err(),
     ] {
-        assert!(err.contains("no such drafts folder"), "got {err}");
+        assert!(err.contains("no such changes folder"), "got {err}");
     }
     assert_eq!(folder_paths(root), vec!["backend".to_string()]);
     assert_eq!(folder_of(root, &id), "backend");

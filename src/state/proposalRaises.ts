@@ -74,7 +74,7 @@ export function draftProposalRaise(
     key: draftRaiseKey(payload.draftId),
     // DCR-FR-18: a proposal waiting for review is Info.
     level: "Info",
-    title: `${proposerHandle(payload.proposal)} proposed a change`,
+    title: `${proposerHandle(payload.proposal)} proposed edits`,
     body: payload.proposal.path,
     address: mintAddress(root.projectKey, root.worktree, {
       kind: "draft",
@@ -161,7 +161,7 @@ export function newDraftProposalRaise(
   return {
     key: `new-draft-proposal:${payload.draftId}`,
     level: "Info",
-    title: `${who} proposed a new draft`,
+    title: `${who} proposed a new change`,
     body: `Part ${proposal.position} of ${proposal.total} · ${proposal.name}`,
     address: mintAddress(root.projectKey, root.worktree, {
       kind: "draft",

@@ -171,7 +171,7 @@ export function GraduationSettingsSection() {
         style={{ marginBottom: error ? 4 : 18 }}
       >
         Bounds each conversation turn whose provider sets no turn timeout. It
-        does not bound graduation turns: Time per turn bounds them. Empty uses 2
+        does not bound implementation turns: Time per turn bounds them. Empty uses 2
         hours.
       </div>
       {error && (

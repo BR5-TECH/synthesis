@@ -31,6 +31,14 @@ type View =
 /** CHG-FR-GXNP: the events after which the list reads again. */
 const REFRESH_EVENTS = [onGraduationRunChanged, onGraduationQueueChanged, onChangesUpdated];
 
+/**
+ * CHG-FR-QLZO, PVC-FR-HMJD: the kind as the row shows it. The stored kind
+ * `draft` (PVC-FR-ODXM) is a run of a change, so the row reads `change`.
+ */
+function kindLabel(kind: BranchCompletedRun["kind"]): string {
+  return kind === "draft" ? "change" : kind;
+}
+
 export function CompletedRuns() {
   const [view, setView] = useState<View>({ status: "absent" });
   const seq = useRef(0);
@@ -125,7 +133,7 @@ export function CompletedRuns() {
                 {run.title}
               </span>
               <span className="changes-completed__meta">
-                {run.kind} · landed{" "}
+                {kindLabel(run.kind)} · landed{" "}
                 <time dateTime={run.landing.at}>{formatRelative(run.landing.at)}</time>
               </span>
             </li>

@@ -93,7 +93,7 @@ export function decompositionDiscussion(human: unknown, agent: unknown) {
       {
         id: "disc-19-c1",
         author: human,
-        body: "This draft is too large for one graduation. Split it into smaller drafts.",
+        body: "This change is too large for one implementation. Split it into smaller changes.",
         quotes: [],
         attachments: [],
         createdAt: at("02"),

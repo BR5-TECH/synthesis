@@ -60,5 +60,5 @@ ListOpenSpecChangesOutput {
 
 ## Non-functional requirements
 - A call costs one `list_changes(location)` read of `../core/OSM-openspec-mode.md`: two CLI processes and one directory listing for each change.
-- The first sentence of the description tells it apart from `list_openspec_specs`, `read_openspec_spec`, and `search_drafts`.
+- The first sentence of the description tells it apart from `list_openspec_specs`, `read_openspec_spec`, and `search_changes`.
 - Nothing in this tool needs network access.

@@ -32,9 +32,10 @@ fn watcher(fx: &Fixture, seen: &Seen) -> impl Fn() + Send + Sync + 'static {
     }
 }
 
-/// GRD-FR-ZHNV, PRG-FR-KXQW: while the work turn and the review turn run, the
-/// run is one in-flight operation that names the run as its destination, and it
-/// is the same operation in both turns. It is gone when the run completes.
+/// GRD-FR-ZHNV, PRG-FR-KXQW, PVC-FR-ZQRE: while the work turn and the review
+/// turn run, the run is one in-flight operation that names the run as its
+/// destination, and it is the same operation in both turns. Its label reads
+/// `Implementing <name>…`. It is gone when the run completes.
 #[test]
 fn an_executing_run_is_one_operation_with_the_run_as_its_destination() {
     let fx = Fixture::new();
@@ -64,7 +65,7 @@ fn an_executing_run_is_one_operation_with_the_run_as_its_destination() {
             during[0].activation,
             Some(Activation::GraduationRun { run_id: run.id.clone() })
         );
-        assert_eq!(during[0].label, "Graduating editor draft…");
+        assert_eq!(during[0].label, "Implementing editor draft…");
         assert_eq!(during[0].scope, None);
     }
     assert_eq!(seen[0][0].id, seen[1][0].id, "working and reviewing share one");

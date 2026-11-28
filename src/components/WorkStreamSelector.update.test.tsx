@@ -279,7 +279,7 @@ describe("what an update refuses (WSS-FR-CJYE, WSS-FR-QSAF, WSS-FR-ZWCB)", () =>
       /worktree holding main/,
     );
     expect(
-      within(row).getByRole("button", { name: "Open Changes" }),
+      within(row).getByRole("button", { name: "Open Commits" }),
     ).toBeInTheDocument();
   });
 
@@ -294,7 +294,7 @@ describe("what an update refuses (WSS-FR-CJYE, WSS-FR-QSAF, WSS-FR-ZWCB)", () =>
     );
   });
 
-  it("WSS-FR-QSAF: a base branch with no checkout says so and offers no Changes route", async () => {
+  it("WSS-FR-QSAF: a base branch with no checkout says so and offers no Commits route", async () => {
     const row = await startWith(STREAM_ERRORS.baseNotCheckedOut);
 
     expect(within(row).getByRole("alert").textContent).toMatch(
@@ -302,10 +302,10 @@ describe("what an update refuses (WSS-FR-CJYE, WSS-FR-QSAF, WSS-FR-ZWCB)", () =>
     );
     // There is no uncommitted work to settle, so the Changes route would lead
     // the author nowhere.
-    expect(within(row).queryByRole("button", { name: "Open Changes" })).toBeNull();
+    expect(within(row).queryByRole("button", { name: "Open Commits" })).toBeNull();
   });
 
-  it("WSS-FR-QSAF: Open Changes routes to the Changes panel", async () => {
+  it("PVC-FR-KTWB, WSS-FR-QSAF: Open Commits routes to the Commits panel", async () => {
     const onOpenChanges = vi.fn();
     backend([behind()], {
       update_work_stream: () => {
@@ -331,7 +331,7 @@ describe("what an update refuses (WSS-FR-CJYE, WSS-FR-QSAF, WSS-FR-ZWCB)", () =>
       ).getByTestId("stream-update-merge-source-w1"),
     );
     await userEvent.click(
-      await within(row).findByRole("button", { name: "Open Changes" }),
+      await within(row).findByRole("button", { name: "Open Commits" }),
     );
 
     expect(onOpenChanges).toHaveBeenCalled();

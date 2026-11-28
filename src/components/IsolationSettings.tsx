@@ -211,7 +211,7 @@ export function IsolationSettings() {
     return (
       <div>
         <p className="t-p" style={{ marginBottom: 20 }}>
-          How the agents of graduation runs are contained on this machine.
+          How the agents of implementation runs are contained on this machine.
         </p>
         <p className="t-p" role="alert">
           {loadError}
@@ -223,7 +223,7 @@ export function IsolationSettings() {
     return (
       <div>
         <p className="t-p" style={{ marginBottom: 20 }}>
-          How the agents of graduation runs are contained on this machine.
+          How the agents of implementation runs are contained on this machine.
         </p>
         <p className="t-p">Reading the isolation settings…</p>
       </div>
@@ -283,7 +283,7 @@ export function IsolationSettings() {
   return (
     <div>
       <p className="t-p" style={{ marginBottom: 20 }}>
-        How the agents of graduation runs are contained on this machine. The
+        How the agents of implementation runs are contained on this machine. The
         choice applies to stream, direct, and merge runs, and to no other agent
         call. It belongs to you and this machine — a project never carries it.
       </p>
@@ -336,7 +336,7 @@ export function IsolationSettings() {
         Where a project uses Docker-in-Docker, the VM runs a Docker daemon of its
         own by default, and the project's image must hold dockerd. In Project
         settings, a project can use the host Docker socket instead, which gives up
-        the isolation for its graduation runs.
+        the isolation for its implementation runs.
       </p>
 
       {sandboxed && (

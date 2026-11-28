@@ -160,8 +160,8 @@ describe("Project settings → Docker → dev container panel (SET-FR-FVIZ)", ()
     const [claude, codex] = within(rows).getAllByRole("listitem");
     expect(claude).toHaveTextContent("Claude Code");
     expect(claude).toHaveTextContent("Unknown until a build");
-    await waitFor(() => expect(claude).toHaveTextContent("Needed for graduation"));
-    expect(codex).not.toHaveTextContent("Needed for graduation");
+    await waitFor(() => expect(claude).toHaveTextContent("Needed for implementation"));
+    expect(codex).not.toHaveTextContent("Needed for implementation");
     expect(within(codex).queryByRole("button")).not.toBeInTheDocument();
     expect(codex).toHaveTextContent("must hold codex on the PATH");
     await userEvent.click(within(claude).getByRole("button", { name: "Add the Claude Code feature" }));
@@ -243,7 +243,7 @@ describe("Project settings → Docker → dev container panel (SET-FR-FVIZ)", ()
     const { unmount } = render(<ProjectAgentEnvironment />);
     // The resolved vendor is read in the same mount as the isolation mode, so
     // its mark is the sign that the reads have settled.
-    await screen.findByText("Needed for graduation");
+    await screen.findByText("Needed for implementation");
     expect(screen.queryByText(/Microsandbox does not apply/)).not.toBeInTheDocument();
     unmount();
     isolationMode = "microsandbox";

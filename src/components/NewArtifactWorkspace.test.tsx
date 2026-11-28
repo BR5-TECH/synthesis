@@ -215,7 +215,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     await waitFor(() => {
       const toggle = screen.getByRole("button", { name: "Show History" });
       expect(within(toggle).getByText("3")).toBeInTheDocument();
-      expect(toggle).toHaveAttribute("title", "3 versions of this draft");
+      expect(toggle).toHaveAttribute("title", "3 versions of this change");
     });
   });
 
@@ -301,15 +301,15 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     expect(discuss).toBeDisabled();
     expect(discuss).toHaveAttribute(
       "title",
-      "The discussion is already beside the draft",
+      "The discussion is already beside the change",
     );
     // ACT-FR-05: disabled rather than absent, and the entries beside it are
     // untouched — only Discuss has nothing left to do. An entry that vanished
     // would say the draft no longer affords it at all.
     expect(
       screen.getAllByRole("menuitem").map((e) => e.textContent?.trim()),
-    ).toEqual(["Discuss", "Graduate", "Copy as Source", "Publish to GitHub", "Archive"]);
-    expect(screen.getByRole("menuitem", { name: "Graduate" })).toBeEnabled();
+    ).toEqual(["Discuss", "Implement", "Copy as Source", "Publish to GitHub", "Archive"]);
+    expect(screen.getByRole("menuitem", { name: "Implement" })).toBeEnabled();
     expect(screen.getByRole("menuitem", { name: "Archive" })).toBeEnabled();
   });
 
@@ -327,7 +327,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
       "Discuss this with the agents you address",
     );
 
-    await userEvent.click(screen.getByRole("menuitem", { name: "Graduate" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Implement" }));
     await screen.findByRole("dialog");
     await openActions();
     const discuss = screen.getByRole("menuitem", { name: "Discuss" });
@@ -361,7 +361,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     );
     await waitFor(() =>
       expect(
-        screen.getByRole("textbox", { name: "Discuss this draft" }),
+        screen.getByRole("textbox", { name: "Discuss this change" }),
       ).toHaveFocus(),
     );
     // …and the action row's own control agrees, the two reaching one state
@@ -389,7 +389,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     // rather than opening over the draft. On a draft with nothing said about it
     // yet, it is the composer that opens the first discussion.
     const composer = (await screen.findByRole("textbox", {
-      name: "Discuss this draft",
+      name: "Discuss this change",
     })) as HTMLTextAreaElement;
 
     // ACT-FR-QWNP: no second composer opened over the draft, and the control
@@ -398,7 +398,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(document.querySelector(".draft-composer")).toBeNull();
     expect(
-      screen.getAllByRole("textbox", { name: "Discuss this draft" }),
+      screen.getAllByRole("textbox", { name: "Discuss this change" }),
     ).toHaveLength(1);
     await waitFor(() => expect(composer).toHaveFocus());
 
@@ -425,7 +425,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     // an author should be able to lose by clicking on their own document.
     renderWorkspace();
     const composer = await screen.findByRole("textbox", {
-      name: "Discuss this draft",
+      name: "Discuss this change",
     });
     await userEvent.type(composer, "rework the graduation part");
     await act(async () => {
@@ -439,7 +439,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     fireEvent.keyDown(window, { key: "Escape" });
 
     expect(
-      screen.getByRole("textbox", { name: "Discuss this draft" }),
+      screen.getByRole("textbox", { name: "Discuss this change" }),
     ).toHaveValue("rework the graduation part");
     expect(screen.getByText("picked.png")).toBeInTheDocument();
   });
@@ -459,7 +459,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     expect(document.querySelector(".draft-composer")).toBeNull();
     await waitFor(() =>
       expect(
-        screen.getByRole("textbox", { name: "Discuss this draft" }),
+        screen.getByRole("textbox", { name: "Discuss this change" }),
       ).toHaveFocus(),
     );
 
@@ -467,7 +467,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     await openActions();
     expect(screen.getByRole("menu")).toBeInTheDocument();
     expect(
-      screen.getByRole("textbox", { name: "Discuss this draft" }),
+      screen.getByRole("textbox", { name: "Discuss this change" }),
     ).toBeInTheDocument();
 
     expect(
@@ -478,7 +478,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
   it("NAW-FR-15: the composer's text is not part of any draft file", async () => {
     renderWorkspace();
     const composer = await screen.findByRole("textbox", {
-      name: "Discuss this draft",
+      name: "Discuss this change",
     });
     await userEvent.type(composer, "not a document");
 
@@ -634,7 +634,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     await screen.findByRole("button", { name: "Edit as Markdown source" });
     await editSource("still here");
 
-    await screen.findByText(/Could not write this draft's prompt/);
+    await screen.findByText(/Could not write this change's prompt/);
     expect(drafts.isDirty("d1")).toBe(true);
     expect(drafts.docs.get(drafts.key("d1", PROMPT))?.buffer).toBe("still here");
   });
@@ -670,7 +670,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     // Matched loosely: a button reading " Graduate " or carrying an icon is
     // the same lifecycle control this requirement takes out of the chrome.
     expect(
-      within(chrome).queryByRole("button", { name: /graduate|archive|ready/i }),
+      within(chrome).queryByRole("button", { name: /graduate|implement|archive|ready/i }),
     ).toBeNull();
     expect(screen.queryByText(/Mark ready/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/ready for implementation/i)).not.toBeInTheDocument();
@@ -681,19 +681,19 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
       within(menu)
         .getAllByRole("menuitem")
         .map((b) => b.textContent?.trim()),
-    ).toEqual(["Discuss", "Graduate", "Copy as Source", "Publish to GitHub", "Archive"]);
+    ).toEqual(["Discuss", "Implement", "Copy as Source", "Publish to GitHub", "Archive"]);
     // NAW-FR-17: enabled, with nothing declared beforehand.
-    expect(screen.getByRole("menuitem", { name: "Graduate" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Implement" })).toBeEnabled();
 
-    await userEvent.click(screen.getByRole("menuitem", { name: "Graduate" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Implement" }));
     expect(
-      await screen.findByRole("dialog", { name: /Graduate .artifact-window./ }),
+      await screen.findByRole("dialog", { name: /Implement .artifact-window./ }),
     ).toBeInTheDocument();
   });
 
   it("NAW-FR-27, NAW-FR-30, ACT-FR-03: the control expands, collapses, and dismisses on Escape and an outside press", async () => {
     renderWorkspace();
-    const toggle = await screen.findByRole("button", { name: "Draft actions" });
+    const toggle = await screen.findByRole("button", { name: "Change actions" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 
@@ -701,7 +701,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     await userEvent.click(toggle);
     expect(screen.getByRole("menu")).toBeInTheDocument();
     await userEvent.click(
-      screen.getByRole("button", { name: "Close draft actions" }),
+      screen.getByRole("button", { name: "Close change actions" }),
     );
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 
@@ -776,7 +776,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     // NAW-FR-17: graduation carries no precondition on the status.
     await graduate();
     const dialog = await screen.findByRole("dialog", {
-      name: /Graduate .artifact-window./,
+      name: /Implement .artifact-window./,
     });
     await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
 
@@ -819,7 +819,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
       await screen.findByText(/kept as the record of what the specification/),
     ).toBeInTheDocument();
     await openActions();
-    expect(screen.getByRole("menuitem", { name: "Graduate" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Implement" })).toBeDisabled();
     expect(screen.getByRole("menuitem", { name: "Archive" })).toBeDisabled();
   });
 
@@ -844,7 +844,7 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /artifact-window/ }),
     );
-    const field = screen.getByLabelText("Draft name");
+    const field = screen.getByLabelText("Change name");
     await userEvent.clear(field);
     // Deliberately not what the stub answers with: the typed text and the
     // stored name differ here, so reporting `name` or the field's own value
@@ -864,19 +864,19 @@ describe("New Artifact workspace (NAW-new-artifact.md)", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /artifact-window/ }),
     );
-    const field = screen.getByLabelText("Draft name");
+    const field = screen.getByLabelText("Change name");
     await userEvent.clear(field);
     await userEvent.type(field, "   {Enter}");
 
     expect(invokeMock.mock.calls.some((c) => c[0] === "rename_draft")).toBe(false);
     expect(onNameChanged).not.toHaveBeenCalled();
     // The field closes and the chrome reads the name it had.
-    expect(screen.queryByLabelText("Draft name")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Change name")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /artifact-window/ })).toBeInTheDocument();
 
     // And a commit of the unchanged name is likewise not a rename.
     await userEvent.click(screen.getByRole("button", { name: /artifact-window/ }));
-    await userEvent.type(screen.getByLabelText("Draft name"), "{Enter}");
+    await userEvent.type(screen.getByLabelText("Change name"), "{Enter}");
     expect(invokeMock.mock.calls.some((c) => c[0] === "rename_draft")).toBe(false);
   });
 

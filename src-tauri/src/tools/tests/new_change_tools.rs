@@ -57,7 +57,7 @@ fn pnc_is_a_portable_tool_with_its_fixed_text_and_schema() {
     let t = tool(&f, &QUIET);
     assert_eq!(
         <ProposeNewChangeTool<tauri::test::MockRuntime> as PortableTool>::NAME,
-        "propose_new_change"
+        "propose_new_openspec_change"
     );
     assert_eq!(t.description(), propose_new_change::DESCRIPTION);
     let schema = t.parameters();
@@ -208,7 +208,7 @@ fn pnc_logs_ids_and_counts_and_no_text() {
         .records;
     let info = records.iter().find(|r| r.level == LogLevel::Info).expect("info");
     let fields = serde_json::to_value(&info.fields).expect("fields");
-    assert_eq!(fields["tool"], "propose_new_change");
+    assert_eq!(fields["tool"], "propose_new_openspec_change");
     assert_eq!(fields["name"], "part-one");
     assert_eq!(fields["files"], 1);
     let all = serde_json::to_string(&records.iter().map(|r| &r.fields).collect::<Vec<_>>())

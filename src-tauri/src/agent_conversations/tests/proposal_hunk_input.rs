@@ -111,7 +111,7 @@ fn a_proposal_hunk_names_its_change_in_the_history_and_on_the_current_comment() 
 
     let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &trigger);
     let expected = format!(
-        "[about proposed change {hunk_id} to {}: replace — undecided — changes: \"Loose\" — offers: \"Tidy\"]",
+        "[about proposed edit {hunk_id} to {}: replace — undecided — changes: \"Loose\" — offers: \"Tidy\"]",
         proposal.path
     );
     let history = section_of(&sections, TAG_DISCUSSION_HISTORY);
@@ -151,7 +151,7 @@ fn a_proposal_hunk_names_the_state_its_change_holds_now() {
     assert!(
         current
             .body
-            .contains(&format!("change {hunk_id} to {}: replace — rejected", proposal.path)),
+            .contains(&format!("proposed edit {hunk_id} to {}: replace — rejected", proposal.path)),
         "{}",
         current.body
     );
@@ -183,7 +183,7 @@ fn a_proposal_hunk_that_cannot_be_read_keeps_a_bare_line_with_its_id() {
     let sections = build_input(Roots::same(&h.root()), &ConversationOrigin::of(&thread), &trigger);
     let current = section_of(&sections, TAG_CURRENT_COMMENT);
     assert!(
-        current.body.contains("[about proposed change h-nonesuch to prompt.md]"),
+        current.body.contains("[about proposed edit h-nonesuch to prompt.md]"),
         "{}",
         current.body
     );
@@ -205,9 +205,7 @@ fn a_proposal_hunk_line_bounds_its_excerpts() {
         diagram: false,
     };
     let line = super::sections::proposal_hunk_line("prompt.md", &change);
-    assert!(
-        line.starts_with("[about proposed change h1 to prompt.md: del — accepted — changes: \"")
-    );
+    assert!(line.starts_with("[about proposed edit h1 to prompt.md: del — accepted — changes: \""));
     assert!(line.contains("…\""), "the excerpt is cut: {line}");
     assert!(!line.contains("offers:"), "a deletion offers no text: {line}");
     assert!(line.chars().count() < 250, "{line}");

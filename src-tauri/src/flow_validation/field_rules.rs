@@ -97,7 +97,7 @@ pub fn check_draft_links<'a>(
                 "duplicate_draft_link",
                 item_id,
                 format!(
-                    "`{item_id}` links the draft `{draft_id}`, which another item already links"
+                    "`{item_id}` links the change `{draft_id}`, which another item already links"
                 ),
             ));
         }

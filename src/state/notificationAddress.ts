@@ -359,9 +359,9 @@ export function describeTarget(target: NotificationTarget): string {
       return name ?? target.path;
     }
     case "draft":
-      return "that draft";
+      return "that change";
     case "run":
-      return "that graduation run";
+      return "that implementation run";
     case "panel":
       return `the ${target.surface} panel`;
     case "bottom":

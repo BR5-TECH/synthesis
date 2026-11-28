@@ -52,7 +52,7 @@ async function openGraduation(requested: string | null = null) {
       sectionRequest={requested ? { section: requested, nonce: 1 } : null}
     />,
   );
-  if (!requested) await userEvent.click(screen.getByText("Graduation"));
+  if (!requested) await userEvent.click(screen.getByText("Implementation"));
   const field = await screen.findByTestId("graduation-time-limit");
   await waitFor(() => expect(field).not.toBeDisabled());
   return field as HTMLInputElement;
@@ -69,8 +69,8 @@ describe("Project settings — Graduation", () => {
       "Bounds each conversation turn whose provider sets no turn timeout.",
     );
     // SET-FR-DHFS: the row no longer bounds graduation turns, and says so.
-    expect(note).toHaveTextContent("It does not bound graduation turns");
-    expect(note).not.toHaveTextContent("Bounds each graduation turn");
+    expect(note).toHaveTextContent("It does not bound implementation turns");
+    expect(note).not.toHaveTextContent(/Bounds each (graduation|implementation) turn/);
   });
 
   it("SET-FR-DHFS: an unset limit shows the two-hour default as a placeholder", async () => {
@@ -179,19 +179,19 @@ describe("Project settings — Graduation", () => {
       return undefined;
     });
     render(<Settings contentRoot="/p#0" lineEndings="crlf" onSelectLineEndings={vi.fn()} />);
-    await userEvent.click(screen.getByText("Graduation"));
+    await userEvent.click(screen.getByText("Implementation"));
     expect(await screen.findByTestId("graduation-time-limit-load-error")).toHaveTextContent(
       "project.toml is not valid TOML",
     );
   });
 
-  it("SET-FR-03: Graduation is listed in the section nav after Docker", async () => {
+  it("PVC-FR-QWAN, SET-FR-03: Implementation is listed in the section nav after Docker", async () => {
     backend(null);
     render(<Settings contentRoot="/p#0" lineEndings="crlf" onSelectLineEndings={vi.fn()} />);
-    const nav = screen.getByText("Graduation").closest("nav") ?? document.body;
+    const nav = screen.getByText("Implementation").closest("nav") ?? document.body;
     const text = nav.textContent ?? "";
     expect(text.indexOf("Docker")).toBeGreaterThanOrEqual(0);
-    expect(text.indexOf("Graduation")).toBeGreaterThan(text.indexOf("Docker"));
+    expect(text.indexOf("Implementation")).toBeGreaterThan(text.indexOf("Docker"));
   });
 
   it("SET-FR-YMRV: the bounds of a committed entry", () => {

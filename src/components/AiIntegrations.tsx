@@ -506,7 +506,7 @@ export function AiApiIntegrations() {
           shown back to you.
         </p>
         <p className="t-p" style={{ margin: 0 }}>
-          The model and reasoning here are used only by the graduation loop and
+          The model and reasoning here are used only by the implementation loop and
           by the driver classifier of multi-persona conversations. An agent
           uses its own model and reasoning, set in the Agents section.
         </p>

@@ -12,10 +12,10 @@ import { showToast } from "../../state/toasts";
 /** NTF-FR-RGVU: the key of the toast a failed copy shows. */
 export const COPY_FAILED_KEY = "draft-copy-failed";
 /** NTF-FR-RGVU: the title of that toast. */
-export const COPY_FAILED_TITLE = "Draft not copied";
+export const COPY_FAILED_TITLE = "Change not copied";
 /** NTF-FR-RGVU: the body of that toast. */
 export const COPY_FAILED_BODY =
-  "The prompt of the draft was not copied to the clipboard.";
+  "The prompt of the change was not copied to the clipboard.";
 
 /** Why a copy failed, as the log records it. */
 type CopyFailure = "not_loaded" | "unavailable" | string;

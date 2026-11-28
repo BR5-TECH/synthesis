@@ -149,7 +149,7 @@ fn a_repeated_text_is_refused_with_its_place_and_the_correction() {
         );
         assert!(refusal.retryable());
         let text = refusal.to_string();
-        assert!(text.starts_with("Change 2 of 2"), "{text}");
+        assert!(text.starts_with("Edit 2 of 2"), "{text}");
         assert!(text.contains("`lead` or `trail`"), "{text}");
         assert!(f.proposals().is_empty());
     }
@@ -300,7 +300,7 @@ fn a_long_trail_and_two_long_contexts_are_named_as_such() {
         assert_eq!(refusal.kind(), ToolErrorKind::InvalidArgs);
         assert!(refusal.retryable());
         let text = refusal.to_string();
-        assert!(text.starts_with("Change 2 of 2") && text.contains(correction), "{text}");
+        assert!(text.starts_with("Edit 2 of 2") && text.contains(correction), "{text}");
         assert!(f.proposals().is_empty());
         assert!(!f.proposed.load(Ordering::SeqCst));
         assert_eq!(f.artifact_body(), ORIGINAL, "the artifact is untouched");

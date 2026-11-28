@@ -15,6 +15,17 @@ export type ProposalMark = "proposed" | "withdrawn";
 /** The order the summary counts the operations in (MPV-FR-WKNB). */
 export const OP_ORDER: readonly RowOp[] = ["changed", "added", "withdrawn", "draft"];
 
+/**
+ * PVC-FR-HMJD: the word a badge and a summary show for an operation. A
+ * `new_draft` row creates a change.
+ */
+export const OP_WORD: Readonly<Record<RowOp, string>> = {
+  changed: "changed",
+  added: "added",
+  withdrawn: "withdrawn",
+  draft: "change",
+};
+
 /** The close change of a row, or null. */
 export function closeChangeOf(row: MapPlanRow): RowChange | null {
   if (row.kind !== "modify_issue") return null;
@@ -104,7 +115,7 @@ export function opCounts(proposal: MapPlanProposal): string {
     counts.set(op, (counts.get(op) ?? 0) + 1);
   }
   return OP_ORDER.filter((op) => (counts.get(op) ?? 0) > 0)
-    .map((op) => `${counts.get(op)} ${op}`)
+    .map((op) => `${counts.get(op)} ${OP_WORD[op]}`)
     .join(", ");
 }
 

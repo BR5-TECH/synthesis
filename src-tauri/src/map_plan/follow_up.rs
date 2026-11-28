@@ -77,7 +77,7 @@ fn subject(row: &MapPlanRow) -> String {
     let title = title_of(row);
     let result = row.result.as_ref();
     match (&row.fields, row.state) {
-        (RowFields::NewDraft(_), _) => format!("the new draft \"{title}\""),
+        (RowFields::NewDraft(_), _) => format!("the new change \"{title}\""),
         (_, RowState::Accepted) => {
             let number = result.and_then(|r| r.issue_number);
             let url = result.and_then(|r| r.issue_url.clone());

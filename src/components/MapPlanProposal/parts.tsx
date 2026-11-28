@@ -4,7 +4,7 @@
  * badge, the kind chip, and the reference.
  */
 import type { MapPlanRow } from "../../types";
-import { rowOp, rowRef, type RowOp, type RowStatus } from "../../state/mapPlan/derive";
+import { OP_WORD, rowOp, rowRef, type RowOp, type RowStatus } from "../../state/mapPlan/derive";
 import { KindChip } from "../Flow/boardItems";
 import type { MapPlanHost } from "./host";
 
@@ -40,7 +40,7 @@ export function OpBadge({ row }: { row: MapPlanRow }) {
   const op = rowOp(row);
   return (
     <span className={`pp-op ${OP_CLASS[op]}`} data-op={op}>
-      {op}
+      {OP_WORD[op]}
     </span>
   );
 }

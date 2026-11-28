@@ -98,8 +98,8 @@ export function GraduationRail({
         {listed.length === 0 &&
           (runs.length === 0 ? (
             <div data-testid="graduation-empty">
-              <PanelEmptyState line="Nothing graduating">
-                A graduation begins from a draft's Graduate action.
+              <PanelEmptyState line="Nothing implementing">
+                An implementation begins from a change's Implement action.
               </PanelEmptyState>
             </div>
           ) : (
@@ -110,7 +110,7 @@ export function GraduationRail({
             two targets — the button that opens the run and the cluster that
             acts on it — and a listbox owns options and nothing else. The
             selection is carried by `aria-current` on the row that is open. */}
-        <div role="list" aria-label="Graduation run history">
+        <div role="list" aria-label="Implementation run history">
           {listed.map((entry) => (
             <RailRow
               key={entry.id}

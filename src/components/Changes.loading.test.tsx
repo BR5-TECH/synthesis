@@ -192,7 +192,7 @@ describe("reloading", () => {
     await screen.findByText("Library.tsx");
 
     entries = [LIB, HOOK];
-    await userEvent.click(screen.getByLabelText("Refresh changes"));
+    await userEvent.click(screen.getByLabelText("Refresh"));
     expect(await screen.findByText("useEditHistory.ts")).toBeInTheDocument();
     expect(calls("list_uncommitted_changes")).toHaveLength(2);
   });
@@ -253,7 +253,7 @@ describe("bounded reach over the repository (CHG-FR-21)", () => {
 // ---------------------------------------------------------------------------
 
 describe("inline states", () => {
-  it("explains a project that is not a Git repository, without failing (CHG-FR-22, CHG-FR-47, CHG-FR-56, SNV-FR-60)", async () => {
+  it("explains a project that is not a Git repository, without failing, under the Commits header (CHG-FR-22, CHG-FR-47, CHG-FR-56, SNV-FR-60, PVC-FR-KTWB)", async () => {
     backend({ fail: { list_uncommitted_changes: "not a git repository" } });
     renderPanel();
 
@@ -273,18 +273,18 @@ describe("inline states", () => {
     // SNV-FR-60: outside a repository there is no comparison to select and
     // nothing to narrow, so the control stack is not rendered either.
     expect(screen.queryByRole("radio", { name: "Uncommitted" })).toBeNull();
-    expect(screen.queryByLabelText("Filter changes")).toBeNull();
+    expect(screen.queryByLabelText("Filter files")).toBeNull();
     // The panel itself still rendered rather than failing.
-    expect(screen.getByText("Changes")).toBeInTheDocument();
+    expect(screen.getByText("Commits")).toBeInTheDocument();
   });
 
-  it("composes the empty change set like the not-a-repository state but says a different thing (CHG-FR-23)", async () => {
+  it("composes the empty change set like the not-a-repository state but says Nothing to commit (CHG-FR-23, PVC-FR-KTWB)", async () => {
     backend({ uncommitted: changeSet([]) });
     renderPanel();
 
     // CHG-FR-23 / SNV-FR-60: same block, same placement, different statement —
     // the two are told apart by what they say, not by where they sit.
-    const line = await screen.findByText("No changes.");
+    const line = await screen.findByText("Nothing to commit.");
     const block = line.closest(".panel-empty");
     expect(block).not.toBeNull();
     expect(block?.parentElement).toHaveClass("vpanel__body--empty");
@@ -302,7 +302,7 @@ describe("inline states", () => {
     // exactly when the author reaches for Branch mode.
     expect(screen.getByRole("radio", { name: "Branch" })).toBeInTheDocument();
     // The two narrowing controls go — nothing for them to narrow (SNV-FR-60).
-    expect(screen.queryByLabelText("Filter changes")).toBeNull();
+    expect(screen.queryByLabelText("Filter files")).toBeNull();
     expect(screen.queryByLabelText("Filter by type")).toBeNull();
     // A group with nothing in it renders nothing at all (CHG-FR-16).
     expect(rowNames()).toEqual([]);
@@ -315,8 +315,8 @@ describe("inline states", () => {
     });
     renderPanel();
 
-    await screen.findByText("No changes.");
-    // The statement is mode-specific: the same "No changes." line over a
+    await screen.findByText("Nothing to commit.");
+    // The statement is mode-specific: the same "Nothing to commit." line over a
     // different sentence, because what yields nothing differs between the two
     // comparisons and the author needs to know which one they are looking at.
     expect(
@@ -337,7 +337,7 @@ describe("inline states", () => {
     });
     renderPanel();
 
-    const message = await screen.findByText(/No changes match/);
+    const message = await screen.findByText(/No files match/);
     // SNV-FR-61: the shared narrowed-to-nothing state, which every vertical
     // panel renders the same way — and not the first-class empty block, which
     // says a different thing and takes the filters away with it.
@@ -365,13 +365,13 @@ describe("inline states", () => {
     // Asserting mere presence would pass against a panel that silently reset
     // the author's lens and text, which is the half of SNV-FR-61 that makes the
     // state recoverable.
-    await userEvent.type(screen.getByLabelText("Filter changes"), "package");
+    await userEvent.type(screen.getByLabelText("Filter files"), "package");
     await pickSelector("Filter by type", "skill");
 
-    expect(await screen.findByText(/No changes match/)).toBeInTheDocument();
+    expect(await screen.findByText(/No files match/)).toBeInTheDocument();
     expect(document.querySelector(".panel-empty")).toBeNull();
     expect(selectorValue("Filter by type")).toBe("skill");
-    expect(screen.getByLabelText("Filter changes")).toHaveValue("package");
+    expect(screen.getByLabelText("Filter files")).toHaveValue("package");
   });
 
   it("names an unresolvable target branch and keeps the picker usable (CHG-FR-05)", async () => {

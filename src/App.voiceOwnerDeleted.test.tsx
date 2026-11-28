@@ -134,10 +134,10 @@ describe("voice mode and the deletion of its draft", () => {
     expect(getVoiceState().activeKey).toBe("draft:d1");
     await screen.findByTestId("status-bar-voice");
 
-    fireEvent.contextMenu(await screen.findByRole("treeitem", { name: /^Draft Untitled/ }));
+    fireEvent.contextMenu(await screen.findByRole("treeitem", { name: /^Change Untitled/ }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     await userEvent.click(
-      within(screen.getByRole("dialog", { name: "Delete draft" })).getByRole("button", {
+      within(screen.getByRole("dialog", { name: "Delete change" })).getByRole("button", {
         name: "Delete",
       }),
     );
@@ -155,10 +155,10 @@ describe("voice mode and the deletion of its draft", () => {
     act(() => {
       enterVoiceMode("draft:other", null, { kind: "draft", draftId: "other" });
     });
-    fireEvent.contextMenu(await screen.findByRole("treeitem", { name: /^Draft Untitled/ }));
+    fireEvent.contextMenu(await screen.findByRole("treeitem", { name: /^Change Untitled/ }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     await userEvent.click(
-      within(screen.getByRole("dialog", { name: "Delete draft" })).getByRole("button", {
+      within(screen.getByRole("dialog", { name: "Delete change" })).getByRole("button", {
         name: "Delete",
       }),
     );

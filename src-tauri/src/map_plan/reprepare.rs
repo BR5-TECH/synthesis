@@ -91,7 +91,7 @@ fn subject(row: &MapPlanRow) -> String {
     match &row.fields {
         RowFields::ModifyIssue(fields) => format!("#{}", fields.number),
         RowFields::CreateIssue(fields) => format!("the new issue \"{}\"", fields.title),
-        RowFields::NewDraft(fields) => format!("the new draft \"{}\"", fields.name),
+        RowFields::NewDraft(fields) => format!("the new change \"{}\"", fields.name),
     }
 }
 

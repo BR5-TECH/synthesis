@@ -194,20 +194,20 @@ describe("reveal a changed file (CHG-FR-54)", () => {
     await screen.findByText("Library.tsx");
 
     // A filter that admits the target must survive the reveal untouched.
-    await userEvent.type(screen.getByLabelText("Filter changes"), "Library");
+    await userEvent.type(screen.getByLabelText("Filter files"), "Library");
     await waitFor(() => expect(rowNames()).not.toContain("onboarding.md"));
     act(() => revealFile("src/components/Library.tsx"));
     await waitFor(() =>
       expect(row("Library.tsx")).toHaveAttribute("data-selected", "true"),
     );
-    expect(screen.getByLabelText("Filter changes")).toHaveValue("Library");
+    expect(screen.getByLabelText("Filter files")).toHaveValue("Library");
 
     // One that hides it is cleared — and only then.
     act(() => revealFile(".claude/skills/onboarding.md"));
     await waitFor(() =>
       expect(row("onboarding.md")).toHaveAttribute("data-selected", "true"),
     );
-    expect(screen.getByLabelText("Filter changes")).toHaveValue("");
+    expect(screen.getByLabelText("Filter files")).toHaveValue("");
   });
 
   it("SNV-FR-68: a finished reveal is not re-applied when the panel remounts", async () => {

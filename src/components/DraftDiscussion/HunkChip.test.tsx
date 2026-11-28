@@ -58,7 +58,7 @@ afterEach(() => {
 });
 
 describe("DCR-FR-12: what the chip holds", () => {
-  it("DCR-FR-12: an undecided change's chip holds Accept, Reject, and Discuss", () => {
+  it("DCR-FR-12: an undecided edit's chip holds Accept, Reject, and Discuss", () => {
     mount(hunk());
     expect(screen.getByRole("button", { name: /Accept/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Reject/ })).toBeEnabled();
@@ -82,7 +82,7 @@ describe("DCR-FR-12: what the chip holds", () => {
 describe("DCR-FR-10: what a change is called", () => {
   it("DCR-FR-10: a rejected change's accessible name says that it is rejected", () => {
     expect(hunkLabel(hunk({ state: "rejected" }))).toBe(
-      "Change 2 of 3, replacement proposed by @arch, rejected",
+      "Edit 2 of 3, replacement proposed by @arch, rejected",
     );
     expect(hunkLabel(hunk())).not.toContain("rejected");
   });
@@ -199,15 +199,16 @@ describe("DCR-FR-HBTM: Compare on the chip of a diagram hunk", () => {
     expect(scroller).toHaveFocus();
   });
 
-  it("DCR-FR-BYSX, DCR-FR-10: a diagram hunk's accessible name gives its kind as a diagram change, addition, or removal", () => {
+  it("DCR-FR-BYSX, PVC-FR-VBPY: a diagram hunk's accessible name gives its kind as a diagram edit, addition, or removal, and counts it as an edit", () => {
     expect(hunkLabel(hunk({ diagram }))).toBe(
-      "Change 2 of 3, diagram change proposed by @arch",
+      "Edit 2 of 3, diagram edit proposed by @arch",
     );
     expect(hunkLabel(hunk({ diagram: { ...diagram, oldSource: null }, kind: "add" }))).toBe(
-      "Change 2 of 3, diagram addition proposed by @arch",
+      "Edit 2 of 3, diagram addition proposed by @arch",
     );
     expect(hunkLabel(hunk({ diagram: { ...diagram, newSource: null }, kind: "del" }))).toBe(
-      "Change 2 of 3, diagram removal proposed by @arch",
+      "Edit 2 of 3, diagram removal proposed by @arch",
     );
+    expect(hunkLabel(hunk({ diagram }))).not.toMatch(/change/i);
   });
 });

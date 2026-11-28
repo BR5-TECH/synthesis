@@ -71,6 +71,34 @@ describe("the Documents toggle (DPN-FR-KYSK, SNV-FR-UCJH, SNV-FR-49)", () => {
   });
 });
 
+describe("the product vocabulary of the toggles (PVC-FR-KTWB, PVC-FR-HMJD, SNV-FR-49)", () => {
+  it("PVC-FR-KTWB, SNV-FR-49: the toggle of the changes surface is named Commits, in its tooltip and its accessible name", async () => {
+    const props = renderBar();
+    const toggle = screen.getByRole("button", { name: "Commits" });
+    expect(toggle).toHaveAttribute("aria-label", "Commits");
+    await act(async () => toggle.focus());
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Commits");
+    await userEvent.click(toggle);
+    expect(props.onSelectPanelSurface).toHaveBeenCalledWith("changes");
+  });
+
+  it("PVC-FR-HMJD, SNV-FR-49: the toggle of the drafts surface is named Changes, in its tooltip and its accessible name", async () => {
+    const props = renderBar();
+    const toggle = screen.getByRole("button", { name: "Changes" });
+    expect(toggle).toHaveAttribute("aria-label", "Changes");
+    await act(async () => toggle.focus());
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Changes");
+    await userEvent.click(toggle);
+    expect(props.onSelectPanelSurface).toHaveBeenCalledWith("drafts");
+  });
+
+  it("PVC-FR-KTWB, PVC-FR-HMJD: no toggle is named Drafts, and exactly one is named Changes", () => {
+    renderBar();
+    expect(screen.queryByRole("button", { name: "Drafts" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Changes" })).toHaveLength(1);
+  });
+});
+
 describe("the activity bar's two clusters (SNV-FR-44)", () => {
   it("groups vertical-panel toggles at the top and bottom-panel toggles at the foot", () => {
     renderBar();
@@ -83,8 +111,8 @@ describe("the activity bar's two clusters (SNV-FR-44)", () => {
       "Documents",
       "Notes",
       "Comments",
-      "Drafts",
       "Changes",
+      "Commits",
       "Terminals",
     ]);
     // SNV-FR-44: Logs sits beside Runs — the two surfaces that stream lines as
@@ -117,8 +145,8 @@ describe("the activity bar's two clusters (SNV-FR-44)", () => {
       ["Documents", "documents"],
       ["Notes", "notes"],
       ["Comments", "comments"],
-      ["Drafts", "drafts"],
-      ["Changes", "changes"],
+      ["Changes", "drafts"],
+      ["Commits", "changes"],
       ["Terminals", "terminals"],
     ] as const) {
       const props = renderBar();
@@ -169,7 +197,7 @@ describe("which toggle reads as active (SNV-FR-45 / SNV-FR-46)", () => {
       bottomVisible: true,
       bottomSurface: "git",
     });
-    expect(activeNames()).toEqual(["Changes", "Git"]);
+    expect(activeNames()).toEqual(["Commits", "Git"]);
   });
 
   it("marks Comments when the panel is showing it", () => {
@@ -177,9 +205,9 @@ describe("which toggle reads as active (SNV-FR-45 / SNV-FR-46)", () => {
     expect(activeNames()).toEqual(["Comments"]);
   });
 
-  it("marks Drafts when the panel is showing it (SNV-FR-44, SNV-FR-49, SNV-FR-45, DRP-FR-01)", () => {
+  it("marks Changes when the panel is showing the drafts surface (SNV-FR-44, SNV-FR-49, SNV-FR-45, DRP-FR-01, PVC-FR-HMJD)", () => {
     renderBar({ panelSurface: "drafts" });
-    expect(activeNames()).toEqual(["Drafts"]);
+    expect(activeNames()).toEqual(["Changes"]);
   });
 
   it("marks Logs when the bottom panel is showing it", () => {
@@ -219,7 +247,7 @@ describe("the History toggle's enablement (SNV-FR-48 / HVW-FR-01)", () => {
       }),
     ).toBeDisabled();
     // …and it is the only toggle affected.
-    for (const name of ["Project", "Notes", "Changes", "Runs", "Git"]) {
+    for (const name of ["Project", "Notes", "Commits", "Runs", "Git"]) {
       expect(screen.getByRole("button", { name })).toBeEnabled();
     }
   });
@@ -314,7 +342,7 @@ describe("Terminals toggle", () => {
     const spy = vi.spyOn(navigator, "platform", "get").mockReturnValue("Win32");
     renderBar();
     expect(screen.queryByRole("button", { name: "Terminals" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Changes" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Commits" })).toBeInTheDocument();
     spy.mockRestore();
   });
 });

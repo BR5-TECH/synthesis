@@ -280,9 +280,9 @@ describe("the vertical panel's toggles (SNV-FR-45 / SNV-FR-37 / SNV-FR-45)", () 
     render(<App />);
     await enterIde();
 
-    await userEvent.click(toggle("Changes"));
+    await userEvent.click(toggle("Commits"));
     await waitFor(() =>
-      expect(toggle("Changes")).toHaveAttribute("data-active", "true"),
+      expect(toggle("Commits")).toHaveAttribute("data-active", "true"),
     );
     expect(vpanel()).toBeTruthy();
     expect(toggle("Project")).toHaveAttribute("data-active", "false");
@@ -544,7 +544,7 @@ describe("every activity-bar toggle carries a tooltip (SNV-FR-49)", () => {
     render(<App />);
     await enterIde();
 
-    for (const name of ["Project", "Notes", "Changes", "Runs", "Git"]) {
+    for (const name of ["Project", "Notes", "Commits", "Runs", "Git"]) {
       toggle(name).focus();
       const tip = await screen.findByRole("tooltip");
       expect(tip).toHaveTextContent(name);

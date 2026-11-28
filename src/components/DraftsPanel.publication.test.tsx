@@ -208,7 +208,7 @@ describe("Filter positions with a legacy published draft (DRP-FR-07, DRP-FR-08)"
     drafts = mixed();
     renderPanel({ filter: "graduated" });
     const graduated = await waitFor(() => draftRow("graduated-draft"));
-    expect(within(graduated).getByTestId("draft-graduated-marker")).toHaveTextContent("Graduated");
+    expect(within(graduated).getByTestId("draft-graduated-marker")).toHaveTextContent("Implemented");
   });
 
   it("DRP-FR-34: a reveal of a legacy published draft keeps the active position", async () => {
@@ -221,7 +221,7 @@ describe("Filter positions with a legacy published draft (DRP-FR-07, DRP-FR-08)"
       expect(draftRow("published-draft")).toHaveAttribute("aria-selected", "true"),
     );
     // The active position already admits the row, so nothing is relaxed.
-    expect(selectorValue("Draft status")).toBe("active");
+    expect(selectorValue("Change status")).toBe("active");
   });
 
   it("DRP-FR-07: the all-drafts position admits every status", async () => {
@@ -269,8 +269,8 @@ describe("The published position (DRP-FR-07, DRP-FR-GBVS)", () => {
     await waitFor(() => draftRow("plain-draft"));
     expect(screen.queryByText("archived-draft")).toBeNull();
 
-    await pickSelector("Draft status", "published");
-    expect(selectorValue("Draft status")).toBe("published");
+    await pickSelector("Change status", "published");
+    expect(selectorValue("Change status")).toBe("published");
     await waitFor(() => expect(screen.queryByText("plain-draft")).toBeNull());
     expect(draftRow("archived-draft")).toBeInTheDocument();
     expect(draftRow("graduated-draft")).toBeInTheDocument();
@@ -282,7 +282,7 @@ describe("The published position (DRP-FR-07, DRP-FR-GBVS)", () => {
     await waitFor(() => draftRow("archived-draft"));
     expect(within(draftRow("archived-draft")).getByTestId("draft-archived-marker")).toBeInTheDocument();
     expect(within(draftRow("graduated-draft")).getByTestId("draft-graduated-marker")).toHaveTextContent(
-      "Graduated",
+      "Implemented",
     );
     // A legacy published row with a record shows one label: the marker.
     expect(within(draftRow("published-draft")).getAllByText("Published")).toHaveLength(1);
@@ -329,7 +329,7 @@ describe("The published position (DRP-FR-07, DRP-FR-GBVS)", () => {
 
     act(() => revealDraft("d-arch"));
     await waitFor(() => expect(draftRow("archived-draft")).toHaveAttribute("aria-selected", "true"));
-    expect(selectorValue("Draft status")).toBe("published");
+    expect(selectorValue("Change status")).toBe("published");
   });
 
   it("DRP-FR-34: a reveal of an unpublished draft relaxes the published position to all drafts", async () => {
@@ -339,7 +339,7 @@ describe("The published position (DRP-FR-07, DRP-FR-GBVS)", () => {
 
     act(() => revealDraft("d-plain"));
     await waitFor(() => expect(draftRow("plain-draft")).toHaveAttribute("aria-selected", "true"));
-    expect(selectorValue("Draft status")).toBe("all");
+    expect(selectorValue("Change status")).toBe("all");
   });
 });
 
@@ -397,14 +397,14 @@ describe("The five-button status row at a narrow width (SNV-FR-63, DRP-FR-07)", 
   it("SNV-FR-63, DRP-FR-07: keeps Active, Published, and the active position at every width", async () => {
     drafts = [row("d-active", "active")];
     renderPanel({ filter: "graduated" });
-    await waitFor(() => expect(selectorValues("Draft status")).toHaveLength(5));
+    await waitFor(() => expect(selectorValues("Change status")).toHaveLength(5));
 
     await resizeTo(2 * BUTTON_W + 4);
-    expect(selectorValues("Draft status")).toEqual(["active", "graduated", "published"]);
-    expect(selectorValue("Draft status")).toBe("graduated");
+    expect(selectorValues("Change status")).toEqual(["active", "graduated", "published"]);
+    expect(selectorValue("Change status")).toBe("graduated");
 
     await resizeTo(1000);
-    expect(selectorValues("Draft status")).toEqual([
+    expect(selectorValues("Change status")).toEqual([
       "active",
       "archived",
       "graduated",

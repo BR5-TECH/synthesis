@@ -14,11 +14,11 @@ import { Icon } from "../icons";
 
 /** NAW-FR-AXFQ: why each action other than Graduate is disabled. */
 export const SHADOW_DISCUSS_REASON =
-  "This draft mirrors a GitHub issue, so it cannot be discussed here";
+  "This change mirrors a GitHub issue, so it cannot be discussed here";
 export const SHADOW_PUBLISH_REASON =
-  "This draft already mirrors a GitHub issue, so it cannot be published";
+  "This change already mirrors a GitHub issue, so it cannot be published";
 export const SHADOW_ARCHIVE_REASON =
-  "This draft mirrors a GitHub issue, so it cannot be archived or restored";
+  "This change mirrors a GitHub issue, so it cannot be archived or restored";
 
 const issueLabel = (issue: GithubIssueLink) =>
   `${issue.repositoryOwner}/${issue.repositoryName}#${issue.issueNumber}`;
@@ -31,8 +31,8 @@ export function GithubShadowBanner({ issue }: { issue: GithubIssueLink | null })
       role="note"
       data-testid="draft-github-shadow-banner"
     >
-      This draft mirrors the GitHub issue
-      {issue ? ` ${issueLabel(issue)}` : ""} and cannot be edited. Graduate it
+      This change mirrors the GitHub issue
+      {issue ? ` ${issueLabel(issue)}` : ""} and cannot be edited. Implement it
       to start work on the issue.
     </div>
   );

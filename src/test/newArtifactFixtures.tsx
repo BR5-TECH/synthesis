@@ -450,7 +450,7 @@ export function renderNamed(initial: string) {
  */
 export async function openActions() {
   await userEvent.click(
-    await screen.findByRole("button", { name: "Draft actions" }),
+    await screen.findByRole("button", { name: "Change actions" }),
   );
   return screen.getByRole("menu");
 }
@@ -482,10 +482,10 @@ export async function graduate() {
   // NAW-FR-17 / NAW-FR-17: Graduate carries no precondition on status or
   // content — the one thing that disables it is a run already holding this
   // draft, or one that has already graduated it.
-  const item = await screen.findByRole("menuitem", { name: "Graduate" });
+  const item = await screen.findByRole("menuitem", { name: "Implement" });
   await waitFor(() => expect(item).toBeEnabled());
   await userEvent.click(item);
-  await screen.findByRole("dialog", { name: /Graduate .artifact-window./ });
+  await screen.findByRole("dialog", { name: /Implement .artifact-window./ });
 }
 
 /** The History rail, once its toggle has been activated (NAW-FR-08). */
@@ -614,7 +614,7 @@ export async function openComposer() {
     await userEvent.click(entry);
   }
   const composer = (await screen.findByRole("textbox", {
-    name: "Discuss this draft",
+    name: "Discuss this change",
   })) as HTMLTextAreaElement;
   await waitFor(() => expect(composer).toBeVisible());
   // Focused only where this helper had to reach past the column to find it. On

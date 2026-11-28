@@ -155,12 +155,16 @@ fn a_match_carries_exactly_the_documented_fields() {
     keys.sort();
     // The exact key set is the assertion; an "and these are absent" loop beside
     // it would only restate what equality already pins (DST-FR-10). The wire
-    // names are the field names, which is what the spec's output shape writes.
-    assert_eq!(keys, vec!["draft_id", "excerpt", "name", "prompt_path", "score", "status"]);
+    // names are what the spec's output shape writes: `change_id` in place of
+    // the Rust field `draft_id` (PVC-FR-HMJD, PVC-FR-ODXM).
+    assert_eq!(keys, vec!["change_id", "excerpt", "name", "prompt_path", "score", "status"]);
 
     // TLC-FR-08: the collection sits under a named field, never a bare array.
+    // PVC-FR-TKJW, DST-FR-01: that field is `changes`, and no `drafts` key is
+    // left beside it.
     let output =
         serde_json::to_value(DraftSearchOutput { drafts: matches.clone() }).expect("serialises");
-    assert!(output.get("drafts").is_some());
     assert!(output.is_object());
+    let keys: Vec<_> = output.as_object().expect("an object").keys().cloned().collect();
+    assert_eq!(keys, vec!["changes"]);
 }

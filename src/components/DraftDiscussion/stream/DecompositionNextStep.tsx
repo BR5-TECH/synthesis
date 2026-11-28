@@ -64,7 +64,7 @@ export function DecompositionNextStep({
       <span className="dds-next-step__label">What next?</span>
       <div className="dds-next-step__actions">
         <button type="button" className="btn btn--sm" disabled={busy || asked} onClick={ask}>
-          Ask for next draft
+          Ask for next change
         </button>
         {accepted.length > 0 && (
           <button

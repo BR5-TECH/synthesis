@@ -16,7 +16,7 @@ import {
   toolCallStateLabel,
   type ActivityRow,
 } from "../../state/turnActivity";
-import type { Comment, TurnToolCall } from "../../types";
+import type { Comment, DiscussionTarget, TurnToolCall } from "../../types";
 
 export interface ToolCallListProps {
   calls: readonly TurnToolCall[];
@@ -139,6 +139,11 @@ export interface SavedActivityRowProps {
   variant?: "card" | "stream";
   /** CVP-FR-NMVH: the side of the comment the row follows. */
   own?: boolean;
+  /**
+   * PVC-FR-PXOE: the target kind of the conversation, which tells the current
+   * name of a saved call with a legacy name.
+   */
+  targetKind?: DiscussionTarget["kind"];
 }
 
 /**
@@ -146,8 +151,13 @@ export interface SavedActivityRowProps {
  * after it. Collapsed when it first renders. It is no comment: no author line,
  * no timestamp, no Quote action, no cancel control, and no Retry.
  */
-export function SavedActivityRow({ comment, variant = "card", own }: SavedActivityRowProps) {
-  const row = savedActivityRowOf(comment);
+export function SavedActivityRow({
+  comment,
+  variant = "card",
+  own,
+  targetKind,
+}: SavedActivityRowProps) {
+  const row = savedActivityRowOf(comment, targetKind);
   if (!row) return null;
   const rowClass = variant === "stream" ? "dds-activity" : "comment comment--activity";
   return (

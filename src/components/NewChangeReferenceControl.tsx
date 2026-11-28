@@ -29,13 +29,13 @@ export function NewChangeReferenceControl({
   const proposal = newChangeProposalById(attachment.proposalId);
   const name = proposal
     ? `Part ${proposal.position} of ${proposal.total} · ${proposal.name}`
-    : "Proposed change";
+    : "Proposed OpenSpec change";
   return (
     <button
       type="button"
       className="comment-attach__proposal"
       data-testid="comment-attachment-new-change"
-      title={`${name} — show it in the change ${attachment.change}`}
+      title={`${name} — show it in the OpenSpec change ${attachment.change}`}
       onClick={() =>
         openOpenSpecChange({ kind: "stream", streamId: attachment.streamId }, attachment.change)
       }

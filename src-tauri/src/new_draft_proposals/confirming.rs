@@ -87,7 +87,7 @@ where
     if let Some(newest) = all.first() {
         let quoted: Vec<String> = names.iter().map(|d| format!("“{}”", d.name)).collect();
         let mut body =
-            format!("Decomposition confirmed. This draft is superseded by {}.", quoted.join(", "));
+            format!("Decomposition confirmed. This change is superseded by {}.", quoted.join(", "));
         // DCP-FR-HMUG: a confirmation by tool ends with the instruction line.
         if let Some(line) = instruction_line {
             body.push_str("\n\n");

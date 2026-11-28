@@ -118,7 +118,7 @@ describe("Terminals panel rows", () => {
   it("TRM-FR-CTGK: a row of a busy target shows the busy mark", async () => {
     await seed([session({ id: "a", busyRunId: "run-1" })]);
     renderPanel();
-    expect(within(row("Host shell 1")).getByLabelText("A graduation run is working in this target")).toBeInTheDocument();
+    expect(within(row("Host shell 1")).getByLabelText("An implementation run is working in this target")).toBeInTheDocument();
   });
 
   it("TRM-FR-OXKC: at 16 sessions New terminal is disabled and says why", async () => {

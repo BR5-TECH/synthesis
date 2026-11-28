@@ -253,7 +253,7 @@ export function DraftTemplateSection({
     // can be written — until the read has landed.
     return (
       <div className="t-ui-sm t-muted" role="status">
-        Loading the project's draft template…
+        Loading the project's change template…
       </div>
     );
   }
@@ -265,8 +265,8 @@ export function DraftTemplateSection({
     // room the frame has.
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
       <p className="t-ui-xs t-muted" style={{ margin: "0 0 10px" }}>
-        Every draft created in this project starts with this text. Leave it
-        empty for drafts that start blank. Changing it does not touch drafts
+        Every change created in this project starts with this text. Leave it
+        empty for changes that start blank. Changing it does not touch changes
         that already exist.
       </p>
       {/* SET-FR-18: saving, saved, or a failure naming what went wrong — with a
@@ -281,7 +281,7 @@ export function DraftTemplateSection({
         {status === "saved" && <span className="t-muted">Saved</span>}
         {status === "failed" && (
           <span style={{ color: "var(--danger, #e5484d)" }}>
-            The draft template could not be saved.{" "}
+            The change template could not be saved.{" "}
             <button className="btn btn--ghost btn--sm" onClick={() => void save()}>
               Retry
             </button>
@@ -296,7 +296,7 @@ export function DraftTemplateSection({
         <Editor
           key={contentRoot}
           artifactId={TEMPLATE_DOC_KEY}
-          artifactName="Draft template"
+          artifactName="Change template"
           sessions={store}
           showComments={false}
           showActions={false}

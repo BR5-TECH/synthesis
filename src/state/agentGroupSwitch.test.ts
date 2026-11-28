@@ -159,7 +159,7 @@ describe("the rows of an agent group", () => {
     id: "turn-arch",
     nickname: "arch",
     group: { groupId: "g", role: "meta", skipped: null },
-    activeToolCalls: [{ id: "call-1", tool: "search_drafts", activationSeq: 1, advisor: "sec" }],
+    activeToolCalls: [{ id: "call-1", tool: "search_changes", activationSeq: 1, advisor: "sec" }],
   });
 
   it("CTA-FR-QXXR: an advisor turn has no pending contribution, and the Meta turn keeps its own", () => {
@@ -168,9 +168,9 @@ describe("the rows of an agent group", () => {
   });
 
   it("CTA-FR-QXXR: the Meta row names the advisor that requested the tool call it shows", () => {
-    expect(activityStatus(meta)).toBe("@sec: Searching drafts…");
-    expect(activityStatus({ ...meta, activeToolCalls: [{ id: "c", tool: "search_drafts", activationSeq: 1 }] })).toBe(
-      "Searching drafts…",
+    expect(activityStatus(meta)).toBe("@sec: Searching changes…");
+    expect(activityStatus({ ...meta, activeToolCalls: [{ id: "c", tool: "search_changes", activationSeq: 1 }] })).toBe(
+      "Searching changes…",
     );
   });
 

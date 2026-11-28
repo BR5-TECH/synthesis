@@ -526,6 +526,7 @@ mod refusals;
 mod skill_filter;
 mod surface;
 mod synthesis_skills;
+mod vocabulary;
 
 /// DDC-FR-ELAE: a turn in `origin` whose trigger is the opening comment of
 /// its discussion, noted as an author comment, for a decision tool test. The

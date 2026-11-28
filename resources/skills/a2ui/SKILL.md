@@ -11,7 +11,7 @@ This skill tells you how to show the author a panel with the `show_surface` tool
 
 - Show a panel when the author must choose between options, confirm a step, compare options side by side, select items from a list, or give you several values at once.
 - Do not show a panel for one open question. Ask it in your reply, or with `ask_user_comment`.
-- Do not show a panel to propose a change to a draft, a prompt, a change, or a plan. Use the proposal tool of that material.
+- Do not show a panel to propose an edit to a change, a prompt, an OpenSpec change, or a plan. Use the proposal tool of that material.
 - Show one panel for one purpose. Keep it small.
 
 ## Procedure

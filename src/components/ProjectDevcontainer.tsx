@@ -369,7 +369,7 @@ export function ProjectDevcontainer({ state, onState }: ProjectDevcontainerProps
                 {VENDOR_LABELS[row.vendor] ?? row.vendor}
               </span>
               <span className="devcontainer__agent-state">{stateWords(row)}</span>
-              {needed && <span className="devcontainer__agent-mark">Needed for graduation</span>}
+              {needed && <span className="devcontainer__agent-mark">Needed for implementation</span>}
               {notFound && row.knownFeature && selected && (
                 <button
                   type="button"

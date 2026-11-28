@@ -55,7 +55,7 @@ afterEach(() => cleanup());
 describe("New Artifact modal (NTA-new-typed-artifact.md)", () => {
   // NTA-FR-01, NTA-FR-02, NTA-FR-03: exactly the three creation inputs, in the shared centered-overlay
   // chrome — and none of the things this window deliberately does not carry.
-  it("NTA-FR-01, NTA-FR-02, NTA-FR-03: presents Location, Name and Artifact Type in a modal and nothing else", () => {
+  it("NTA-FR-01, NTA-FR-02, NTA-FR-03, PVC-FR-HMJD: presents Location, Name and Artifact Type in a modal and nothing else", () => {
     renderModal();
 
     const dialog = screen.getByRole("dialog", { name: "New Artifact" });
@@ -73,6 +73,12 @@ describe("New Artifact modal (NTA-new-typed-artifact.md)", () => {
     expect(screen.queryByText("AI prompt")).not.toBeInTheDocument();
     expect(screen.queryByText(/template/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/draft/i)).not.toBeInTheDocument();
+    // PVC-FR-HMJD: a draft is a change in the words the author sees, so no
+    // change control either, in the new words.
+    expect(screen.queryByText(/new change/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /\bchanges?\b/i })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: /\bchanges?\b/i })).toBeNull();
+    expect(dialog.textContent).not.toMatch(/\bchanges?\b/i);
     expect(document.querySelector(".ProseMirror")).toBeNull();
     expect(screen.queryByRole("textbox", { name: /content/i })).toBeNull();
     // Stated positively as well, because a negative over a component that has

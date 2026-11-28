@@ -181,10 +181,10 @@ describe("the decision controls (DCR-FR-OLDZ)", () => {
   });
 
   it("DCR-FR-OLDZ, DCR-FR-31: Accept is off with its reason for a hunk that is lost, and the focus goes to Reject", () => {
-    open(content({ acceptBlocked: "The text this change alters is no longer in the prompt" }));
+    open(content({ acceptBlocked: "The text this edit alters is no longer in the prompt" }));
     const accept = within(dialog()).getByRole("button", { name: "Accept" });
     expect(accept).toBeDisabled();
-    expect(accept).toHaveAttribute("title", "The text this change alters is no longer in the prompt");
+    expect(accept).toHaveAttribute("title", "The text this edit alters is no longer in the prompt");
     expect(within(dialog()).getByRole("status")).toHaveTextContent(/no longer in the prompt/);
     expect(within(dialog()).getByRole("button", { name: "Reject" })).toHaveFocus();
   });

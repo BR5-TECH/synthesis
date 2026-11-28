@@ -5,7 +5,7 @@
  * A reference to a change an agent proposed to a prompt artifact the project
  * already holds, rendered as a control on exactly the terms its `proposal`
  * sibling is: rendered alike, naming its file alike, activated alike — and
- * scrolling its file's Editor tab to the first undecided change (PCR-FR-RFJC,
+ * scrolling its file's Editor tab to the first undecided edit (PCR-FR-RFJC,
  * PCR-FR-18).
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
@@ -103,15 +103,15 @@ describe("the control (CMT-FR-48, CMT-FR-49)", () => {
     ).toHaveLength(0);
   });
 
-  it("CMT-FR-48, PCR-FR-RFJC: shows how much the proposal changes", async () => {
+  it("CMT-FR-48, PCR-FR-RFJC, PVC-FR-VBPY: shows how much the proposal changes, as a count of edits", async () => {
     invokeMock.mockResolvedValue([proposal()]);
     renderList();
     const control = await screen.findByTestId("comment-attachment-prompt-proposal");
-    await waitFor(() => expect(control).toHaveTextContent("3 changes"));
+    await waitFor(() => expect(control).toHaveTextContent("3 edits"));
     expect(control).toHaveTextContent("Review in the file");
   });
 
-  it("CMT-FR-48, PCR-FR-RFJC: opens or focuses the tab and scrolls to the first undecided change, opening no modal", async () => {
+  it("CMT-FR-48, PCR-FR-RFJC: opens or focuses the tab and scrolls to the first undecided edit, opening no modal", async () => {
     invokeMock.mockResolvedValue([proposal()]);
     const opened: string[] = [];
     configurePromptReviewRoute((id) => opened.push(id));
@@ -124,7 +124,7 @@ describe("the control (CMT-FR-48, CMT-FR-49)", () => {
     });
 
     // PCR-FR-18: the tab is opened or focused first where it is not already
-    // open, and its document scrolls to the first undecided change.
+    // open, and its document scrolls to the first undecided edit.
     expect(opened).toEqual([ARTIFACT]);
     const state = draftDiscussionState(artifactReviewKey(ARTIFACT));
     expect(state.focusedHunkId).toBe("h2");
@@ -138,7 +138,7 @@ describe("the control (CMT-FR-48, CMT-FR-49)", () => {
   it("states whatever the proposal has since become", async () => {
     invokeMock.mockResolvedValue([proposal()]);
     renderList();
-    expect(await screen.findByText("Review proposed change")).toBeInTheDocument();
+    expect(await screen.findByText("Review proposed edits")).toBeInTheDocument();
 
     await act(async () => {
       notePromptProposalChanged({
@@ -148,7 +148,7 @@ describe("the control (CMT-FR-48, CMT-FR-49)", () => {
     });
     // CMT-FR-67: the comment itself is unchanged and its control says what the
     // proposal became.
-    expect(await screen.findByText("Change accepted")).toBeInTheDocument();
+    expect(await screen.findByText("Edits accepted")).toBeInTheDocument();
     expect(screen.getByTestId("comment-attachment-prompt-proposal")).toHaveTextContent(
       ARTIFACT,
     );
@@ -169,9 +169,9 @@ describe("the two reference kinds (CTA-FR-UKIG, CTA-FR-XVNC)", () => {
     expect(control).toBeDisabled();
     expect(control).toHaveTextContent(ARTIFACT);
     for (const word of [
-      "Review proposed change",
-      "Change accepted",
-      "Change rejected",
+      "Review proposed edits",
+      "Edits accepted",
+      "Edits rejected",
       "No longer available",
     ]) {
       expect(screen.queryByText(word)).toBeNull();
@@ -237,7 +237,7 @@ describe("a hunk reference of a file's proposal (PCR-FR-RFJC, CMS-FR-TQVB)", () 
       { kind: "proposalHunk", proposalId: "p1", hunkId: "h3", artifactId: ARTIFACT, path: ARTIFACT },
     ]);
     const control = await screen.findByTestId("comment-attachment-proposal-hunk");
-    await waitFor(() => expect(control).toHaveTextContent("Change 3 of 3"));
+    await waitFor(() => expect(control).toHaveTextContent("Edit 3 of 3"));
     // No draft store is asked about a reference whose target is an artifact.
     expect(draftReads()).toHaveLength(0);
     await act(async () => {
@@ -308,7 +308,7 @@ describe("an update comment's reference (PCR-FR-RFJC, DCR-FR-OYRR, CMT-FR-48)", 
     );
   });
 
-  it("PCR-FR-RFJC, DCR-FR-OYRR: scrolls to the first undecided change, and states no route where none is undecided", async () => {
+  it("PCR-FR-RFJC, DCR-FR-OYRR: scrolls to the first undecided edit, and states no route where none is undecided", async () => {
     listed = [afterUpdate()];
     const opened: string[] = [];
     configurePromptReviewRoute((id) => opened.push(id));
@@ -345,6 +345,6 @@ describe("an update comment's reference (PCR-FR-RFJC, DCR-FR-OYRR, CMT-FR-48)", 
     listed = [afterUpdate()];
     renderList();
     const control = await screen.findByTestId("comment-attachment-prompt-proposal");
-    await waitFor(() => expect(control).toHaveTextContent("4 changes"));
+    await waitFor(() => expect(control).toHaveTextContent("4 edits"));
   });
 });

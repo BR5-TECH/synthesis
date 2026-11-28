@@ -220,7 +220,7 @@ describe("the review in a tab other than the Map tab (MPV-FR-HGLN, MPV-FR-ZQRE)"
     expect(await within(detail()).findByRole("link", { name: /acme\/payments#12/ })).toBeInTheDocument();
   });
 
-  it("MPV-FR-CUWB, MPV-FR-PIQU: Open draft of an accepted draft row opens the draft", async () => {
+  it("MPV-FR-CUWB, MPV-FR-PIQU: Open change of an accepted draft row opens the draft", async () => {
     const b = wire();
     const p = withRow(proposal([draftRow("d", "Idea", "Body."), createRow("n1", "Next")]), "d", {
       state: "accepted",
@@ -231,7 +231,7 @@ describe("the review in a tab other than the Map tab (MPV-FR-HGLN, MPV-FR-ZQRE)"
     render(<Tab discussion={thread()} openDraft={openDraft} />);
     const { user, sheet } = await openFromRow();
     await user.click(within(sheet).getAllByTestId("pp-nav")[0]);
-    await user.click(within(detail()).getByRole("button", { name: "Open draft" }));
+    await user.click(within(detail()).getByRole("button", { name: "Open change" }));
     expect(openDraft).toHaveBeenCalledWith("draft-9");
   });
 
@@ -370,7 +370,7 @@ describe("arrivals, the delivery source, and the routes of the scope (MPV-FR-UWQ
     expect(sourceReads()).toBe(1);
   });
 
-  it("MPV-FR-CUWB: a tab with no draft route offers no Open draft", async () => {
+  it("MPV-FR-CUWB: a tab with no draft route offers no Open change", async () => {
     const b = wire();
     b.proposals.set("t1", [
       withRow(proposal([draftRow("d", "Idea", "Body."), createRow("n1", "Next")]), "d", {
@@ -381,11 +381,11 @@ describe("arrivals, the delivery source, and the routes of the scope (MPV-FR-UWQ
     render(<Tab discussion={thread()} />);
     const { user, sheet } = await openFromRow();
     await user.click(within(sheet).getAllByTestId("pp-nav")[0]);
-    expect(within(detail()).getByText("Created the draft")).toBeInTheDocument();
-    expect(within(detail()).queryByRole("button", { name: "Open draft" })).toBeNull();
+    expect(within(detail()).getByText("Created the change")).toBeInTheDocument();
+    expect(within(detail()).queryByRole("button", { name: "Open change" })).toBeNull();
   });
 
-  it("MPV-FR-CUWB: Open draft takes the newest route that the shell gave", async () => {
+  it("MPV-FR-CUWB: Open change takes the newest route that the shell gave", async () => {
     const b = wire();
     b.proposals.set("t1", [
       withRow(proposal([draftRow("d", "Idea", "Body."), createRow("n1", "Next")]), "d", {
@@ -399,7 +399,7 @@ describe("arrivals, the delivery source, and the routes of the scope (MPV-FR-UWQ
     const { user, sheet } = await openFromRow();
     view.rerender(<Tab discussion={thread()} openDraft={second} />);
     await user.click(within(sheet).getAllByTestId("pp-nav")[0]);
-    await user.click(within(detail()).getByRole("button", { name: "Open draft" }));
+    await user.click(within(detail()).getByRole("button", { name: "Open change" }));
     expect(second).toHaveBeenCalledWith("draft-9");
     expect(first).not.toHaveBeenCalled();
   });

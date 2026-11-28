@@ -9,17 +9,17 @@ The tool an agent reaches for once it knows which draft it wants and needs what 
 One tool, conforming to `TLC-tool-conventions.md` in full, its output taking that spec's data-with-document shape for the reason RDT-FR-05 gives (per TLC-FR-08). It is attached to every conversational agent turn by `../ai/CVL-conversation-loop.md` (CVL-FR-08), and has no Tauri command, event, or frontend reach.
 
 ### The tool
-`read_draft` — a `rig` portable tool, constructed by its own constructor and attached by a caller that names it (per TLC-FR-19).
+`read_change` — a `rig` portable tool, constructed by its own constructor and attached by a caller that names it (per TLC-FR-19).
 
 ### The description
 The fixed text the model reads (per TLC-FR-05):
 
-> Read the current live prompt of a known draft. Use this after `search_drafts` gives you a draft ID, or when you already know that ID. It returns the draft's stable metadata together with its full current prompt by default; pass `offset` and `limit` to read a range of lines instead, which is what you want for a prompt too large to be worth reading whole. Use the returned prompt path only as information, not as an argument to `read_file`. It never returns an accepted-history snapshot or another version, does not search for drafts, and changes nothing.
+> Read the current live prompt of a known change. Use this after `search_changes` gives you a change ID, or when you already know that ID. It returns the change's stable metadata together with its full current prompt by default; pass `offset` and `limit` to read a range of lines instead, which is what you want for a prompt too large to be worth reading whole. A status of `graduated` means the change is implemented. Use the returned prompt path only as information, not as an argument to `read_file`. It never returns an accepted-history snapshot or another version, does not search for changes, and changes nothing.
 
 ### Arguments
 ```
 ReadDraftArgs {
-  draft_id: string,    // required
+  change_id: string,   // required
   offset:   integer?,  // optional; 0-based first line of the prompt, default 0
   limit:    integer?   // optional; line count, default the rest of the prompt
 }
@@ -27,14 +27,14 @@ ReadDraftArgs {
 
 Their descriptions in the parameter schema (per TLC-FR-06):
 
-- `draft_id` — *"The draft ID returned by `search_drafts` or otherwise already known. This is not a file path, prompt path, history-entry ID, or version selector."*
+- `change_id` — *"The change ID returned by `search_changes` or otherwise already known. This is not a file path, prompt path, history-entry ID, or version selector."*
 - `offset` — *"The first line of the prompt to return, counting from 0. Defaults to 0, the start of the prompt. Use it with `limit` to read part of a large prompt; an offset past the end of the prompt returns no text."*
 - `limit` — *"How many lines to return, starting at `offset`. Defaults to the rest of the prompt. A value below 1 is treated as 1, and a value reaching past the end returns the lines that exist."*
 
 ### Output
 ```
 ReadDraftOutput {
-  draft_id,      // the draft's own id (DRS-FR-02), as it was resolved
+  change_id,     // the draft's own id (DRS-FR-02), as it was resolved
   name,          // the draft's current name
   status,        // the draft's current DraftStatus (DRS-FR-03)
   prompt_path,   // draft-relative path of the live prompt; informational (RDT-FR-09)
@@ -44,21 +44,21 @@ ReadDraftOutput {
 
 ### Refusals
 - **no open project** — the shared refusal of `TLC-tool-conventions.md`: kind `NotFound`, not retryable.
-- **blank draft ID** — kind `InvalidArgs`, retryable: *"The draft ID must name a draft to read. Call again with the ID returned by `search_drafts`."*
-- **unknown draft ID** — kind `NotFound`, retryable: *"No draft exists with that ID in the open project. Check the ID or search for the draft again."*
-- **inconsistent draft** — kind `Other`, retryable: *"That draft does not contain its required single live prompt, so it cannot be read. It must be resolved outside this tool before a later call can succeed."*
-- **unreadable prompt** — kind `Other`, retryable: *"That draft's prompt could not be read. It may not be text, or it may have changed since it was found."*
+- **blank change ID** — kind `InvalidArgs`, retryable: *"The change ID must name a change to read. Call again with the ID returned by `search_changes`."*
+- **unknown change ID** — kind `NotFound`, retryable: *"No change exists with that ID in the open project. Check the ID or search for the change again."*
+- **inconsistent change** — kind `Other`, retryable: *"That change does not contain its required single live prompt, so it cannot be read. It must be resolved outside this tool before a later call can succeed."*
+- **unreadable prompt** — kind `Other`, retryable: *"That change's prompt could not be read. It may not be text, or it may have changed since it was found."*
 
 ## Functional requirements
- 1. **RDT-FR-01** The tool exists as a `rig` portable tool named `read_draft` and conforms to `TLC-tool-conventions.md` in full — its name, description, parameter schema, output shape, refusal shape, logging, statelessness, and read-only posture are that spec's rules applied to this tool.
+ 1. **RDT-FR-01** The tool exists as a `rig` portable tool named `read_change` and conforms to `TLC-tool-conventions.md` in full — its name, description, parameter schema, output shape, refusal shape, logging, statelessness, and read-only posture are that spec's rules applied to this tool.
  2. **RDT-FR-02** Its `description()` returns the fixed text of the contract surface above, compiled into the binary, and its `parameters()` returns the JSON Schema for the three documented arguments with the documented parameter descriptions (per TLC-FR-05).
  3. **RDT-FR-03** The tool resolves the draft through `../core/DRS-draft-storage.md` (DRS-FR-38) at the moment of the call and reads the live prompt from that draft's own `files/` folder through the same resolution, composing no path of its own from the id (per DRS-FR-36). It consults no index, so a successful read reflects the newest persisted live prompt even while `../core/BMI-bm25-indexing.md`'s drafts index is still catching up, and a prompt saved a moment ago reads back at once.
  4. **RDT-FR-04** The tool reads the **live prompt and nothing else**. It never reads an accepted history entry (`../core/DHS-draft-history.md` DHS-FR-01), the candidate of a proposed change (`../core/DCP-draft-change-proposals.md` DCP-FR-01), a review log, or a conversation log, and it exposes no argument by which a model could name one: there is no version selector, no entry id, no revision, no timestamp, and no path. A draft's settled versions are review provenance the author reads in their own rail, and an agent recommending on the strength of one would be recommending against the draft as it now stands.
  5. **RDT-FR-05** The output is the structured `ReadDraftOutput` of the contract surface — a JSON object with stable named fields, carrying the prompt's text under `content` — which is the data-with-document case of TLC-FR-08 rather than the unwrapped-document form `RFT-read-file-tool.md` returns. The two arrive together because neither is usable alone: a prompt without its draft's name and status is material the model cannot place, and the metadata without the prompt is a row it cannot act on, so returning the document unwrapped would cost a second call for facts this call already resolved.
  6. **RDT-FR-06** With both `offset` and `limit` absent, `content` is the **complete** text of the live prompt, whatever its length. The tool applies no size ceiling, no truncation, no elision, and no summarisation. The conversation loop bounds what reaches the model (per `../ai/CVL-conversation-loop.md` CVL-FR-XMGI).
  7. **RDT-FR-VQYO** `offset` and `limit` select lines of the live prompt with exactly the meaning `RFT-read-file-tool.md` gives them for a file: a 0-based first line and a count (RFT-FR-07, RFT-FR-08), the same clamps, and empty `content` for an offset at or past the end (RFT-FR-09). Lines keep their own terminators.
- 8. **RDT-FR-ANEC** A range read returns the same metadata as a whole read: `draft_id`, `name`, `status`, and `prompt_path` do not change with `offset` or `limit`.
- 9. **RDT-FR-07** The result carries exactly `draft_id`, `name`, `status`, `prompt_path`, and `content`. The draft's `created_at`, `updated_at`, its filed folder, its build state, its graduation run, and its pending-proposal flag are omitted: each is a fact about how the author is managing the draft rather than about what it says, and a model can act on none of them.
+ 8. **RDT-FR-ANEC** A range read returns the same metadata as a whole read: `change_id`, `name`, `status`, and `prompt_path` do not change with `offset` or `limit`.
+ 9. **RDT-FR-07** The result carries exactly `change_id`, `name`, `status`, `prompt_path`, and `content`. The draft's `created_at`, `updated_at`, its filed folder, its build state, its graduation run, and its pending-proposal flag are omitted: each is a fact about how the author is managing the draft rather than about what it says, and a model can act on none of them.
  8. **RDT-FR-08** `name` and `status` are the draft's current record as `../core/DRS-draft-storage.md` holds it (DRS-FR-03). `status` is that record's own `DraftStatus` carried through unchanged and interpreted nowhere here: **every status draft storage retains is readable on identical terms**, this tool carrying no precondition on status and refusing for none, and a status added to that type reaches this tool's output without a change to it.
  9. **RDT-FR-09** `prompt_path` is draft-relative and informational, on the same terms `DST-draft-search-tool.md` returns it (DST-FR-11): it names the prompt's position inside the draft's own storage rather than a position in the project, so it is not a path `RFT-read-file-tool.md`'s tool resolves to this prompt, and the description tells the model so. It is returned because a model reasoning about a draft is helped by knowing what the prompt is called, not because it is an argument to anything.
 10. **RDT-FR-10** `draft_id` is a draft's own opaque id (`../core/DRS-draft-storage.md` DRS-FR-02) and is what `DST-draft-search-tool.md` returns, accepted unchanged. It is not a path of any kind, not a `prompt_path`, not a history entry's id, and not a version selector; a value that is any of those names no draft and is therefore the unknown-draft refusal rather than being interpreted as something else.

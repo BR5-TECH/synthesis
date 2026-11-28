@@ -20,7 +20,7 @@ The two-column shape of the New Artifact tab, where an author and one or more ag
 9. **DDS-FR-DPRJ** The discussion follows an arriving message only while it is scrolled to the tail. Its header reads `following` while it does. The header states the follow state only while the column renders a transcript, and states nothing while it renders none.
 10. **DDS-FR-GKMT** Scrolling the discussion away from the tail stops it following. Its header reads `paused · reading history`, an arriving message lands below a divider naming how many are unread, and a control offering the jump to the tail appears. A post of the author, a decision on a proposed change included, returns the discussion to the tail and to `following` (per `CVP-conversation-presentation.md` CVP-FR-CUKV). A column that renders no transcript follows nothing and shows none of these three.
 11. **DDS-FR-WCHN** An arriving message never scrolls the document column. The document moves for hunk navigation and for the author's own scrolling, and for nothing else.
-12. **DDS-FR-WKTQ** While the column renders a hunk discussion (per `DCR-draft-change-review.md` DCR-FR-VBQN) or the composer of a new one, a **subject strip** below its header names the hunk: `Change N of M`, the file, and the hunk's current state, which follows each decision. The strip stands outside the message scroller and holds its place while the transcript scrolls.
+12. **DDS-FR-WKTQ** While the column renders a hunk discussion (per `DCR-draft-change-review.md` DCR-FR-VBQN) or the composer of a new one, a **subject strip** below its header names the hunk: `Edit N of M`, the file, and the hunk's current state, which follows each decision. The strip stands outside the message scroller and holds its place while the transcript scrolls.
     - *Why:* Without it, only the first message names the hunk, and that message scrolls away.
 12. **DDS-FR-PBXN** The subject strip shows the agent's note on the hunk and the text the hunk removes and adds, in the tones of `DCR-draft-change-review.md` DCR-FR-07. Each text is cut to a few lines and **Show more** shows all of it. While the proposal is open, **Show in document** scrolls the document column to the hunk (per `CMT-comments.md` CMT-FR-48).
 12. **DDS-FR-YLRM** A discussion tab, or the control that begins another discussion, leaves the composer of a hunk discussion and shows what the author chose. The text typed into that composer stays in the draft's composer. A decision of the hunk does not close the composer.
@@ -80,7 +80,7 @@ The two-column shape of the New Artifact tab, where an author and one or more ag
 At rest — both columns scroll on their own, the discussion pinned to the tail:
 
 ```
-┌─ ✦ Draft discussion · Backend comms.md   ● 3 proposed changes   [doc70|50/50|chat70] ⌘\ ✕ ┐
+┌─ ✦ Change discussion · Backend comms.md   ● 3 proposed edits    [doc70|50/50|chat70] ⌘\ ✕ ┐
 ├───────────────────────────────────────────┬─┬───────────────────────────────────────────┤
 │ B I ⟨⟩ │ Hx▾ Vx▾ Ax▾ │ • 1.               │ │ DISCUSSION           [following]  ◔ 38% ⋯ │
 ├───────────────────────────────────────────┤ ├───────────────────────────────────────────┤
@@ -90,13 +90,13 @@ At rest — both columns scroll on their own, the discussion pinned to the tail:
 │    ┌─[ 1/3  [Accept] [Reject] Discuss ]───┐│ │                                          │
 │  ┃+│ ### User                            ││ │ + Olaf     Backend engineer       6h ago  │
 │  ┃ │ A **user** is a person who uses…    ││ │ Agreed. Add `User` as a top-level…        │
-│    └─────────────────────────────────────┘│ │ ┌ 3 changes  +38  −4   Review on the left ┐│
+│    └─────────────────────────────────────┘│ │ ┌ 3 edits  +38  −4     Review on the left ┐│
 │  A **registration** is the one-time…    ▍ │ │ └─────────────────────────────────────────┘│
 ├───────────────────────────────────────────┤ ├───────────────────────────────────────────┤
 │         (page on its recessed field)      │ │ ┌───────────────────────────────────────┐ │
 │         ── fragment discussions below ──    │ │ │ Reply to @Olaf…                    ➤  │ │
 ├───────────────────────────────────────────┤ │ └───────────────────────────────────────┘ │
-│ change 1 of 3 [‹ ⌥↑][› ⌥↓]  [Reject all][Accept all] │                                  │
+│ edit 1 of 3 [‹ ⌥↑][› ⌥↓]    [Reject all][Accept all] │                                  │
 └───────────────────────────────────────────┴─┴─┴───────────────────────────────────────┴─┘
 ```
 
@@ -105,7 +105,7 @@ Reading history — auto-follow paused, the unread divider, the jump control, th
 ```
 │ DISCUSSION                       [paused · reading history] │
 ├─────────────────────────────────────────────────────────────┤
-│ anchor  @Olaf · proposal of 3 changes · 6h    Back to change 2│
+│ anchor  @Olaf · proposal of 3 edits · 6h       Back to edit 2│
 ├─────────────────────────────────────────────────────────────┤
 │ + Helga                                        1d ago       │  ← read, 85% opacity
 │ When a mobile device scans the QR code…                     │
@@ -121,7 +121,7 @@ A hunk discussion — the subject strip under the header, outside the scroller:
 ```
 │ DISCUSSION                          [following]  ◔ 42% ⚠ ⋯ │
 ├─────────────────────────────────────────────────────────────┤
-│ ⟨diff⟩ Change 2 of 3 · Backend comms.md · ● undecided        │
+│ ⟨diff⟩ Edit 2 of 3 · Backend comms.md · ● undecided         │
 │ Names the remote client as a second kind of user.           │
 │ − A user is a person who uses the IDE.                      │
 │ + A USER is a person who uses the IDE and the remote…       │
@@ -182,7 +182,7 @@ The content column, with one of each message form in it:
         │ ▌ │ what should happen to the uploaded files │   │
         │ ▌ └──────────────────────────────────────────┘   │
         │                                                  │
-        │ ┌ CHG  Post draft to Github.md  2 changes        │
+        │ ┌ CHG  Post draft to Github.md  2 edits          │
         │ │                       accepted    16m ago ────┘ │
         │                                                  │
         │ Helga                              just now      │

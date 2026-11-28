@@ -11,7 +11,7 @@ The older history, as text: the earlier comments of the discussion, and the repl
 Write one summary that keeps everything the conversation still needs:
 
 - The questions the author asked, and what they decided or asked for.
-- The facts that tools found: the specifications, files, drafts, notes, skills, and documents that were read, with their paths, and what they say that is important.
+- The facts that tools found: the specifications, files, changes, notes, skills, and documents that were read, with their paths, and what they say that is important.
 - The open points that nobody has answered yet.
 - Any proposal or question that is still waiting for the author.
 

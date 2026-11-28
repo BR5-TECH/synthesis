@@ -770,9 +770,9 @@ export function proposalControlLabel(
   state: "pending" | "accepted" | "rejected" | null,
   gone: boolean,
 ): string | null {
-  if (state === "accepted") return "Change accepted";
-  if (state === "rejected") return "Change rejected";
-  if (state === "pending") return "Review proposed change";
+  if (state === "accepted") return "Edits accepted";
+  if (state === "rejected") return "Edits rejected";
+  if (state === "pending") return "Review proposed edits";
   // CTA-FR-SACG: the statement, in the register CMT-FR-49's chip says "could not
   // be loaded" in. A sentence would not fit beside the path within the rail's
   // measure, and one cut at "This proposed change is no l…" states nothing.

@@ -79,7 +79,7 @@ async function fire(event: string, payload: unknown = {}) {
 }
 
 describe("Completed runs", () => {
-  it("CHG-FR-QLZO, GRD-FR-BHFP: below the footer, rows name the title, the kind and when the work landed, in landing order, and the heading states the count", async () => {
+  it("CHG-FR-QLZO, GRD-FR-BHFP, PVC-FR-HMJD: below the footer, rows name the title, the kind (change or direct) and when the work landed, in landing order, and the heading states the count", async () => {
     backend({
       completedRuns: [
         completedRun("g1", { title: "Voice playback", hoursAgo: 2 }),
@@ -91,7 +91,7 @@ describe("Completed runs", () => {
 
     expect(region).toHaveTextContent(/^Completed runs · 2/);
     expect(rowTexts()).toEqual([
-      "Voice playbackdraft · landed 2h ago",
+      "Voice playbackchange · landed 2h ago",
       "Audio devicesdirect · landed 1h ago",
     ]);
     // Below the footer: the list follows the footer row in the panel.

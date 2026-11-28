@@ -24,7 +24,7 @@ The inspector is the reading pane of the specification map. It shows everything 
 16. **SMI-FR-BWIY** For the source `openspec`, the inspector shows no **Depends on** list.
 17. **SMI-FR-BXET** For the source `openspec`, the **Needs attention** card lists each issue of a spec node as `<level> — <message>`. For an index node it lists up to four issues of the node and of the nodes beneath it as `<label> — <message>`, the label being that of the node that holds the issue.
 18. **SMI-FR-ZMZB** A click on a change chip selects it. The inspector then shows the change name, its location as the stream name or `active worktree`, the label of the capability node that holds it, and a **Needs attention** card of its issues where it holds any.
-19. **SMI-FR-UKIV** For a change chip, the primary action is **Open change**. It opens the change workspace for that change in the location of the chip (per `OCW-openspec-change-workspace.md` OCW-FR-DMGL), or jumps focus to the tab already showing it.
+19. **SMI-FR-UKIV** For a change chip, the primary action is **Open OpenSpec change**. It opens the change workspace for that change in the location of the chip (per `OCW-openspec-change-workspace.md` OCW-FR-DMGL), or jumps focus to the tab already showing it.
 20. **SMI-FR-QCUC** For the source `openspec`, a spec file selection of the Project panel (SMI-FR-PRSL) selects the capability node whose requirement nodes have that path, shows the last level, and centres the node.
 
 ## Wireframes

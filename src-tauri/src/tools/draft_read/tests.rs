@@ -66,17 +66,27 @@ impl DraftFixture {
 // RDT-FR-01, RDT-FR-02: the contract surface
 // ---------------------------------------------------------------------------
 
-/// RDT-FR-01: a `rig` portable tool under the documented name.
+/// RDT-FR-01, PVC-FR-RWDM: a `rig` portable tool under the documented name.
 #[test]
-fn is_a_portable_tool_named_read_draft() {
+fn is_a_portable_tool_named_read_change() {
     let fixture = DraftFixture::new();
-    assert_eq!(NAME, "read_draft");
+    assert_eq!(NAME, "read_change");
     assert_eq!(<DraftReadTool<tauri::test::MockRuntime> as PortableTool>::NAME, NAME);
     assert_eq!(rig::tool::tool_definition(&fixture.tool()).name, NAME);
 }
 
-/// RDT-FR-02: the fixed description, and a schema declaring `draft_id`,
-/// `offset`, and `limit` alone.
+// PVC-FR-ODXM, PVC-FR-CUAT: the output keeps the stored status `graduated`, so
+// the description tells the model what it means. The description is the quote
+// of the spec, byte for byte.
+#[test]
+fn the_description_says_what_the_stored_status_means_and_is_the_spec_quote() {
+    const SPEC: &str = include_str!("../../../../specifications/tools/RDT-read-draft-tool.md");
+    assert!(DESCRIPTION.contains("A status of `graduated` means the change is implemented."));
+    assert!(SPEC.contains(&format!("\n> {DESCRIPTION}\n")), "the RDT quote differs");
+}
+
+/// RDT-FR-02, PVC-FR-SQAF: the fixed description, and a schema declaring
+/// `change_id`, `offset`, and `limit` alone. The alias `draft_id` is not in it.
 #[test]
 fn definition_declares_three_parameters_and_no_other() {
     let fixture = DraftFixture::new();
@@ -84,8 +94,8 @@ fn definition_declares_three_parameters_and_no_other() {
     assert_eq!(definition.description, DESCRIPTION);
 
     let schema = definition.parameters;
-    assert_eq!(schema["required"], serde_json::json!(["draft_id"]));
-    assert_eq!(schema["properties"]["draft_id"]["description"], DRAFT_ID_DESCRIPTION);
+    assert_eq!(schema["required"], serde_json::json!(["change_id"]));
+    assert_eq!(schema["properties"]["change_id"]["description"], CHANGE_ID_DESCRIPTION);
     assert_eq!(schema["properties"]["offset"]["description"], OFFSET_DESCRIPTION);
     assert_eq!(schema["properties"]["limit"]["description"], LIMIT_DESCRIPTION);
     assert_eq!(schema["properties"]["offset"]["type"], "integer");
@@ -93,7 +103,10 @@ fn definition_declares_three_parameters_and_no_other() {
     // RDT-FR-04: nothing here selects a version.
     let properties = schema["properties"].as_object().expect("an object");
     assert_eq!(properties.len(), 3, "three parameters and no other");
-    for absent in ["version", "entryId", "entry_id", "revision", "at", "path", "draftId"] {
+    for absent in [
+        "version", "entryId", "entry_id", "revision", "at", "path", "draftId", "draft_id",
+        "changeId",
+    ] {
         assert!(properties.get(absent).is_none(), "{absent} is not a parameter");
     }
 }
@@ -185,6 +198,7 @@ fn never_returns_sibling_storage() {
 // ---------------------------------------------------------------------------
 
 /// RDT-FR-05, RDT-FR-07: a structured record carrying exactly the five documented fields.
+// PVC-FR-TKJW, RDT-FR-01: the id of the change is `change_id` on the wire.
 #[test]
 fn output_is_a_record_of_exactly_five_fields() {
     let fixture = DraftFixture::new();
@@ -193,8 +207,8 @@ fn output_is_a_record_of_exactly_five_fields() {
     let json = serde_json::to_value(fixture.read(&id).expect("reads")).expect("serialises");
     let mut keys: Vec<_> = json.as_object().expect("an object").keys().cloned().collect();
     keys.sort();
-    assert_eq!(keys, vec!["content", "draft_id", "name", "prompt_path", "status"]);
-    assert_eq!(json["draft_id"], serde_json::json!(id));
+    assert_eq!(keys, vec!["change_id", "content", "name", "prompt_path", "status"]);
+    assert_eq!(json["change_id"], serde_json::json!(id));
     assert_eq!(json["name"], serde_json::json!("shape"));
     assert_eq!(json["prompt_path"], serde_json::json!("shape.md"));
     // RDT-FR-05, RDT-FR-07: `status` serialises as the wire spelling a model reads, not as

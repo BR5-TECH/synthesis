@@ -61,4 +61,19 @@ describe("the demo index (SMP-FR-HWIC)", () => {
       expect(level.singular.length).toBeGreaterThan(0);
     }
   });
+
+  it("PVC-FR-HMJD, PVC-FR-ZQRE: no label or summary the map shows says draft or graduation", () => {
+    const shown: string[] = [];
+    const walk = (n: (typeof DEMO_SPECIFICATION_INDEX.roots)[number]) => {
+      shown.push(n.label, n.summary);
+      for (const c of n.children) {
+        if ("code" in c) shown.push(c.label, c.summary);
+        else walk(c);
+      }
+    };
+    DEMO_SPECIFICATION_INDEX.roots.forEach(walk);
+    expect(shown.filter((text) => /draft|graduat/i.test(text))).toEqual([]);
+    expect(shown).toContain("changes panel");
+    expect(shown).toContain("implementation runs");
+  });
 });

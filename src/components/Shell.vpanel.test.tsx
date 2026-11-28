@@ -112,8 +112,8 @@ describe("DRP-FR-07: the Drafts surface opens in the active position", () => {
 
     // DRP-FR-07 / SNV-FR-62: five toggle buttons acting as one radio group,
     // active leading and marked, with no dropdown to open.
-    expect(selectorValue("Draft status")).toBe("active");
-    expect(selectorValues("Draft status")).toEqual([
+    expect(selectorValue("Change status")).toBe("active");
+    expect(selectorValues("Change status")).toEqual([
       "active",
       "archived",
       // DRP-FR-07: `graduated` is a position of its own, not a kind of archive.
@@ -122,16 +122,16 @@ describe("DRP-FR-07: the Drafts surface opens in the active position", () => {
       // DRP-FR-GBVS: the drafts published to GitHub, on any status.
       "published",
     ]);
-    expect(selectorNames("Draft status")).toEqual([
+    expect(selectorNames("Change status")).toEqual([
       "Active",
       "Archived",
       // DRP-FR-07: the position admits `graduated` alone, and its title says so.
-      "Graduated",
-      "All drafts",
+      "Implemented",
+      "All changes",
       "Published to GitHub",
     ]);
     expect(
-      screen.queryByRole("combobox", { name: "Draft status" }),
+      screen.queryByRole("combobox", { name: "Change status" }),
     ).not.toBeInTheDocument();
   });
 });

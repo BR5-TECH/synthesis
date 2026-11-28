@@ -116,7 +116,7 @@ describe("the writes of the draft workspace on a main branch (MBW-FR-DBGA)", () 
     proposalBackend();
     renderWorkspace();
     render(<MainBranchWriteHost />);
-    const bar = await screen.findByRole("region", { name: "Proposed changes" });
+    const bar = await screen.findByRole("region", { name: "Proposed edits" });
     await waitFor(() => expect(callsTo("load_draft_change_proposal_hunks")).toHaveLength(1));
 
     await userEvent.click(within(bar).getByRole("button", { name: "Accept all" }));
@@ -146,7 +146,7 @@ describe("the writes of the draft workspace on a main branch (MBW-FR-DBGA)", () 
 
     const rename = async () => {
       await userEvent.click(await screen.findByRole("button", { name: /artifact-window/ }));
-      const field = screen.getByLabelText("Draft name");
+      const field = screen.getByLabelText("Change name");
       await userEvent.clear(field);
       await userEvent.type(field, "agent personas{Enter}");
     };
@@ -162,7 +162,7 @@ describe("the writes of the draft workspace on a main branch (MBW-FR-DBGA)", () 
     expect(reads.confirms).toEqual([]);
 
     // The field stays open with the typed text, so the author can press Enter again.
-    await userEvent.type(screen.getByLabelText("Draft name"), "{Enter}");
+    await userEvent.type(screen.getByLabelText("Change name"), "{Enter}");
     await userEvent.click(await screen.findByRole("button", { name: "Confirm write to main" }));
     await waitFor(() => expect(callsTo("rename_draft")).toHaveLength(1));
     expect(reads.confirms).toEqual(["main"]);

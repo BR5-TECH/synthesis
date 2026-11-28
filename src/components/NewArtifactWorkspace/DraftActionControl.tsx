@@ -75,8 +75,8 @@ export function DraftActionControl({
          ownerLabel/ownerSurface above). */
       ownerLabel={name}
       ownerSurface="draft"
-      itemNoun="draft"
-      controlLabel="Draft actions"
+      itemNoun="change"
+      controlLabel="Change actions"
       // NAW-FR-34: enabled whenever a draft is open, on the same
       // unconditional terms Graduate is — a draft always holds its prompt,
       // so there is always material for an agent to be asked about, and an
@@ -91,7 +91,7 @@ export function DraftActionControl({
           ? SHADOW_DISCUSS_REASON
           : discussionHidden
             ? undefined
-            : "The discussion is already beside the draft"
+            : "The discussion is already beside the change"
       }
       /* ACT-FR-QWNP / DDS-FR-JWNC: the conversation is a column of this tab
          rather than a composer to open. The action is only reachable while
@@ -108,7 +108,7 @@ export function DraftActionControl({
       discussionsInRail
       blocked={blocked}
       graduate={{
-        label: "Graduate",
+        label: "Implement",
         onActivate: onGraduate,
         // NAW-FR-17 / NAW-FR-17: no precondition on status or content —
         // a draft always holds its one prompt, and an empty prompt is a
@@ -118,8 +118,8 @@ export function DraftActionControl({
         disabled: locked,
         title: locked
           ? graduated
-            ? "This draft has already been graduated"
-            : "A graduation run is already working on this draft"
+            ? "This change has already been implemented"
+            : "An implementation run is already working on this change"
           : "Write the specification this prompt describes",
       }}
       copySource={{

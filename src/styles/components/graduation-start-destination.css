@@ -20,6 +20,11 @@
   overflow: hidden;
   background: var(--bg-canvas);
 }
+/* GSD-FR-DCLQ: the "Implement as" toggle has two segments, so each segment
+   gets half of the row. With four tracks, "Propose OpenSpec change" is cut. */
+.graduation-start__destination-row--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 .graduation-start__destination-option {
   min-width: 0;
   /* The narrow side padding lets "Temporary stream" fit in bold. */

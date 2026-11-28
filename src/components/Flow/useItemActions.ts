@@ -46,7 +46,7 @@ export interface PendingRemoval {
  * take its link, for example because the write of the plan is held.
  */
 export function unlinkedDraftText(name: string): string {
-  return `The draft ${name} was created, but this item does not link it: the plan could not be changed. Use Link draft to link it.`;
+  return `The change ${name} was created, but this item does not link it: the plan could not be edited. Use Link change to link it.`;
 }
 
 /** FLO-FR-HGIY: a kind change that would remove a draft link or a footprint. */
@@ -217,7 +217,7 @@ export function useItemActions(c: FlowCanvasState, props: FlowCanvasProps) {
     setCreating(null);
     if (!outcome.ok) {
       if (outcome.error !== null) {
-        const error = `The draft was not created. ${outcome.error}`;
+        const error = `The change was not created. ${outcome.error}`;
         setDraftErrors((prev) => ({ ...prev, [id]: error }));
         logWarn(["frontend"], "flow task draft not created", { flow: flowId ?? "", item: id });
       }
@@ -255,7 +255,7 @@ export function useItemActions(c: FlowCanvasState, props: FlowCanvasProps) {
         showToast({
           key: `flow-draft:${draftId}`,
           level: "Error",
-          title: "Draft not opened",
+          title: "Change not opened",
           body: errorText(e),
           address: null,
         });

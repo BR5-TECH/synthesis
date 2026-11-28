@@ -260,6 +260,7 @@ export function DiscussionMessages({
             <SavedActivityRow
               comment={comment}
               own={embedded && isOwnComment(comment.author, identity)}
+              targetKind={thread.target.kind}
             />
           )}
         </Fragment>

@@ -97,7 +97,7 @@ fn the_history_ends_with_the_decomposition_and_the_pending_body() {
     d.reject(&first.id);
     let second = d.propose("relay-sync", "SECOND-BODY", 2);
     let body = discussion_state_text(d.roots(), &d.thread(), "");
-    let named = format!("The decomposition {} of this draft, not confirmed,", first.set_id);
+    let named = format!("The decomposition {} of this change, not confirmed,", first.set_id);
     let at = body.find(&named).expect("the decomposition, by its id");
     let tail = &body[at..];
     let one = tail.find(&first.id).unwrap();
@@ -121,7 +121,9 @@ fn a_confirmed_decomposition_says_it_is_confirmed() {
     };
     crate::drafts::mark_draft_superseded(d.roots().worktree, &d.draft_id, marker).expect("marked");
     let text = decomposition_text(d.roots(), &d.thread().target).expect("decomposition");
-    assert!(text.contains(&format!("The decomposition {} of this draft, confirmed,", first.set_id)));
+    assert!(
+        text.contains(&format!("The decomposition {} of this change, confirmed,", first.set_id))
+    );
 }
 
 // AGC-FR-TIGM: a draft with no new-draft proposal, and a note, have none.
@@ -147,7 +149,7 @@ fn a_reference_names_the_proposal_as_it_stands() {
         },
         &reads,
     );
-    assert!(line.starts_with("[proposed a new draft: id "), "{line}");
+    assert!(line.starts_with("[proposed a new change: id "), "{line}");
     assert!(line.contains("part 1 of 3 — “relay-auth” — pending"));
     assert!(!line.contains("ZEBRA-BODY"));
     let changed = new_draft_line(
@@ -158,7 +160,7 @@ fn a_reference_names_the_proposal_as_it_stands() {
         },
         &reads,
     );
-    assert!(changed.starts_with("[withdrew the proposed new draft"));
+    assert!(changed.starts_with("[withdrew the proposed new change"));
     let subject = new_draft_line(
         &comments::Attachment::NewDraftSubject {
             proposal_id: p.id.clone(),
@@ -166,7 +168,7 @@ fn a_reference_names_the_proposal_as_it_stands() {
         },
         &reads,
     );
-    assert!(subject.starts_with("[about the proposed new draft: id "));
+    assert!(subject.starts_with("[about the proposed new change: id "));
     let unknown = new_draft_line(
         &comments::Attachment::NewDraftSubject {
             proposal_id: "gone".into(),
@@ -174,7 +176,7 @@ fn a_reference_names_the_proposal_as_it_stands() {
         },
         &reads,
     );
-    assert_eq!(unknown, "[about the proposed new draft gone]");
+    assert_eq!(unknown, "[about the proposed new change gone]");
 }
 
 // AGC-FR-MATQ, AGC-FR-TIGM: a bounded pending body keeps its start and ends

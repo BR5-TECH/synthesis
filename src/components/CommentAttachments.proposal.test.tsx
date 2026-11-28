@@ -123,13 +123,13 @@ describe("a proposal reference (CMT-FR-48, CMT-FR-49)", () => {
 });
 
 describe("what the control says (CMT-FR-67)", () => {
-  it("follows the proposal's state rather than the immutable attachment", async () => {
+  it("PVC-FR-VBPY: follows the proposal's state rather than the immutable attachment", async () => {
     invokeMock.mockResolvedValue([proposal()]);
     renderList();
 
     const control = await screen.findByTestId("comment-attachment-proposal");
     await waitFor(() => expect(control).toHaveAttribute("data-state", "pending"));
-    expect(control).toHaveTextContent(/review proposed change/i);
+    expect(control).toHaveTextContent(/review proposed edits/i);
 
     // The very same log line, after the author accepted.
     await act(async () => {
@@ -139,7 +139,7 @@ describe("what the control says (CMT-FR-67)", () => {
       });
     });
     expect(control).toHaveAttribute("data-state", "accepted");
-    expect(control).toHaveTextContent(/change accepted/i);
+    expect(control).toHaveTextContent(/edits accepted/i);
 
     await act(async () => {
       noteProposalChanged({
@@ -147,7 +147,7 @@ describe("what the control says (CMT-FR-67)", () => {
         proposal: proposal({ state: "rejected" }),
       });
     });
-    expect(control).toHaveTextContent(/change rejected/i);
+    expect(control).toHaveTextContent(/edits rejected/i);
   });
 
   it("says so and opens nothing when the proposal no longer resolves", async () => {
@@ -199,7 +199,7 @@ describe("a control the reading does not hold (CTA-FR-UKIG, CTA-FR-XVNC)", () =>
     await waitFor(() =>
       expect(control).toHaveAttribute("data-state", "pending"),
     );
-    expect(control).toHaveTextContent(/review proposed change/i);
+    expect(control).toHaveTextContent(/review proposed edits/i);
     expect(control).toBeEnabled();
   });
 
@@ -250,7 +250,7 @@ describe("a control the reading does not hold (CTA-FR-UKIG, CTA-FR-XVNC)", () =>
     await waitFor(() =>
       expect(control).toHaveAttribute("data-state", "pending"),
     );
-    expect(control).toHaveTextContent(/review proposed change/i);
+    expect(control).toHaveTextContent(/review proposed edits/i);
     expect(control).toBeEnabled();
     expect(reads()).toHaveLength(2);
   });
@@ -354,7 +354,7 @@ describe("beside the other kinds", () => {
     renderList();
 
     const card = await screen.findByTestId("comment-attachment-proposal");
-    expect(card).toHaveTextContent("3 changes");
+    expect(card).toHaveTextContent("3 edits");
     expect(card).toHaveTextContent("Review on the left");
 
     // DCR-FR-03: activating it takes the author to the first change still to
@@ -401,7 +401,7 @@ describe("an update comment's reference (DCR-FR-OYRR, CMT-FR-48)", () => {
       ],
     });
 
-  it("DCR-FR-OYRR, DCR-FR-HVXK: carries the update's counts in place of the count of changes, and scrolls to the first undecided change", async () => {
+  it("DCR-FR-OYRR, DCR-FR-HVXK: carries the update's counts in place of the count of changes, and scrolls to the first undecided edit", async () => {
     listed = [open()];
     renderList([updated]);
     const card = await screen.findByTestId("comment-attachment-proposal");
@@ -438,6 +438,6 @@ describe("an update comment's reference (DCR-FR-OYRR, CMT-FR-48)", () => {
     listed = [open()];
     renderList();
     const card = await screen.findByTestId("comment-attachment-proposal");
-    await waitFor(() => expect(card).toHaveTextContent("2 changes"));
+    await waitFor(() => expect(card).toHaveTextContent("2 edits"));
   });
 });

@@ -6,15 +6,15 @@
 The tool an agent reaches for when it needs to know what this project is *planning* rather than what it has already decided. It takes the agent's own description of a topic, ranks the drafts of the active worktree against the prompts they currently hold, and hands back the best few by draft id, each carrying the passage inside it that matched, so the agent can tell from the excerpt alone whether that planned work bears on the question in hand. It exists because a draft is a decision in the making — an agent asked about a specification three unpublished prompts already anticipate cannot find those three by guessing, and a recommendation made without them argues for work the author has already planned. It ranks over **current live prompts alone**: a draft's accepted history is review provenance, a record of what the author settled and moved on from, and an agent that recommended on the strength of a superseded version would be recommending against the draft's own past. Everything it knows comes from `../core/BMI-bm25-indexing.md`'s `drafts` index, and every draft it names is resolved through `../core/DRS-draft-storage.md` before it is returned. Out of scope: reading a prompt in full, which is `RDT-read-draft-tool.md`'s once this one has named the draft; searching anything the project holds that is not a draft's live prompt; reading, offering, or making any change to a draft; and deciding whether a draft that was found actually bears on the job in hand, which is the model's alone.
 
 ## Contract surface
-One tool, conforming to `TLC-tool-conventions.md` in full. It is attached to every conversational agent turn by `../ai/CVL-conversation-loop.md` (CVL-FR-08), and has no Tauri command, event, or frontend reach. The Tauri command `../core/DRS-draft-storage.md` registers under the same name (DRS-FR-17) is the Drafts panel's own substring filter and is a different operation on a different surface: it is not reachable from here, and nothing about this tool is reachable from it.
+One tool, conforming to `TLC-tool-conventions.md` in full. It is attached to every conversational agent turn by `../ai/CVL-conversation-loop.md` (CVL-FR-08), and has no Tauri command, event, or frontend reach. The Tauri command `../core/DRS-draft-storage.md` registers under the same name (DRS-FR-17) is the Changes panel's own substring filter and is a different operation on a different surface: it is not reachable from here, and nothing about this tool is reachable from it.
 
 ### The tool
-`search_drafts` — a `rig` portable tool, constructed by its own constructor and attached by a caller that names it (per TLC-FR-19).
+`search_changes` — a `rig` portable tool, constructed by its own constructor and attached by a caller that names it (per TLC-FR-19).
 
 ### The description
 The fixed text the model reads (per TLC-FR-05):
 
-> Find planned drafts relevant to a topic, ranked by how well each current live prompt matches what you describe. Use this to discover related draft work when you do not already know its draft ID. Results are best first and include the draft ID to pass unchanged to `read_draft`, its name and status, an informational draft-relative prompt path, a matching excerpt, and a score that orders this result set. Only current live prompts are searched: accepted history and other snapshots are never searched. This does not read a complete prompt, modify a draft, or make its path usable with `read_file`. An empty result means no current readable draft matched.
+> Find planned changes relevant to a topic, ranked by how well each current live prompt matches what you describe. Use this to discover related change work when you do not already know its change ID. Results are best first and include the change ID to pass unchanged to `read_change`, its name and status, an informational change-relative prompt path, a matching excerpt, and a score that orders this result set. A status of `graduated` means the change is implemented. Only current live prompts are searched: accepted history and other snapshots are never searched. This does not read a complete prompt, modify a change, or make its path usable with `read_file`. An empty result means no current readable change matched.
 
 ### Arguments
 ```
@@ -26,13 +26,13 @@ DraftSearchArgs {
 
 Their descriptions in the parameter schema (per TLC-FR-06):
 
-- `query` — *"A plain description of the planned work or topic to find in current draft prompts. Do not supply a file path."*
-- `limit` — *"How many distinct drafts to return, best match first. Defaults to 10. Values below 1 or above 20 are clamped into that range."*
+- `query` — *"A plain description of the planned work or topic to find in current change prompts. Do not supply a file path."*
+- `limit` — *"How many distinct changes to return, best match first. Defaults to 10. Values below 1 or above 20 are clamped into that range."*
 
 ### Output
 ```
 DraftSearchMatch {
-  draft_id,      // the draft's own id (DRS-FR-02); what read_draft accepts
+  change_id,     // the draft's own id (DRS-FR-02); what read_change accepts
   name,          // the draft's current name
   status,        // the draft's current DraftStatus (DRS-FR-03)
   prompt_path,   // draft-relative path of the live prompt; informational (DST-FR-11)
@@ -40,7 +40,7 @@ DraftSearchMatch {
   score          // orders this result set (DST-FR-09)
 }
 
-DraftSearchOutput { drafts: DraftSearchMatch[] }
+DraftSearchOutput { changes: DraftSearchMatch[] }
 ```
 
 ### Refusals
@@ -48,7 +48,7 @@ DraftSearchOutput { drafts: DraftSearchMatch[] }
 - **empty query** — kind `InvalidArgs`, retryable: *"The query must describe the planned work or topic to find. Call again with a short plain-language description."*
 
 ## Functional requirements
- 1. **DST-FR-01** The tool exists as a `rig` portable tool named `search_drafts` and conforms to `TLC-tool-conventions.md` in full — its name, description, parameter schema, output shape, refusal shape, logging, statelessness, and read-only posture are that spec's rules applied to this tool.
+ 1. **DST-FR-01** The tool exists as a `rig` portable tool named `search_changes` and conforms to `TLC-tool-conventions.md` in full — its name, description, parameter schema, output shape, refusal shape, logging, statelessness, and read-only posture are that spec's rules applied to this tool.
  2. **DST-FR-02** Its `description()` returns the fixed text of the contract surface above, compiled into the binary, and its `parameters()` returns the JSON Schema for the two documented arguments with the documented parameter descriptions (per TLC-FR-05).
  3. **DST-FR-03** The tool ranks by calling `../core/BMI-bm25-indexing.md`'s `search` (BMI-FR-10) against the `drafts` index alone and returns no draft that call did not produce. It enumerates no drafts folder, walks no drafts hierarchy, reads no prompt, holds no index of its own, and applies no ranking of its own.
  4. **DST-FR-04** What is searchable is the `drafts` index's own membership and nothing beside it: each draft's **current live prompt** at the `prompt_path` of `../core/DRS-draft-storage.md` DRS-FR-01 (per `../core/BMI-bm25-indexing.md` BMI-FR-04). A draft's accepted history entries (`../core/DHS-draft-history.md` DHS-FR-01), the candidates of the changes agents have proposed to it (`../core/DCP-draft-change-proposals.md` DCP-FR-01), its review logs, and its conversation log are in no index and are unreachable through this tool by any query, so a passage that a live prompt no longer holds is a passage this tool cannot match on.
@@ -64,7 +64,7 @@ DraftSearchOutput { drafts: DraftSearchMatch[] }
 14. **DST-FR-14** `excerpt` is the matching chunk's text as the underlying call supplied it. It is neither truncated, summarised, re-wrapped, nor annotated, and no text this tool composed appears in it.
 15. **DST-FR-15** A `query` that is empty, or blank once trimmed, is the retryable `InvalidArgs` refusal of the contract surface rather than a success carrying an empty list. A model that sent no query made a mistake it can correct in one further call, and an empty result would tell it the opposite — that this project is planning nothing on the topic.
 16. **DST-FR-16** With no project open the tool produces the shared no-open-project refusal (per TLC-FR-13), rather than the empty list `../core/BMI-bm25-indexing.md` returns in that circumstance (BMI-FR-10), because a model told "no draft matched" would conclude the project has none and stop looking.
-17. **DST-FR-17** A query that matches no draft in an open project is a success carrying an empty `drafts` list (per TLC-FR-12). So is a worktree holding no draft at all, and so is one whose every matching hit was dropped under DST-FR-13: all three are answers rather than failures, and the model is told which by the description's closing sentence.
+17. **DST-FR-17** A query that matches no draft in an open project is a success carrying an empty `changes` list (per TLC-FR-12). So is a worktree holding no draft at all, and so is one whose every matching hit was dropped under DST-FR-13: all three are answers rather than failures, and the model is told which by the description's closing sentence.
 18. **DST-FR-18** The tool never blocks on an index pass (per TLC-FR-16, and `../core/BMI-bm25-indexing.md` BMI-FR-10 and BMI-FR-12). A call made while the first index build after a project opens is still running ranks over what has been indexed so far and returns immediately rather than holding the agent's turn open until indexing settles. A search is therefore as current as the index at the moment of the call, which is the freshness `RDT-read-draft-tool.md` does not share, that tool reading the prompt from disk (RDT-FR-03).
 19. **DST-FR-19** A change to a draft's live prompt reaches this tool on the next index pass, in every direction (`../core/BMI-bm25-indexing.md` BMI-FR-19): saved text becomes matchable and the text it replaced stops being, a draft created becomes findable, and a draft deleted stops being returned. The tool holds nothing from a previous call, and it never widens what it searches to reach material a pass has not yet taken up.
 20. **DST-FR-20** The tool is read-only (per TLC-FR-17): it creates, modifies, and deletes no project file, no draft file, no history entry, no proposal, no index, and no other state, and it touches no repository state. Searching for a draft leaves the worktree exactly as it was.

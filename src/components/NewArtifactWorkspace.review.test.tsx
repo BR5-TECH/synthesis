@@ -232,7 +232,7 @@ async function onChip(action: "Accept" | "Reject" | "Discuss") {
 
 /** Wait until the review bar has the changes, so a decision has one to take. */
 async function reviewing() {
-  const bar = await screen.findByRole("region", { name: "Proposed changes" });
+  const bar = await screen.findByRole("region", { name: "Proposed edits" });
   await waitFor(() =>
     expect(
       invokeMock.mock.calls.some(
@@ -321,7 +321,7 @@ describe("deciding one change at a time (DCR-FR-13, DCR-FR-14, DCR-FR-20)", () =
     act(() => setFocusedHunk("d1", "h2"));
     await onChip("Discuss");
 
-    const composer = await screen.findByRole("textbox", { name: "Discuss this draft" });
+    const composer = await screen.findByRole("textbox", { name: "Discuss this change" });
     await waitFor(() => expect(composer).toHaveFocus());
     await userEvent.type(composer, "why{Backspace}{Backspace}{Enter}x");
 
@@ -501,9 +501,9 @@ describe("what a refusal leaves standing (DCR-FR-16)", () => {
     backend({ hunks: "fail" });
     renderWorkspace();
 
-    const bar = await screen.findByRole("region", { name: "Proposed changes" });
+    const bar = await screen.findByRole("region", { name: "Proposed edits" });
     expect(within(bar).getByRole("button", { name: "Reject all" })).toBeEnabled();
-    expect(bar).toHaveTextContent(/change 1 of 3/);
+    expect(bar).toHaveTextContent(/edit 1 of 3/);
   });
 });
 
@@ -518,9 +518,9 @@ describe("a rejected change while the proposal is open (DCR-FR-QPRV, DCR-FR-12, 
     backend({ proposal: mixed() });
     renderWorkspace();
     await reviewing();
-    // DCR-FR-12: the review opens on the first undecided change.
+    // DCR-FR-12: the review opens on the first undecided edit.
     await waitFor(() =>
-      expect(screen.getByTestId("review-counter").textContent ?? "").toContain("change 2 of"),
+      expect(screen.getByTestId("review-counter").textContent ?? "").toContain("edit 2 of"),
     );
     // One change is undecided, yet the moves stay available: the rejected
     // change is still one the review visits.
@@ -586,7 +586,7 @@ describe("following the backend's own event (DCR-FR-08, DCR-FR-21, DCR-FR-WRJP)"
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("region", { name: "Proposed changes" }),
+        screen.queryByRole("region", { name: "Proposed edits" }),
       ).toBeNull(),
     );
     expect(screen.queryByTestId("draft-pending-proposal")).toBeNull();
@@ -620,7 +620,7 @@ describe("an edit to a change (DCR-FR-25, DCR-FR-29)", () => {
     act(() => setFocusedHunk("d1", "h1"));
     // The chip's actions are off while the conflict stands, so the decision is
     // asked for by the route that stays live: the whole-proposal action.
-    const bar = screen.getByRole("region", { name: "Proposed changes" });
+    const bar = screen.getByRole("region", { name: "Proposed edits" });
     fireEvent.click(within(bar).getByRole("button", { name: "Accept all" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -718,13 +718,13 @@ describe("an edit to a change (DCR-FR-25, DCR-FR-29)", () => {
 });
 
 describe("what the surface says about the draft (DCR-FR-27)", () => {
-  it("DCR-FR-27: says the draft has not changed, and says so again after an edit", async () => {
+  it("PVC-FR-VBPY, DCR-FR-27: says the prompt has not changed, and says so again after a rewrite of an edit", async () => {
     backend();
     renderWorkspace();
     await reviewing();
 
     expect(screen.getByTestId("review-standing")).toHaveTextContent(
-      "The draft has not changed.",
+      "The prompt has not changed.",
     );
 
     // DCR-FR-26: editing a proposed change writes to proposal storage and to
@@ -739,7 +739,7 @@ describe("what the surface says about the draft (DCR-FR-27)", () => {
 
     await waitFor(() =>
       expect(screen.getByTestId("review-standing")).toHaveTextContent(
-        /You have edited a proposed change\. The draft has not changed\./,
+        /You have rewritten a proposed edit\. The prompt has not changed\./,
       ),
     );
     expect(
@@ -749,7 +749,7 @@ describe("what the surface says about the draft (DCR-FR-27)", () => {
     ).toBe(false);
   });
 
-  it("DCR-FR-27: says the draft has changed only once an acceptance has landed", async () => {
+  it("PVC-FR-VBPY, DCR-FR-27: says the change took an edit only once an acceptance has landed", async () => {
     backend({
       proposal: proposal({
         counts: { pending: 2, accepted: 1, rejected: 0, discussing: 0 },
@@ -760,7 +760,7 @@ describe("what the surface says about the draft (DCR-FR-27)", () => {
     await reviewing();
 
     expect(screen.getByTestId("review-standing")).toHaveTextContent(
-      "1 change accepted into this draft",
+      "1 edit accepted into this change",
     );
   });
 });
@@ -779,12 +779,12 @@ describe("moving through a proposal from the tab (DCR-FR-11, DCR-FR-30)", () => 
 
     // The review opens on the first change and says so. A press that landed
     // there again would be a key that does nothing — the defect this pins.
-    expect(counter()).toContain("change 1 of");
+    expect(counter()).toContain("edit 1 of");
     act(() => {
       fireEvent.keyDown(window, { key: "ArrowDown", altKey: true });
     });
     expect(draftDiscussionState("d1").focusedHunkId).toBe("h2");
-    expect(counter()).toContain("change 2 of");
+    expect(counter()).toContain("edit 2 of");
 
     // A second press, which is what proves the tab hands the move its **live**
     // focus. A move that always started from the first change would arrive
@@ -793,7 +793,7 @@ describe("moving through a proposal from the tab (DCR-FR-11, DCR-FR-30)", () => 
       fireEvent.keyDown(window, { key: "ArrowDown", altKey: true });
     });
     expect(draftDiscussionState("d1").focusedHunkId).toBe("h3");
-    expect(counter()).toContain("change 3 of");
+    expect(counter()).toContain("edit 3 of");
   });
 
   it("DCR-FR-11: the bar's control and the accelerator land on the same change", async () => {
@@ -825,7 +825,7 @@ describe("moving through a proposal from the tab (DCR-FR-11, DCR-FR-30)", () => 
     await userEvent.click(screen.getByRole("button", { name: /Previous/ }));
     // The change before the first is the last, the review being a ring.
     expect(draftDiscussionState("d1").focusedHunkId).toBe("h3");
-    expect(counter()).toContain("change 3 of");
+    expect(counter()).toContain("edit 3 of");
   });
 });
 
@@ -848,7 +848,7 @@ describe("where the review goes after a decision (DCR-FR-12)", () => {
     );
   });
 
-  it("DCR-FR-12: deciding the last undecided change rounds to the first", async () => {
+  it("DCR-FR-12: deciding the last undecided edit rounds to the first", async () => {
     backend();
     renderWorkspace();
     await reviewing();
@@ -869,7 +869,7 @@ describe("the change a discussion is about, while it is decided (DDS-FR-YLRM, DD
     await reviewing();
     act(() => setFocusedHunk("d1", "h2"));
     await onChip("Discuss");
-    const composer = await screen.findByRole("textbox", { name: "Discuss this draft" });
+    const composer = await screen.findByRole("textbox", { name: "Discuss this change" });
     await userEvent.type(composer, "abc");
 
     await onChip("Accept");
@@ -886,12 +886,12 @@ describe("the change a discussion is about, while it is decided (DDS-FR-YLRM, DD
     );
     // The review moves on; the composer stays on the change it is about.
     await waitFor(() => expect(draftDiscussionState("d1").focusedHunkId).toBe("h3"));
-    expect(screen.getByRole("textbox", { name: "Discuss this draft" })).toHaveValue("@arch abc");
+    expect(screen.getByRole("textbox", { name: "Discuss this change" })).toHaveValue("@arch abc");
     expect(screen.getByTestId("draft-open-discussion")).toHaveTextContent(
-      "This begins a discussion about change 2 of 3.",
+      "This begins a discussion about edit 2 of 3.",
     );
     const strip = screen.getByTestId("discussion-subject");
-    expect(strip).toHaveTextContent("Change 2 of 3");
+    expect(strip).toHaveTextContent("Edit 2 of 3");
     await waitFor(() =>
       expect(screen.getByTestId("discussion-subject-state")).toHaveTextContent("accepted"),
     );
@@ -926,13 +926,13 @@ describe("a withdrawn change in the draft's review (DCR-FR-OZVU, DCR-FR-NYDA)", 
     backend({ proposal: withdrawn() });
     renderWorkspace();
     const bar = await reviewing();
-    await waitFor(() => expect(bar).toHaveTextContent(/change 1 of 2/));
+    await waitFor(() => expect(bar).toHaveTextContent(/edit 1 of 2/));
 
     act(() => {
       fireEvent.keyDown(window, { key: "ArrowDown", altKey: true });
     });
     expect(draftDiscussionState("d1").focusedHunkId).toBe("h3");
-    expect(bar).toHaveTextContent(/change 2 of 2/);
+    expect(bar).toHaveTextContent(/edit 2 of 2/);
     act(() => {
       fireEvent.keyDown(window, { key: "ArrowDown", altKey: true });
     });
@@ -964,7 +964,7 @@ describe("a withdrawn change in the draft's review (DCR-FR-OZVU, DCR-FR-NYDA)", 
     await onChip("Accept");
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "The agent withdrew this change, so it cannot be decided. Nothing was changed.",
+      "The agent withdrew this edit, so it cannot be decided. Nothing was changed.",
     );
     expect(drafts.docs.get(key)?.buffer).toBe(before);
     expect(draftDiscussionState("d1").focusedHunkId).toBe("h2");

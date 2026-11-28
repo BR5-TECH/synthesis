@@ -142,6 +142,9 @@ fn comment_spans(raw: &str) -> Vec<(usize, usize)> {
 }
 
 #[cfg(test)]
+pub(crate) mod vocabulary_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

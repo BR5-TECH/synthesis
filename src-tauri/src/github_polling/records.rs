@@ -91,7 +91,7 @@ pub fn error_text(code: &str) -> String {
             "The task status on GitHub could not be set to the In Progress status."
         }
         ERR_PENDING_CLAIM_WRITE_FAILED => "The claim could not be recorded on this machine.",
-        ERR_SHADOW_CREATE_FAILED => "The draft for this task could not be created.",
+        ERR_SHADOW_CREATE_FAILED => "The change for this task could not be created.",
         ERR_ISSUE_NOT_LISTED => "This issue is not a listed task of the polling repository.",
         ERR_NO_PROJECT => "No project is open.",
         other => {

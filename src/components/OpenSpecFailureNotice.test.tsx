@@ -186,16 +186,16 @@ describe("the actions of each class", () => {
         streamName="auth-work"
       />,
     );
-    await userEvent.click(screen.getByRole("button", { name: "Open change" }));
+    await userEvent.click(screen.getByRole("button", { name: "Open OpenSpec change" }));
     expect(openChange).toHaveBeenCalledWith({ kind: "stream", streamId: "s-1" }, "add-logout", {
       thread: "t-3",
       streamName: "auth-work",
     });
   });
 
-  it("OFN-FR-RLSO: a notice on the tab of that change, with no location, offers no Open change", () => {
+  it("OFN-FR-RLSO: a notice on the tab of that change, with no location, offers no Open OpenSpec change", () => {
     render(<OpenSpecFailureNotice failure={f({ code: "cli_rejected", change: "c" })} surface="test" />);
-    expect(screen.queryByRole("button", { name: "Open change" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open OpenSpec change" })).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
   });
 
@@ -206,7 +206,7 @@ describe("the actions of each class", () => {
         surface="test"
       />,
     );
-    expect(screen.getByRole("alert")).toHaveTextContent("A rework run started to repair the change.");
+    expect(screen.getByRole("alert")).toHaveTextContent("A rework run started to repair the OpenSpec change.");
     await userEvent.click(screen.getByRole("button", { name: "Open run" }));
     expect(openRun).toHaveBeenCalledWith("g-12");
   });
@@ -361,7 +361,7 @@ describe("Details", () => {
       />,
     );
     await user.tab();
-    expect(screen.getByRole("button", { name: "Open change" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Open OpenSpec change" })).toHaveFocus();
     await user.tab();
     expect(screen.getByRole("button", { name: "Open run" })).toHaveFocus();
     await user.tab();

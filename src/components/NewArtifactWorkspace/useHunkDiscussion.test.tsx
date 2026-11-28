@@ -207,7 +207,7 @@ describe("DCR-FR-MTFD, DDS-FR-RHKW: Discuss on a change", () => {
 });
 
 describe("DCR-FR-JTXE: once the discussion exists", () => {
-  it("DCR-FR-JTXE: an undecided change is held for its discussion", async () => {
+  it("DCR-FR-JTXE: an undecided edit is held for its discussion", async () => {
     const { hook } = mount();
     act(() => hook.result.current.discuss("h1"));
     act(() => hook.result.current.opened(discussion("d-new", [reference("h1")])));

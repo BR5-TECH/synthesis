@@ -67,7 +67,7 @@ describe("Export to... in the action control", () => {
         discussions={discussions()}
         discussionsInRail
         exportTo={host("Export to...")}
-        graduate={host("Graduate")}
+        graduate={host("Implement")}
         copySource={copy}
         publish={host("Publish to GitHub")}
         archive={host("Archive")}
@@ -79,7 +79,7 @@ describe("Export to... in the action control", () => {
     expect(names).toEqual([
       "Discuss",
       "Export to...",
-      "Graduate",
+      "Implement",
       "Copy as Source",
       "Publish to GitHub",
       "Archive",

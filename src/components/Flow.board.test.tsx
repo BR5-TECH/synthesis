@@ -193,8 +193,8 @@ describe("the board in the canvas (DBR-FR-ERHW, DBR-FR-LNZI .. DBR-FR-ZRBD)", ()
     fireEvent.click(blocked);
     expect(itemEl("t1")).toHaveAttribute("data-selected", "true");
     const draft = within(itemEl("t1")).getByTestId("flow-draft-glyph");
-    expect(draft).toHaveTextContent("draft");
-    expect(draft).toHaveAttribute("title", "Draft tokenize-cards");
+    expect(draft).toHaveTextContent("change");
+    expect(draft).toHaveAttribute("title", "Change tokenize-cards");
     expect(within(itemEl("x1")).queryByTestId("flow-draft-glyph")).toBeNull();
   });
 
@@ -202,9 +202,9 @@ describe("the board in the canvas (DBR-FR-ERHW, DBR-FR-LNZI .. DBR-FR-ZRBD)", ()
     const doc = plan([...DOC.items.map((i) => (i.id === "x1" ? { ...i, draftId: "gone" } : i))], DOC.edges);
     await open(doc);
     const warn = within(itemEl("x1")).getByTestId("flow-draft-missing");
-    expect(warn).toHaveTextContent("draft missing");
+    expect(warn).toHaveTextContent("change missing");
     expect(warn).toHaveClass("badge--warn");
-    expect(warn).toHaveAttribute("title", "Draft gone is missing");
+    expect(warn).toHaveAttribute("title", "Change gone is missing");
   });
 
   it("DBR-FR-ZRBD, MIV-FR-VHDP: a card shows no status chip, no reference, no excerpt, and no draft row; the issue view shows the draft row with its open action", async () => {
@@ -218,7 +218,7 @@ describe("the board in the canvas (DBR-FR-ERHW, DBR-FR-LNZI .. DBR-FR-ZRBD)", ()
     clickItem("t1");
     const panel = await screen.findByTestId("map-issue-view");
     expect(within(panel).getByTestId("flow-panel-draft")).toHaveTextContent("tokenize-cards");
-    expect(within(panel).getByRole("button", { name: "Unlink draft" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Unlink change" })).toBeInTheDocument();
   });
 
   it("DBR-FR-SBTR, DBR-FR-SBLK, DBR-FR-VNSJ, DBR-FR-BKWE: a group has the face of a card with its count and its toggle; it shows no excerpt and offers no resize", async () => {

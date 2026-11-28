@@ -554,7 +554,7 @@ describe("the run region", () => {
     expect(region.lastElementChild).toBe(foot);
     expect(foot!.querySelector(".graduation__actions")).not.toBeNull();
     expect(
-      within(foot!).getByRole("button", { name: "Open draft" }),
+      within(foot!).getByRole("button", { name: "Open change" }),
     ).toBeInTheDocument();
   });
 
@@ -577,7 +577,7 @@ describe("the run region", () => {
   it("GRU-FR-RZDI: every run routes to its source draft, by id", async () => {
     const onOpenDraft = vi.fn();
     await open({ onOpenDraft });
-    await userEvent.click(await screen.findByRole("button", { name: "Open draft" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Open change" }));
     expect(onOpenDraft).toHaveBeenCalledWith("draft-r1");
   });
 
@@ -593,8 +593,8 @@ describe("the run region", () => {
       [...region.querySelectorAll(".graduation__actions button")].map(
         (button) => button.textContent,
       ),
-    ).toEqual(["Open draft", "Pause", "Discard run"]);
-    expect(screen.queryByRole("button", { name: /graduate/i })).toBeNull();
+    ).toEqual(["Open change", "Pause", "Discard run"]);
+    expect(screen.queryByRole("button", { name: /graduate|implement/i })).toBeNull();
   });
 
   it("GRU-FR-MRPE: agent text renders as escaped plain text", async () => {

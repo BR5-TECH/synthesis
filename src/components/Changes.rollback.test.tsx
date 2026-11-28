@@ -70,7 +70,7 @@ afterEach(cleanup);
 /** The footer's rollback button (CHG-FR-56). */
 function rollbackButton(): HTMLButtonElement {
   return screen.getByRole("button", {
-    name: "Discard selected changes",
+    name: "Discard selected files",
   }) as HTMLButtonElement;
 }
 
@@ -113,7 +113,7 @@ describe("the footer's count row and rollback button (CHG-FR-55, CHG-FR-56, CHG-
     // the trailing one.
     const footer = container.querySelector(".changes-actions")!;
     const buttons = [...footer.querySelectorAll("button")];
-    expect(buttons[0]).toHaveAttribute("aria-label", "Discard selected changes");
+    expect(buttons[0]).toHaveAttribute("aria-label", "Discard selected files");
     expect(buttons[buttons.length - 1]).toHaveAttribute(
       "aria-label",
       "Choose action",
@@ -133,7 +133,7 @@ describe("the footer's count row and rollback button (CHG-FR-55, CHG-FR-56, CHG-
     );
     // CHG-FR-56: Branch mode has no rollback action at all.
     expect(
-      screen.queryByRole("button", { name: "Discard selected changes" }),
+      screen.queryByRole("button", { name: "Discard selected files" }),
     ).toBeNull();
     // …and the split control has not moved off the trailing edge.
     const footer = container.querySelector(".changes-actions")!;
@@ -169,7 +169,7 @@ describe("rollback enablement and its stated reason (CHG-FR-58)", () => {
     await userEvent.click(checkbox("Library.tsx"));
     button = rollbackButton();
     expect(button).toBeEnabled();
-    expect(button.getAttribute("title")).toMatch(/returning these files to HEAD/i);
+    expect(button.getAttribute("title")).toMatch(/returning them to HEAD/i);
 
     // CHG-FR-58: a narrowing lens disables it again, because the author cannot
     // review the whole of what they have ticked.
@@ -188,7 +188,7 @@ describe("rollback enablement and its stated reason (CHG-FR-58)", () => {
     const button = rollbackButton();
     // The accessible name is what a screen reader announces; the tooltip is
     // what a pointer user reads. Neither is the icon.
-    expect(button).toHaveAttribute("aria-label", "Discard selected changes");
+    expect(button).toHaveAttribute("aria-label", "Discard selected files");
     expect(button.getAttribute("title")).toBeTruthy();
   });
 });
@@ -524,7 +524,7 @@ describe("regressions the browser pass caught", () => {
     // A stale report outliving the state it described would tell the author a
     // file they have since fixed by hand still could not be rolled back.
     await userEvent.click(
-      screen.getByRole("button", { name: "Refresh changes" }),
+      screen.getByRole("button", { name: "Refresh" }),
     );
     await waitFor(() =>
       expect(screen.queryByText(/could not be rolled back/i)).toBeNull(),
@@ -543,7 +543,7 @@ describe("regressions the browser pass caught", () => {
     await userEvent.click(checkbox("onboarding.md"));
 
     // Narrow the text filter so only one of the two checked rows is visible.
-    const filter = screen.getByPlaceholderText(/filter changes/i);
+    const filter = screen.getByPlaceholderText(/filter files/i);
     await userEvent.type(filter, "Library");
     await waitFor(() => expect(rowNames()).not.toContain("onboarding.md"));
 

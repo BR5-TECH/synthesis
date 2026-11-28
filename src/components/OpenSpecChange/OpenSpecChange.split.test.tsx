@@ -99,6 +99,23 @@ describe("the new-change card (OCW-FR-BGDN)", () => {
     expect(screen.queryByTestId("comment-attachment-new-change")).toBeNull();
   });
 
+  it("DCR-FR-FKNQ, PVC-FR-NEXL: the card and the line of an earlier comment name an OpenSpec change, not a bare change", async () => {
+    const thread = splitDiscussion();
+    const later = thread.comments[1];
+    thread.comments.push({
+      ...later,
+      id: "t3-c3",
+      attachments: [{ kind: "newChangeProposal", proposalId: "n1", streamId: STREAM_ID, change: CHANGE, update: "change" }],
+    });
+    backend.discussions = [thread];
+    const shown = await card();
+    expect(shown).toHaveAccessibleName(
+      "Proposed OpenSpec change, part 1 of 2, add-logout-ui, Waiting for you",
+    );
+    const line = screen.getByTestId("new-change-reference");
+    expect(line).toHaveTextContent("Proposed an OpenSpec change · Part 1 of 2 · add-logout-ui");
+  });
+
   it("OCW-FR-BGDN: Accept invokes accept new change proposal with the feedback, and the card reads the decision", async () => {
     const user = userEvent.setup();
     backend.decideNew = () => outcome();
@@ -124,12 +141,18 @@ describe("the new-change card (OCW-FR-BGDN)", () => {
     expect(calls("accept_new_change_proposal")).toHaveLength(0);
   });
 
-  it("OCW-FR-BGDN: Discuss opens a discussion whose opening comment carries one new_change_subject", async () => {
+  it("OCW-FR-BGDN, PVC-FR-NEXL: Discuss opens a discussion whose opening comment carries one new_change_subject", async () => {
     const user = userEvent.setup();
     const shown = await card();
     await user.click(within(shown).getByRole("button", { name: "Discuss →" }));
     expect(await screen.findByText("This begins a discussion about part 1 of 2 of the split.")).toBeInTheDocument();
-    const composer = screen.getByRole("textbox", { name: "Discuss this change" });
+    // PVC-FR-NEXL: the hint names the OpenSpec change, not a bare change.
+    expect(
+      screen.getByText(
+        "The proposed OpenSpec change is not decided by this discussion. Accept or reject it on its card.",
+      ),
+    ).toBeInTheDocument();
+    const composer = screen.getByRole("textbox", { name: "Discuss this OpenSpec change" });
     expect((composer as HTMLTextAreaElement).value).toBe("@arch ");
     await user.type(composer, "is the UI part complete?");
     await user.keyboard("{Control>}{Enter}{/Control}");
@@ -161,7 +184,7 @@ describe("the new-change card (OCW-FR-BGDN)", () => {
     const shown = await card();
     await user.click(within(shown).getByRole("button", { name: "Accept" }));
     expect(await screen.findByTestId("new-change-refusal")).toHaveTextContent(
-      "A change of this name is already on the stream",
+      "An OpenSpec change of this name is already on the stream",
     );
     expect(screen.getByTestId("new-change-card")).toHaveAttribute("data-state", "pending");
   });
@@ -183,11 +206,11 @@ describe("the new-change card (OCW-FR-BGDN)", () => {
 });
 
 describe("an acceptance (OCW-FR-IJAI)", () => {
-  it("OCW-FR-IJAI: an accepted proposal's card names the created change and opens its tab", async () => {
+  it("OCW-FR-IJAI, PVC-FR-NEXL: an accepted proposal's card names the created OpenSpec change and opens its tab", async () => {
     const user = userEvent.setup();
     backend.newChanges = [newChangeProposal({ state: "accepted", createdChange: "add-logout-ui" })];
     const shown = await card();
-    expect(shown).toHaveTextContent("Created change add-logout-ui");
+    expect(shown).toHaveTextContent("Created OpenSpec change add-logout-ui");
     await user.click(within(shown).getByRole("button", { name: "add-logout-ui" }));
     expect(open).toHaveBeenCalledWith({ kind: "stream", streamId: STREAM_ID }, "add-logout-ui", {});
   });
@@ -223,7 +246,7 @@ describe("an acceptance (OCW-FR-IJAI)", () => {
     const shown = await card();
     await user.click(within(shown).getByRole("button", { name: "Accept" }));
     const refusal = await screen.findByTestId("new-change-refusal");
-    expect(refusal).toHaveTextContent("holds this stream, so the change was not created");
+    expect(refusal).toHaveTextContent("holds this stream, so the OpenSpec change was not created");
     expect(refusal.textContent).toMatch(/The run “.+”/);
   });
 });

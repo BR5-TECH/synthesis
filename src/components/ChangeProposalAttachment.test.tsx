@@ -49,15 +49,16 @@ afterEach(() => {
 });
 
 describe("a change_proposal reference", () => {
-  it("CMT-FR-48, OCW-FR-COLR: renders a control that opens the change on its stream at the first undecided hunk", async () => {
+  it("CMT-FR-48, OCW-FR-COLR, PVC-FR-NEXL: renders a control that opens the OpenSpec change on its stream at the first undecided hunk", async () => {
     const open = vi.fn();
     configureOpenSpecChangeRoutes({ open });
     render(<CommentAttachmentList threadId="t1" attachments={[REFERENCE]} />);
     const control = await screen.findByTestId("comment-attachment-change-proposal");
     await waitFor(() => expect(control).toHaveAttribute("data-state", "pending"));
     expect(control).toHaveTextContent(CHANGE);
-    expect(control).toHaveTextContent("2 changes");
-    expect(control).toHaveTextContent("Review proposed change");
+    expect(control).toHaveTextContent("2 edits");
+    expect(control).toHaveTextContent("Review proposed edits");
+    expect(control).toHaveTextContent("Review in the OpenSpec change");
     await userEvent.click(control);
     expect(open).toHaveBeenCalledWith({ kind: "stream", streamId: STREAM_ID }, CHANGE, {
       file: "proposal.md",
@@ -82,6 +83,6 @@ describe("a change_proposal reference", () => {
     render(<ChangeRow reference={REFERENCE} createdAt="2026-01-01T00:00:00Z" />);
     const row = await screen.findByTestId("dds-change-row");
     await waitFor(() => expect(row).toHaveAttribute("data-state", "pending"));
-    expect(row).toHaveAccessibleName(`${CHANGE}, 2 changes, pending`);
+    expect(row).toHaveAccessibleName(`${CHANGE}, 2 edits, pending`);
   });
 });

@@ -9,14 +9,17 @@
  */
 import type { ProposalUpdateCounts } from "../types";
 
-/** DCR-FR-HVXK: the count of changes a recorded proposal holds. */
+/**
+ * DCR-FR-HVXK, PVC-FR-VBPY: the count of edits (proposed hunks) a recorded
+ * proposal holds.
+ */
 export function changeCountSummary(changes: number): string {
-  return `${changes} ${changes === 1 ? "change" : "changes"}`;
+  return `${changes} ${changes === 1 ? "edit" : "edits"}`;
 }
 
 /**
  * DCR-FR-OYRR: the one line an update comment's reference carries in place of
- * the count of changes. It names all three numbers, a zero included, so the
+ * the count of edits. It names all three numbers, a zero included, so the
  * line reads the same for every update.
  */
 export function updateSummary(update: ProposalUpdateCounts): string {

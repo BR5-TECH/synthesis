@@ -116,7 +116,7 @@ describe("the review bar (DCR-FR-11)", () => {
     // By name, not by position: the bar stands at the foot of the column and
     // is read upward, so which status comes first is a layout decision.
     expect(screen.getByTestId("review-counter")).toHaveTextContent(
-      "reviewing change 2 of 3",
+      "reviewing edit 2 of 3",
     );
     // DCR-FR-27: and beside it, whether the draft has moved yet.
     expect(screen.getByTestId("review-standing")).toHaveTextContent(
@@ -402,7 +402,7 @@ describe("the change under review (DCR-FR-12, DCR-FR-31)", () => {
     // The decoration says nothing to a screen reader, so the name carries the
     // change's place, its kind, and who proposed it.
     expect(hunkLabel(hunk())).toBe(
-      "Change 1 of 3, replacement proposed by @arch",
+      "Edit 1 of 3, replacement proposed by @arch",
     );
     expect(hunkLabel(hunk({ kind: "add", position: 2 }))).toContain("insertion");
     expect(hunkLabel(hunk({ kind: "del" }))).toContain("deletion");
@@ -436,7 +436,7 @@ describe("the gutter map (DCR-FR-BQNL)", () => {
     // DCR-FR-28: real controls with names, so the map is a route a keyboard can
     // take rather than a set of coloured spans only a pointer can reach.
     expect(within(map).getAllByRole("button")).toHaveLength(3);
-    expect(marks[1].getAttribute("aria-label")).toContain("Change 1 of 3");
+    expect(marks[1].getAttribute("aria-label")).toContain("Edit 1 of 3");
     expect(marks).toHaveLength(3);
     expect(marks[0].getAttribute("data-kind")).toBe("add");
     expect(marks[1].getAttribute("data-kind")).toBe("del");
@@ -642,7 +642,7 @@ describe("what one decision leaves standing (DCR-FR-20, DCR-FR-WRJP)", () => {
     });
 
     expect(hunkLabel(revised)).toBe(hunkLabel(before));
-    expect(hunkLabel(revised)).toContain("Change 2 of 3");
+    expect(hunkLabel(revised)).toContain("Edit 2 of 3");
     // Still drawn, because it is still undecided: a revision is an offer, not a
     // decision.
     expect(undecoratedByDecision(revised)).toBe(false);
@@ -762,7 +762,7 @@ describe("the document following the review (DCR-FR-30)", () => {
 });
 
 describe("where a move is unavailable (DCR-FR-11, DCR-FR-30)", () => {
-  it("DCR-FR-11, DCR-FR-30: a proposal holding one undecided change has nowhere to move, by the key as by the control", () => {
+  it("DCR-FR-11, DCR-FR-30: a proposal holding one undecided edit has nowhere to move, by the key as by the control", () => {
     // The bar and the accelerators must say the same thing. A bar offering no
     // move beside a key that quietly re-sets the focus is two rules, and the
     // author learns the wrong one from whichever they try first.

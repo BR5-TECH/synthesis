@@ -152,7 +152,7 @@ fn a_diagram_change_over_a_text_hunk_is_refused_with_its_place() {
             },
             "{subject:?}",
         );
-        assert!(refusal.to_string().starts_with("Diagram change 2 of 2: "), "{refusal}");
+        assert!(refusal.to_string().starts_with("Diagram edit 2 of 2: "), "{refusal}");
         assert!(refusal.retryable());
         f.assert_untouched(&before);
     }
@@ -176,7 +176,7 @@ fn a_refusal_while_joining_names_the_diagram_change() {
             ToolRefusal::InvalidDiagramAt { message: DIAGRAM_NOT_FOUND, at: 2, of: 2 },
             "{subject:?}",
         );
-        assert!(refusal.to_string().starts_with("Diagram change 2 of 2: "), "{refusal}");
+        assert!(refusal.to_string().starts_with("Diagram edit 2 of 2: "), "{refusal}");
         // All or nothing: the first change was not added either.
         f.assert_untouched(&before);
     }

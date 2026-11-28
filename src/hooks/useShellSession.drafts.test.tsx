@@ -399,7 +399,7 @@ describe("draft failures are toasts (NTF-FR-DRFT)", () => {
     await act(async () => result.current.openDraftById("gone"));
     expect(visibleToasts().find((t) => t.key === "draft-open-failed")).toMatchObject({
       level: "Error",
-      title: "Draft not opened",
+      title: "Change not opened",
       body: "draft_not_found",
       address: null,
     });
@@ -419,7 +419,7 @@ describe("draft failures are toasts (NTF-FR-DRFT)", () => {
     });
     expect(visibleToasts().find((t) => t.key === "draft-create-failed")).toMatchObject({
       level: "Error",
-      title: "Draft not created",
+      title: "Change not created",
       body: "drafts_store_malformed",
     });
     expect(result.current.tabs.some((t) => t.kind === "draft")).toBe(false);

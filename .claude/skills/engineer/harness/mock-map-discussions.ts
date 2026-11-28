@@ -214,7 +214,7 @@ const planRows = (at: string) => [
 const planComment = (discussionId: string, n: number, proposalId: string, createdAt: string) => ({
   id: `${discussionId}-pp${n}`,
   author: AGENT,
-  body: "I propose a task for the retry, a status change of #42, and a draft for the dry run.",
+  body: "I propose a task for the retry, a status change of #42, and a change for the dry run.",
   quotes: [],
   attachments: [{ kind: "mapPlanProposal", proposalId }],
   createdAt,

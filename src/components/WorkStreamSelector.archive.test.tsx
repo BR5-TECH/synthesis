@@ -250,7 +250,7 @@ describe("an archive refusal (WSS-FR-NTGC)", () => {
     expect(within(r).queryByRole("button", { name: /Open/ })).toBeNull();
   });
 
-  it("WSS-FR-NTGC, OFN-FR-RLSO: change_not_archivable renders its notice, and Open change opens the change on the stream", async () => {
+  it("WSS-FR-NTGC, OFN-FR-RLSO: change_not_archivable renders its notice, and Open OpenSpec change opens the change on the stream", async () => {
     const opened = vi.fn();
     configureOpenSpecChangeRoutes({ open: opened });
     const { r, alert } = await refused({
@@ -259,11 +259,11 @@ describe("an archive refusal (WSS-FR-NTGC)", () => {
       change: "add-logout",
       diagnostics: [],
     });
-    expect(alert).toHaveTextContent(`The change "add-logout" has tasks that are not done. ${FRAME}`);
+    expect(alert).toHaveTextContent(`The OpenSpec change "add-logout" has tasks that are not done. ${FRAME}`);
     // OFN-FR-PFYW: one statement of the failure, with no code.
     expect(r).not.toHaveTextContent("tasks_incomplete");
     expect(within(r).queryByRole("button", { name: "Retry" })).toBeNull();
-    await userEvent.click(within(r).getByRole("button", { name: "Open change" }));
+    await userEvent.click(within(r).getByRole("button", { name: "Open OpenSpec change" }));
     expect(opened).toHaveBeenCalledWith(
       { kind: "stream", streamId: "w1" },
       "add-logout",
@@ -292,7 +292,7 @@ describe("an archive refusal (WSS-FR-NTGC)", () => {
       ],
     });
     expect(alert).toHaveTextContent(
-      `The deltas of "add-logout" do not apply to the live specifications. A rework run started to repair the change. ${FRAME}`,
+      `The deltas of "add-logout" do not apply to the live specifications. A rework run started to repair the OpenSpec change. ${FRAME}`,
     );
     await userEvent.click(within(r).getByRole("button", { name: /Details/ }));
     expect(within(r).getByTestId("openspec-failure-diagnostic").textContent).toBe(
@@ -300,7 +300,7 @@ describe("an archive refusal (WSS-FR-NTGC)", () => {
     );
     expect(within(r).getByRole("button", { name: "Open run" })).toBeInTheDocument();
     // SNV-FR-56: the change opens behind the dropdown, so the dropdown closes.
-    await userEvent.click(within(r).getByRole("button", { name: "Open change" }));
+    await userEvent.click(within(r).getByRole("button", { name: "Open OpenSpec change" }));
     expect(opened).toHaveBeenCalledWith(
       { kind: "stream", streamId: "w1" },
       "add-logout",
@@ -334,7 +334,7 @@ describe("an archive refusal (WSS-FR-NTGC)", () => {
       diagnostics: [],
     });
     expect(alert).toHaveTextContent(
-      'The change "add-logout" is not valid. No repair run started: the change holds a pending edit proposal.',
+      'The OpenSpec change "add-logout" is not valid. No repair run started: the OpenSpec change holds a pending edit proposal.',
     );
   });
 
@@ -472,7 +472,7 @@ describe("an archive refusal (WSS-FR-NTGC)", () => {
 
   it("WSS-FR-NTGC: the typed strings of the archive refusals read as the short form of their notice", () => {
     expect(refusalText("change_not_archivable: c: tasks_incomplete")).toBe(
-      `The change "c" has tasks that are not done. ${FRAME}`,
+      `The OpenSpec change "c" has tasks that are not done. ${FRAME}`,
     );
     expect(refusalText("archive_failed: c: cli_output_unreadable")).toBe(
       `The OpenSpec CLI gave an answer that the application cannot read. Check the version of the OpenSpec CLI. ${FRAME}`,

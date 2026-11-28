@@ -199,6 +199,8 @@ afterEach(() => {
 
 const split = () => screen.getByTestId("editor-discussion-split");
 const column = () => screen.getByTestId("editor-discussion-column");
+// The splitter between the columns, not a handle of the page width ruler.
+const SPLITTER = /Resize the document and discussion columns/;
 const markOf = (id: string) =>
   document.querySelector<HTMLElement>(`.ProseMirror [data-comment-thread="${id}"]`);
 const toRaw = async () => {
@@ -283,7 +285,7 @@ describe("CMT-FR-01, DDS-FR-KTVW: the grid below the toolbar", () => {
     expect(split()).toHaveAttribute("data-discussion", "hidden");
     // The document column takes the tab's full width.
     expect(split().style.gridTemplateColumns).toBe("1fr");
-    expect(screen.getByRole("separator", { hidden: true })).toHaveAttribute("hidden");
+    expect(document.querySelector(".dds-splitter")).toHaveAttribute("hidden");
     // Hidden rather than unmounted: the same element, still holding the discussion.
     expect(column()).toBe(held);
     expect(within(held).getByTestId("comment-thread-t1")).toBeInTheDocument();
@@ -299,7 +301,7 @@ describe("CMT-FR-01, DDS-FR-KTVW: the grid below the toolbar", () => {
     const documentWide = split().style.gridTemplateColumns;
     expect(discussionColumnState(fileColumn("a.md")).ratio).toBe("doc70");
 
-    fireEvent.keyDown(screen.getByRole("separator"), { key: "ArrowLeft" });
+    fireEvent.keyDown(screen.getByRole("separator", { name: SPLITTER }), { key: "ArrowLeft" });
     await waitFor(() => expect(split().style.gridTemplateColumns).not.toBe(documentWide));
     expect(typeof discussionColumnState(fileColumn("a.md")).ratio).toBe("number");
     expect(discussionColumnState(fileColumn("b.md")).ratio).toBe("even");

@@ -183,7 +183,9 @@ describe("the measure and the one breakpoint (DDS-FR-ZMXQ, DDS-FR-LWPC)", () => 
     // `--sp-3-5` is 14px, taken on each side: the 28 the requirement names.
     const tokens = sheet("colors_and_type.css");
     expect(tokens).toContain("--sp-3-5: 14px");
-    expect(tokens).toContain("--doc-page-width: 820px");
+    // EPW-FR-QGUZ: 820 is the default page width, which the author can change.
+    expect(tokens).toContain("--doc-page-base-width: 820px");
+    expect(tokens).toContain("--doc-page-width: var(--doc-page-base-width)");
   });
 
   it("DDS-FR-ZMXQ, CTA-FR-UUXA: every surface of the column stands on that one measure", () => {

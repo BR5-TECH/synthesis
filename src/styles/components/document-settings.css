@@ -43,3 +43,11 @@
     transition: none;
   }
 }
+
+/* GLS-FR-IXAQ / GLS-FR-NOWF: the Page width field with its Reset control on
+   the line of the input. */
+.document-settings__page-width {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+}

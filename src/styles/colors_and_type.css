@@ -17,7 +17,11 @@
      The page a document is read on — the Editor's canvas, and the Diff tab's
      rich rendering of the same document. Declared once so the two cannot
      drift apart. */
-  --doc-page-width: 820px;
+  /* EPW-FR-QGUZ: the page width at 100% zoom. The page width store sets it on
+     the root from the stored preference, and the ruler changes it during a
+     drag. Every page measure below is built on it. */
+  --doc-page-base-width: 820px;
+  --doc-page-width: var(--doc-page-base-width);
   --doc-page-padding: 24px 48px 64px;
   /* The horizontal half of that padding, named on its own so anything drawn
      ON the page — the frontmatter region above the prose — can register with
@@ -27,7 +31,7 @@
      inside that width. This, not `--doc-page-width`, is the edge the text
      reaches, so it is what anything measuring the empty margin beside the page
      has to measure against. */
-  --doc-page-box: calc(820px + 96px);
+  --doc-page-box: calc(var(--doc-page-base-width) + 96px);
   /* EDT-FR-63: how far the page is inset from the tab's boundaries on every
      side. What is left over is the **field** — the band above the surface, the
      margin the comments occupy, and the empty width beside the centred page.
@@ -741,11 +745,11 @@ textarea,
   --fs-src-sm:  calc(var(--font-source-size) * 12 / 13 * var(--editor-zoom));
   --fs-src-md:  calc(var(--font-source-size) * var(--editor-zoom));
   --fs-src-lg:  calc(var(--font-source-size) * 14 / 13 * var(--editor-zoom));
-  /* EZM-FR-LRVS / EZM-FR-RWKC: the page grows with its text. Each surface caps
+  /* EZM-FR-LRVS / EZM-FR-RWKC / EPW-FR-GNNZ: the page grows with its text. Each surface caps
      it at the tab width less the inset, with `min()`, so it never scrolls the
      tab horizontally. */
-  --doc-page-width: calc(820px * var(--editor-zoom));
-  --doc-page-box: calc(820px * var(--editor-zoom) + 96px);
+  --doc-page-width: calc(var(--doc-page-base-width) * var(--editor-zoom));
+  --doc-page-box: calc(var(--doc-page-base-width) * var(--editor-zoom) + 96px);
   --doc-page-outer: calc(var(--doc-page-box) + 2px);
   /* EZM-FR-VQHI: the region keeps a vertical and a horizontal pan, and a
      two-finger pinch reaches the page as pointer events. */

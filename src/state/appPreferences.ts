@@ -90,6 +90,8 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   gitFilesWidthFraction: 0.3,
   // GSS-FR-KKYO / EZM-FR-SOZM: the editor zoom level starts at 100%.
   editorZoomPercent: 100,
+  // GSS-FR-UYXH / EPW-FR-QGUZ: the page width starts at 820 pixels.
+  editorPageWidthPx: 820,
 };
 
 /**

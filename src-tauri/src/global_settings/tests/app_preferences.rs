@@ -211,6 +211,8 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
             git_files_width_fraction: 0.37,
             // Non-default for the same reason (GSS-FR-KKYO).
             editor_zoom_percent: 137,
+            // Non-default for the same reason (GSS-FR-UYXH).
+            editor_page_width_px: 1240,
             terminal_theme: TerminalThemePreference::Night,
             // Listed exhaustively rather than defaulted: this test is the
             // canary for GSS-FR-20, so a field added to the record without
@@ -370,6 +372,7 @@ fn a_whole_record_write_of_one_field_carries_the_other_through() {
     assert_eq!(after_follow.graduation_paths_width_fraction, 0.44);
     assert_eq!(after_follow.git_files_width_fraction, 0.37);
     assert_eq!(after_follow.editor_zoom_percent, 137);
+    assert_eq!(after_follow.editor_page_width_px, 1240);
     assert_eq!(after_follow.terminal_theme, TerminalThemePreference::Night);
 
     // GSS-FR-20 / GSS-FR-34: and the graduation section's own write is the

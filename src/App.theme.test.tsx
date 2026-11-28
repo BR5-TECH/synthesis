@@ -15,6 +15,7 @@ import userEvent from "@testing-library/user-event";
 
 import App from "./App";
 import { resetAppPreferencesCache } from "./state/appPreferences";
+import { resetEditorPageWidthForTest } from "./state/editorPageWidth";
 import { applyFontRoles } from "./state/fontRoles";
 import { resetLayoutPreferencesCache } from "./state/layoutPreferences";
 import type { ThemePreference } from "./types";
@@ -186,6 +187,7 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
       editorZoomPercent: 100,
+      editorPageWidthPx: 820,
       },
     });
     // Applied to the root immediately, no relaunch.
@@ -264,6 +266,7 @@ describe("Top-chrome theme selector (SNV-FR-15 / SNV-FR-16)", () => {
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
       editorZoomPercent: 100,
+      editorPageWidthPx: 820,
         },
       }),
     );
@@ -506,5 +509,25 @@ describe("Typographic roles (OVW-FR-14)", () => {
 
     render(<App />);
     await waitFor(() => expect(rootProp("--font-source-size")).toBe("16px"));
+  });
+});
+
+describe("page width at startup (EPW-FR-ZCBT)", () => {
+  afterEach(() => {
+    resetEditorPageWidthForTest();
+  });
+
+  it("EPW-FR-ZCBT: the window shows the stored page width on every page from startup", async () => {
+    resetEditorPageWidthForTest();
+    invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "load_app_preferences") return { theme: "system", editorPageWidthPx: 1300 };
+      return defaultInvoke(cmd, args);
+    });
+    render(<App />);
+    await waitFor(() =>
+      expect(document.documentElement.style.getPropertyValue("--doc-page-base-width")).toBe(
+        "1300px",
+      ),
+    );
   });
 });

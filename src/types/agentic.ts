@@ -32,6 +32,14 @@ export type AgenticKind = "cli" | "api";
  */
 export type ClaudeAuthMode = "subscription" | "custom_gateway";
 
+/**
+ * Codex's authentication mode (AIC-FR-UFYH): the login folder that Codex's own
+ * `codex login` writes, or a ChatGPT workspace access token. Null on every
+ * other vendor's record, and a Codex record with no stored mode reads as
+ * `login_folder`.
+ */
+export type CodexAuthMode = "login_folder" | "access_token";
+
 /** Where a stored binary path came from (AIC-FR-07). CLI kind only. */
 export type AgenticPathOrigin = "detected" | "user_supplied" | "unset";
 
@@ -142,8 +150,9 @@ export interface AgenticIntegration {
   baseUrl: string | null;
   /**
    * AIC-FR-25: the credential fields follow the credential, not the kind. They
-   * describe an API-kind vendor's key **and Claude Code's OAuth token**; Codex
-   * and OpenCode hold nothing, so they always read `unset` with a null hint.
+   * describe an API-kind vendor's key, Claude Code's OAuth token, and Codex's
+   * access token in `access_token` mode. Codex in `login_folder` mode and
+   * OpenCode hold nothing, so they read `unset` with a null hint.
    */
   keyState: KeyState;
   /**
@@ -164,6 +173,8 @@ export interface AgenticIntegration {
   gatewayMaskedHint?: string | null;
   /** Claude Code only: the author's `NAME=value` entries (AIC-FR-XTEZ). */
   envVars?: string[];
+  /** Codex only (AIC-FR-UFYH); null or absent on every other record. */
+  codexAuthMode?: CodexAuthMode | null;
   /** Whether this vendor requires a credential at all — true for Claude Code. */
   keyRequired: boolean;
   state: AgenticState;
@@ -185,7 +196,12 @@ export interface AgenticIntegration {
    * neither.
    */
   modelOverrides: Record<string, string>;
-  /** Empty for a vendor with no notion of reasoning effort (AIC-FR-09). */
+  /**
+   * Empty for a vendor with no notion of reasoning effort (AIC-FR-09). Where a
+   * model carries a ladder of its own (`ModelOption.reasoning`), that ladder
+   * decides which of these levels a selector offers (AIC-FR-SFMS), and this
+   * list gives them their labels.
+   */
   reasoningEfforts: EffortOption[];
   /** The effort every turn kind uses unless `effortOverrides` names one. */
   selectedEffort: string | null;
@@ -236,12 +252,19 @@ export interface AgenticVerifyConfig {
    */
   oauthToken?: string | null;
   /**
-   * Claude Code only (AIC-FR-UFNB). Absent means `subscription`. The gateway
-   * fields below are sent only with `custom_gateway`, and `oauthToken` only
-   * without it; the backend refuses the other combination as
-   * `wrong_config_kind`.
+   * Claude Code (AIC-FR-UFNB): absent means `subscription`. The gateway fields
+   * below are sent only with `custom_gateway`, and `oauthToken` only without
+   * it; the backend refuses the other combination as `wrong_config_kind`.
+   *
+   * Codex (AIC-FR-ISWS): `login_folder` with the path alone, or `access_token`
+   * with the path and an optional `accessToken`.
    */
-  authMode?: ClaudeAuthMode;
+  authMode?: ClaudeAuthMode | CodexAuthMode;
+  /**
+   * Codex only, with `authMode = "access_token"` (AIC-FR-ISWS). Present when
+   * the author typed a new token; absent keeps the stored one.
+   */
+  accessToken?: string | null;
   gatewayBaseUrl?: string | null;
   gatewayTokenVar?: string | null;
   /** Present when the author typed a new token; absent keeps the stored one (AIC-FR-IOWS). */
@@ -265,6 +288,23 @@ export const CLAUDE_OAUTH_TOKEN_PATTERN = /^sk-ant-oat01-[A-Za-z0-9_-]+$/;
 /** Whether `value` is shaped like a Claude Code OAuth token (AII-FR-50). */
 export const isValidClaudeOauthToken = (value: string): boolean =>
   CLAUDE_OAUTH_TOKEN_PATTERN.test(value);
+
+/** AIC-FR-BXFL / AII-FR-NXAV: the longest access token Codex's tab accepts. */
+export const CODEX_ACCESS_TOKEN_MAX_BYTES = 16384;
+
+/**
+ * AII-FR-NXAV / AIC-FR-BXFL: whether `value`, trimmed, is shaped like a Codex
+ * access token — non-empty, at most 16384 bytes, and free of whitespace and
+ * control characters. Structural only: the format of the token itself is the
+ * vendor's, so nothing more is tested. The backend re-checks the same rule.
+ */
+export function isValidCodexAccessToken(value: string): boolean {
+  const token = value.trim();
+  if (token === "") return false;
+  if (new TextEncoder().encode(token).length > CODEX_ACCESS_TOKEN_MAX_BYTES) return false;
+  // Whitespace (any Unicode space) and C0, DEL, and C1 control characters.
+  return !/[\s\u0000-\u001f\u007f-\u009f]/u.test(token);
+}
 
 /**
  * How the open project resolved an integration — the value that decides what the

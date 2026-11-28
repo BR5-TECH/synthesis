@@ -121,7 +121,7 @@ fn info_exclude_ignores_and_a_gitignore_negation_overrides_it() {
 fn skill_folders_stay_even_when_ignored() {
     let (_tmp, root) = project(&[(
         ".gitignore",
-        ".claude/\n.codex/\n.github/\n.opencode/\n.claudex/\n.synthesis/\n",
+        ".agents/\n.claude/\n.codex/\n.github/\n.opencode/\n.claudex/\n.synthesis/\n",
     )]);
     let (out, _) =
         kept(&root, &[".synthesis/skills/a/SKILL.md", ".synthesis/skills", ".synthesis"]);

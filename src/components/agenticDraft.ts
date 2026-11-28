@@ -1,9 +1,12 @@
 import {
+  CODEX_ACCESS_TOKEN_MAX_BYTES,
   isValidClaudeOauthToken,
+  isValidCodexAccessToken,
   type AgenticIntegration,
   type AgenticVendorId,
   type AgenticVerifyConfig,
   type ClaudeAuthMode,
+  type CodexAuthMode,
 } from "../types";
 import type { Busy, Status } from "./aiIntegrationsShared";
 import {
@@ -40,6 +43,49 @@ export interface AgenticDraft extends GatewayFields {
    * across a tab change, or restores it when the tab reopens (AII-FR-53).
    */
   oauthToken: string;
+  /**
+   * Codex's open sub-tab (AII-FR-LOYM). A candidate like `authMode`: choosing a
+   * sub-tab commits nothing until Verify succeeds.
+   */
+  codexAuthMode: CodexAuthMode;
+  /**
+   * Codex's access token (AII-FR-XXSQ). Held as `oauthToken` is held: only
+   * until the submission carrying it resolves (AII-FR-53).
+   */
+  accessToken: string;
+}
+
+/**
+ * AII-FR-LOYM: does this tab render the Login folder and Access token sub-tabs?
+ * Codex is the one CLI whose credential is optional, so the vendor id is the
+ * fact that decides it.
+ */
+export function isCodexTab(i: AgenticIntegration): boolean {
+  return i.kind === "cli" && i.vendor === "codex";
+}
+
+/** AIC-FR-UFYH: a Codex record with no stored mode reads as `login_folder`. */
+export function storedCodexMode(i: AgenticIntegration): CodexAuthMode {
+  return i.codexAuthMode ?? "login_folder";
+}
+
+/** AII-FR-XXSQ: is the Codex Access token sub-tab open? */
+export function codexTokenOpen(i: AgenticIntegration, draft: AgenticDraft): boolean {
+  return isCodexTab(i) && draft.codexAuthMode === "access_token";
+}
+
+/**
+ * AII-FR-NXAV: the inline complaint about a typed access token, or `""`. An
+ * empty field is not an error: it means "keep the stored token". Quotes none of
+ * the value, for the reason `oauthTokenValidation` gives.
+ */
+export function accessTokenValidation(value: string): string {
+  const token = value.trim();
+  if (token === "" || isValidCodexAccessToken(token)) return "";
+  if (new TextEncoder().encode(token).length > CODEX_ACCESS_TOKEN_MAX_BYTES) {
+    return `An access token is at most ${CODEX_ACCESS_TOKEN_MAX_BYTES} bytes.`;
+  }
+  return "An access token holds no spaces, line breaks, or control characters.";
 }
 
 /**
@@ -83,6 +129,14 @@ export function canVerifyAgentic(
   i: AgenticIntegration,
   draft: AgenticDraft,
 ): boolean {
+  // AII-FR-NXAV: the Access token sub-tab needs a valid typed token or a
+  // stored one. The Login folder sub-tab has nothing extra to satisfy.
+  if (isCodexTab(i)) {
+    if (draft.codexAuthMode !== "access_token") return true;
+    const typed = draft.accessToken.trim();
+    if (typed !== "") return isValidCodexAccessToken(typed);
+    return i.keyState === "set";
+  }
   if (!rendersOauthTokenField(i)) return true;
   // AII-FR-51 / AII-FR-HOKG: an environment line the backend would refuse
   // leaves the configuration incomplete in either sub-tab.
@@ -101,6 +155,12 @@ export function claudeDraftEdited(
   i: AgenticIntegration,
   draft: AgenticDraft,
 ): boolean {
+  if (isCodexTab(i)) {
+    // AII-FR-22 / AII-FR-LOYM: a change of sub-tab, or a typed token, is an
+    // edit like a changed path.
+    if (draft.codexAuthMode !== storedCodexMode(i)) return true;
+    return draft.codexAuthMode === "access_token" && draft.accessToken.trim() !== "";
+  }
   if (!rendersOauthTokenField(i)) return false;
   const storedMode: ClaudeAuthMode = i.authMode ?? "subscription";
   if (draft.authMode !== storedMode) return true;
@@ -126,6 +186,8 @@ export function draftForIntegration(i: AgenticIntegration): AgenticDraft {
     gatewayTokenVar: i.gatewayTokenVar ?? DEFAULT_GATEWAY_TOKEN_VAR,
     gatewayToken: "",
     envText: envTextOf(i.envVars),
+    codexAuthMode: storedCodexMode(i),
+    accessToken: "",
   };
 }
 
@@ -202,8 +264,11 @@ export function agenticStatus(
     }
     if (integration.state === "key_unavailable") {
       return {
-        // A gateway record returns above, so only the OAuth token is left here.
-        text: "The stored OAuth token can no longer be read. Enter one and verify again.",
+        // A gateway record returns above, so only the OAuth token, or Codex's
+        // access token, is left here (AIC-FR-15).
+        text: isCodexTab(integration)
+          ? "The stored access token can no longer be read. Enter one and verify again."
+          : "The stored OAuth token can no longer be read. Enter one and verify again.",
         tone: "warn",
       };
     }
@@ -252,13 +317,18 @@ export function emptyDraft(): AgenticDraft {
     gatewayTokenVar: DEFAULT_GATEWAY_TOKEN_VAR,
     gatewayToken: "",
     envText: "",
+    // AII-FR-26: a cleared Codex tab opens on its Login folder sub-tab.
+    codexAuthMode: "login_folder",
+    accessToken: "",
   };
 }
 
 /**
  * AIC-FR-26 / AIC-FR-UFNB / AIC-FR-SXVA: the configuration a CLI tab submits.
  *
- * Codex and OpenCode send the path alone. Claude Code sends the open sub-tab's
+ * OpenCode sends the path alone. Codex sends the path and the open sub-tab's
+ * mode, and an access token only when one was typed (AIC-FR-ISWS). Claude Code
+ * sends the open sub-tab's
  * shape and no field of the other: a subscription sends a token only when one
  * was typed, and a gateway sends its URL, its variable name, and a token only
  * when one was typed. The environment entries are sent when they differ from
@@ -282,6 +352,17 @@ export function cliConfigFor(
     return config;
   }
   const config: AgenticVerifyConfig = { path: draft.path };
+  if (integration && isCodexTab(integration)) {
+    // AII-FR-RNSO / AII-FR-NXAV.
+    if (draft.codexAuthMode === "access_token") {
+      config.authMode = "access_token";
+      const token = draft.accessToken.trim();
+      if (token !== "") config.accessToken = token;
+    } else {
+      config.authMode = "login_folder";
+    }
+    return config;
+  }
   if (!integration || !rendersOauthTokenField(integration)) return config;
   const token = draft.oauthToken.trim();
   if (token !== "") config.oauthToken = token;

@@ -419,15 +419,19 @@ pub(crate) fn ranking_project() -> Fixture {
     mounted(dir)
 }
 
-/// A project where one name is held by three ecosystems and another by one.
+/// A project where one name is held by a project skill and a synthesis skill,
+/// and another name by one skill.
+///
+/// Project copies of one name are one skill in the registry (DSL-FR-17), so a
+/// collision the tools see spans kinds (DSL-FR-QMRX).
 ///
 /// The `review` skills carry *different* descriptions on purpose: identical text
 /// would make the search's "keep the better match" rule (SST-FR-12) untestable,
-/// because either survivor would satisfy an assertion about score. The `.codex`
-/// one is the one that matches "pull request diff", so the tool that keeps the
-/// higher score and the tool that keeps the first path disagree about which
-/// file stands behind the name — which is exactly what SLT-FR-14 now permits and
-/// what LSK-FR-10 refuses to guess between.
+/// because either survivor would satisfy an assertion about score. The
+/// synthesis one is the one that matches "pull request diff", so the tool that
+/// keeps the higher score and the tool that keeps the first path disagree about
+/// which file stands behind the name — which is exactly what SLT-FR-14 permits
+/// and what LSK-FR-10 refuses to guess between.
 pub(crate) fn collision_project() -> Fixture {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
@@ -440,17 +444,10 @@ pub(crate) fn collision_project() -> Fixture {
     );
     write_skill(
         root,
-        ".codex/skills",
+        ".synthesis/skills",
         "review",
         "name: review\ndescription: Review a pull request diff for defects, regressions and style violations.",
-        "# Codex review\n\nThe codex copy's instructions.",
-    );
-    write_skill(
-        root,
-        ".opencode/skills",
-        "review",
-        "name: review\ndescription: Review a database migration for destructive operations.",
-        "# Opencode review\n\nThe opencode copy's instructions.",
+        "# Synthesis review\n\nThe synthesis copy's instructions.",
     );
     write_skill(
         root,
@@ -475,7 +472,8 @@ pub(crate) fn collision_project() -> Fixture {
 
 /// Two skills that tie on score, in an order the folder walk would not produce.
 ///
-/// The four ecosystem folders are walked claude → codex → github → opencode,
+/// The five project folders are walked agents → claude → codex → github →
+/// opencode,
 /// which is already ascending by path prefix, so a fixture spread across them
 /// cannot tell the explicit sort from the walk. These two sit in one folder
 /// with names whose sorted order is the opposite of neither — `alpha` before

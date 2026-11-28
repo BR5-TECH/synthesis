@@ -53,6 +53,7 @@ fn descriptor(path: &str, ecosystem: Ecosystem) -> SkillDescriptor {
         folder_name: "x".into(),
         name: "x".into(),
         description: "does x".into(),
+        shadowed_paths: Vec::new(),
     }
 }
 
@@ -86,7 +87,7 @@ fn the_synthesis_folder_is_enumerated_with_its_own_ecosystem() {
 }
 
 // DSL-FR-NWKE, DSL-FR-02, DSL-FR-03, DSL-FR-07, DSL-FR-08, DSL-FR-09,
-// DSL-FR-10: the eligibility rules of the four folders apply to the fifth the
+// DSL-FR-10: the eligibility rules of the five folders apply to the sixth the
 // same way, and the folder is matched at the project root alone.
 #[test]
 fn the_synthesis_folder_follows_the_same_eligibility_rules() {

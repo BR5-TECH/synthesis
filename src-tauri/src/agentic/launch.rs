@@ -83,10 +83,26 @@ pub enum AgentLaunchCredential {
     /// container: its subscription token, or its gateway URL and token, and
     /// the author's own variables (AIC-FR-XZCS, EAC-FR-15).
     ClaudeEnvironment(Vec<LaunchVariable>),
-    /// Codex authenticates through the login directory its own CLI wrote on
-    /// this machine, mounted read-only (EAC-FR-16). Not a secret this module
-    /// holds — a location it resolves and never opens.
+    /// Codex in `login_folder` mode authenticates through the login directory
+    /// its own CLI wrote on this machine, mounted read/write (EAC-FR-16). Not a
+    /// secret this module holds — a location it resolves and never opens.
     CodexConfigMount { source: PathBuf, target: PathBuf },
+    /// Codex in `access_token` mode authenticates through one masked variable,
+    /// `CODEX_ACCESS_TOKEN`, and no mount (AIC-FR-KAVY). The variant names the
+    /// mode, so the executor can choose Codex's session-state directory from it.
+    CodexEnvironment(Vec<LaunchVariable>),
+}
+
+impl AgentLaunchCredential {
+    /// AIC-FR-KAVY: the Codex authentication mode this handoff carries, or
+    /// `None` for a Claude Code handoff.
+    pub fn codex_auth_mode(&self) -> Option<CodexAuthMode> {
+        match self {
+            Self::ClaudeEnvironment(_) => None,
+            Self::CodexConfigMount { .. } => Some(CodexAuthMode::LoginFolder),
+            Self::CodexEnvironment(_) => Some(CodexAuthMode::AccessToken),
+        }
+    }
 }
 
 impl std::fmt::Debug for AgentLaunchCredential {
@@ -99,6 +115,9 @@ impl std::fmt::Debug for AgentLaunchCredential {
             }
             Self::CodexConfigMount { .. } => {
                 f.write_str("AgentLaunchCredential::CodexConfigMount(<redacted>)")
+            }
+            Self::CodexEnvironment(variables) => {
+                write!(f, "AgentLaunchCredential::CodexEnvironment({} variables)", variables.len())
             }
         }
     }
@@ -156,6 +175,30 @@ pub fn resolve_agent_launch_credential(
             &record,
             &credential,
         )?));
+    }
+
+    // AIC-FR-UFYH / AIC-FR-KAVY: the stored mode decides the handoff. A
+    // registry that cannot be read is a refusal, never a quiet fall back to the
+    // login directory.
+    if let Some(variable) = descriptor.access_token_env {
+        let (records, _) =
+            store.load_agentic_registry().map_err(|_| ERR_REGISTRY_UNAVAILABLE.to_string())?;
+        let mode = records
+            .iter()
+            .find(|r| r.vendor == vendor)
+            .map_or(CodexAuthMode::LoginFolder, |r| r.codex_auth_mode);
+        if mode == CodexAuthMode::AccessToken {
+            let token = ai
+                .secrets
+                .get(vendor)
+                .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
+                .ok_or(ERR_TOKEN_MISSING)?;
+            return Ok(AgentLaunchCredential::CodexEnvironment(vec![LaunchVariable {
+                name: variable.to_string(),
+                value: SecretString::new(token),
+                masked: true,
+            }]));
+        }
     }
 
     let mount = descriptor.config_mount.ok_or(ERR_NOT_AN_EXECUTABLE_CLI)?;

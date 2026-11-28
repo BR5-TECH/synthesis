@@ -231,7 +231,7 @@ RUN npm install --global --no-fund --no-audit \
 ENV OPENSPEC_TELEMETRY=0
 
 # AVI-FR-06: an exact version, never a floating tag.
-ARG CODEX_VERSION=0.147.0
+ARG CODEX_VERSION=0.172.0
 RUN npm install --global --no-fund --no-audit \
         "@openai/codex@${CODEX_VERSION}" \
     && npm cache clean --force
@@ -292,10 +292,12 @@ ENV HOME=/home/agent \
 # AVI-FR-03: the same fixed non-root UID/GID as the Claude Code image.
 #
 # `/home/agent` is load-bearing here in a way it is not for Claude Code: it is
-# the mount target for the host's Codex login directory (AIC-FR-30), so the
-# path the container expects and the home this user is given have to agree.
-# `.codex` is created and owned in advance so a read-only bind mount lands on a
-# directory that already belongs to the agent user.
+# the mount target for the Codex session-state directory, which is the host's
+# login directory in the `login_folder` mode (AIC-FR-30) and a dedicated one in
+# the `access_token` mode, so the path the container expects and the home this
+# user is given have to agree. `.codex` is created and owned in advance so the
+# read/write bind mount lands on a directory that already belongs to the agent
+# user.
 RUN groupadd --gid 10001 agent \
     && useradd --uid 10001 --gid 10001 --create-home --home-dir /home/agent agent \
     && mkdir -p /home/agent/.codex /home/agent/.local/share/pnpm/bin \

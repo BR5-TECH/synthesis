@@ -31,7 +31,7 @@ fn the_launch_handoff_answers_only_for_executable_clis() {
     std::fs::create_dir_all(home.path().join(".codex")).expect("login dir");
     let codex = harness(
         FakeFs::with_executable(&["/usr/bin/codex"]),
-        FakeRunner::saying("/usr/bin/codex", "codex 0.147.0"),
+        FakeRunner::saying("/usr/bin/codex", "codex-cli 0.172.0"),
         Arc::new(FakeProber::default()),
         FakeKeychain::new(),
     );
@@ -126,7 +126,7 @@ fn the_handoff_type_never_renders_and_every_refusal_is_typed() {
     let empty_home = tempfile::tempdir().expect("temp home");
     let codex = harness(
         FakeFs::with_executable(&["/usr/bin/codex"]),
-        FakeRunner::saying("/usr/bin/codex", "codex 0.147.0"),
+        FakeRunner::saying("/usr/bin/codex", "codex-cli 0.172.0"),
         Arc::new(FakeProber::default()),
         FakeKeychain::new(),
     );

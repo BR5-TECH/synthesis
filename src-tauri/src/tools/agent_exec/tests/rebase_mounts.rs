@@ -56,7 +56,8 @@ fn eac_ts52_the_semantic_rebase_mount_is_fixed_read_only_and_identical_per_vendo
                 mount.contains(&format!("target={}", harness.workspace_target()))
                     || mount.contains("target=/rebase")
                     || mount.contains(&harness.session_state_dir(vendor))
-                    || mount.contains("/.codex"),
+                    || mount.contains("/.codex")
+                    || mount.contains("target=/opt/synthesis/vendor"),
                 "{vendor}: an unexpected mount: {mount}",
             );
         }

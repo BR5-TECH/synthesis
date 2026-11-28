@@ -41,8 +41,8 @@ uid = 10001
 gid = 10001
 
 [codex]
-image_ref = "ghcr.io/br5-tech/synthesis-agent-codex:0.147.0-6"
+image_ref = "ghcr.io/br5-tech/synthesis-agent-codex:0.172.0-1"
 image_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-cli_version = "0.147.0"
+cli_version = "0.172.0"
 uid = 10001
 gid = 10001

@@ -157,9 +157,10 @@ fn the_tool_reads_no_file_and_enumerates_no_folder_of_its_own() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn all_four_ecosystem_folders_are_listed_and_a_nested_one_is_not() {
+fn all_five_project_folders_are_listed_and_a_nested_one_is_not() {
     let dir = tempfile::TempDir::new().unwrap();
     let root = dir.path();
+    write_skill(root, ".agents/skills", "e", "name: e\ndescription: does e", "# E");
     write_skill(root, ".claude/skills", "a", "name: a\ndescription: does a", "# A");
     write_skill(root, ".codex/skills", "b", "name: b\ndescription: does b", "# B");
     write_skill(root, ".github/skills", "c", "name: c\ndescription: does c", "# C");
@@ -176,16 +177,22 @@ fn all_four_ecosystem_folders_are_listed_and_a_nested_one_is_not() {
     let fixture = mounted(dir);
     let output = call(&fixture).unwrap();
 
-    assert_eq!(names(&output), vec!["a", "b", "c", "d"]);
+    assert_eq!(names(&output), vec!["e", "a", "b", "c", "d"]);
     assert!(
         !names(&output).contains(&"deep"),
-        "SLT-FR-06: a package's own skills folder deeper in the tree is not one of the four",
+        "SLT-FR-06: a package's own skills folder deeper in the tree is not one of the six",
     );
 
     let ecosystems: Vec<Ecosystem> = output.skills.iter().map(|s| s.ecosystem).collect();
     assert_eq!(
         ecosystems,
-        vec![Ecosystem::Claude, Ecosystem::Codex, Ecosystem::Github, Ecosystem::Opencode,],
+        vec![
+            Ecosystem::Agents,
+            Ecosystem::Claude,
+            Ecosystem::Codex,
+            Ecosystem::Github,
+            Ecosystem::Opencode,
+        ],
         "each entry reports the folder family it came from",
     );
 }
@@ -285,7 +292,7 @@ fn two_calls_return_the_same_entries_in_ascending_path_order() {
     let mut sorted = ordered.clone();
     sorted.sort();
     assert_eq!(ordered, sorted, "SLT-FR-08: ascending path order");
-    // The registry's own walk visits the four folders in an order that is
+    // The registry's own walk visits the six folders in an order that is
     // already ascending by path prefix, so this assertion cannot distinguish
     // the sort from the walk. What it *can* pin — and what is this tool's
     // responsibility rather than the registry's — is that the tool preserves
@@ -389,11 +396,11 @@ fn a_colliding_name_is_kept_by_the_first_copy_in_path_order() {
     let fixture = collision_project();
     let output = call(&fixture).unwrap();
 
-    // `.claude` beats `.codex` beats `.opencode`, those folder names sorting
-    // that way — and the surviving entry keeps its position in the order rather
-    // than being appended after the survivors were chosen (SLT-FR-08).
-    // `packager` sits between the kept `.claude` review and the dropped
-    // `.codex` and `.opencode` ones in path order, so a survivor appears both
+    // The `.claude` project skill beats the `.synthesis` one, those paths
+    // sorting that way — and the surviving entry keeps its position in the
+    // order rather than being appended after the survivors were chosen
+    // (SLT-FR-08). `packager` sits between the kept `.claude` review and the
+    // dropped `.synthesis` one in path order, so a survivor appears both
     // before and after a dropped entry: an implementation that appended the
     // survivors rather than leaving them in place would reorder this.
     assert_eq!(
@@ -468,7 +475,7 @@ fn the_two_tools_agree_on_names_and_may_differ_on_which_copy_stands_behind_one()
     let fixture = collision_project();
     let listed = call(&fixture).unwrap();
 
-    // The `.codex` copy matches this query best, so the search keeps it while
+    // The synthesis copy matches this query best, so the search keeps it while
     // the list keeps `.claude`'s. SLT-FR-14 promises the *name*, not the file.
     let found = block_on(
         SkillSearchTool::new(fixture.handle(), crate::skills::SkillFilter::all_project()).call(
@@ -489,7 +496,7 @@ fn the_two_tools_agree_on_names_and_may_differ_on_which_copy_stands_behind_one()
         "SLT-FR-14: and `path` and `ecosystem` need not agree",
     );
     assert_eq!(listed_review.ecosystem, Ecosystem::Claude);
-    assert_eq!(found_review.ecosystem, Ecosystem::Codex);
+    assert_eq!(found_review.ecosystem, Ecosystem::Synthesis);
 }
 
 #[test]

@@ -632,8 +632,13 @@ describe("the pure rules", () => {
       oauthToken: SAMPLE_TOKEN,
       envVars: ["X=1"],
     });
-    // Codex and OpenCode send the path alone.
-    expect(cliConfigFor(agenticIntegration("codex" as AgenticVendorId), draft)).toEqual({ path: "/p" });
+    // OpenCode sends the path alone. Codex sends the path and its own mode,
+    // and never a Claude Code field (AIC-FR-ISWS).
+    expect(cliConfigFor(agenticIntegration("opencode" as AgenticVendorId), draft)).toEqual({ path: "/p" });
+    expect(cliConfigFor(agenticIntegration("codex" as AgenticVendorId), draft)).toEqual({
+      path: "/p",
+      authMode: "login_folder",
+    });
     expect(claudeDraftEdited(stored, { ...draft, gatewayUrl: GATEWAY_URL, gatewayTokenVar: "ANTHROPIC_AUTH_TOKEN", gatewayToken: "" })).toBe(false);
     // AIC-FR-QHLN: a gateway status ignores the path, which a gateway does not use.
     const gatewayDraft = { ...draftForIntegration(stored), path: "/anything" };

@@ -240,6 +240,14 @@ impl TurnScript {
         self
     }
 
+    /// EAC-FR-IGXZ: the executor reports the session `s-exec` with the
+    /// continuation token `access_token`, and the agent's own envelope reports
+    /// the session `s-agent`, as an agent that guessed its id does.
+    pub(crate) fn leaves_an_executor_session(mut self) -> Self {
+        self.inner = self.inner.with_executor_session("s-exec", "access_token", Some("s-agent"));
+        self
+    }
+
     /// The turn answers with a vendor session the next turn can resume.
     pub(crate) fn leaves_a_session(mut self) -> Self {
         self.inner = self.inner.with_session("s1");

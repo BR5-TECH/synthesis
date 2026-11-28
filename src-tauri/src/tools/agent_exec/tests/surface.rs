@@ -144,7 +144,7 @@ fn codexs_generated_invocation_carries_its_own_contract() {
     let harness = harness_for("codex");
     // Codex declares reasoning efforts, so a resolved one becomes a config
     // override; a model becomes `--model`.
-    agentic::set_model_impl(&harness.store, &harness.ai, "codex", None, Some("gpt-5.1"))
+    agentic::set_model_impl(&harness.store, &harness.ai, "codex", None, Some("gpt-6.1-sol"))
         .expect("model");
     agentic::set_effort_impl(&harness.store, &harness.ai, "codex", None, Some("high"))
         .expect("effort");
@@ -161,11 +161,10 @@ fn codexs_generated_invocation_carries_its_own_contract() {
         [
             "exec",
             "--json",
-            "--sandbox",
-            "danger-full-access",
+            "--dangerously-bypass-approvals-and-sandbox",
             "--skip-git-repo-check",
             "--model",
-            "gpt-5.1",
+            "gpt-6.1-sol",
             "-c",
             "model_reasoning_effort=\"high\"",
             "-",
@@ -193,8 +192,8 @@ fn codexs_generated_invocation_carries_its_own_contract() {
     // mount is it.
     assert_eq!(
         recorded.argv.iter().filter(|a| *a == "--mount").count(),
-        2,
-        "workspace and the login directory, and nothing else"
+        3,
+        "workspace, the login directory and the launch files, and nothing else"
     );
 
     // The caller sees the same shape it saw for Claude Code.
@@ -281,7 +280,10 @@ fn an_unavailable_credential_prevents_the_launch_without_disclosing_anything() {
     let ai = AgenticIntegrations::new(
         Box::new(FakeProbe { executables: vec!["/usr/bin/codex".into()], directories: vec![] }),
         Box::new(FakeRunner {
-            banners: HashMap::from([("/usr/bin/codex".to_string(), "codex 0.147.0".to_string())]),
+            banners: HashMap::from([(
+                "/usr/bin/codex".to_string(),
+                "codex-cli 0.172.0".to_string(),
+            )]),
         }),
         Box::new(NoProber),
         Box::new(Arc::new(FakeKeys::default())),

@@ -67,7 +67,10 @@ pub(super) async fn work_turn<R: tauri::Runtime>(
             return Step::Stop;
         };
         first = false;
-        let resumed = turn.resume.is_some();
+        // GXD-FR-XPUR: a turn resumes either the session it names or, for the
+        // answers of an escalation, the one the run's checkpoint holds.
+        let resumed =
+            turn.resume.is_some() || super::turns::resume_for(run, phases::PART_WORK).is_some();
         // GRL-FR-QKDC: a refused answer is asked again once, in the same session.
         let (outcome, bound) =
             match execute_step(app, run, turn, cancellation, dispatch, resumed).await {
@@ -302,12 +305,15 @@ async fn execute_step<R: tauri::Runtime>(
         app,
         &crate::logging::BUFFER,
         &[Domain::Ai, Domain::Backend],
-        "graduation runs a check gate step as a fresh turn: the vendor did not resume",
+        "graduation runs a work turn as a fresh turn: the vendor did not resume",
         log_fields! { "run_id" => run.id.clone() },
     );
     if let Some(gate) = run.checkpoint.check_gate.as_mut() {
         gate.resume = None;
     }
+    // GXD-FR-XPUR: the answers of an escalation go into a fresh work turn, so
+    // the session the checkpoint holds is not asked for again.
+    run.checkpoint.resume = None;
     let settings = settings_for_dispatch(app, run, phases::PART_WORK);
     retry.bound = settings.turn_bound(run.turn_time_used_ms);
     corrections::execute_with_correction(app, run, retry, cancellation, dispatch).await

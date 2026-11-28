@@ -1,6 +1,6 @@
 //! Dynamic skills loading (`DSL-dynamic-skills-loading.md`).
 //!
-//! The registry of skills an AI agent may reach for on its own: the four
+//! The registry of skills an AI agent may reach for on its own: the five
 //! folders the agent ecosystems keep their project skills in and the project's
 //! own `.synthesis/skills` folder (DSL-FR-NWKE), walked directly,
 //! each eligible `SKILL.md`'s declared name and description read out of its
@@ -16,8 +16,8 @@
 //! that gitignores `.claude/` would otherwise have no skills at all (DSL-FR-06).
 //! The cost of that choice is that the scan cannot be the trigger either: a
 //! gitignored file's edit changes nothing in the tree. The watcher's raw path
-//! channel (ASC-FR-20) is what reports it, and every pass re-enumerates all five
-//! folders in full rather than interpreting the event (DSL-FR-19) — five shallow
+//! channel (ASC-FR-20) is what reports it, and every pass re-enumerates all six
+//! folders in full rather than interpreting the event (DSL-FR-19) — six shallow
 //! directory listings, which is cheaper than being clever and cannot drift.
 //!
 //! ## Why a descriptor rather than the file
@@ -28,8 +28,9 @@
 //! (DSL-FR-14) — so ranking a skill on how it describes itself is not disturbed
 //! by how much it wrote.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use std::time::SystemTime;
 
 use serde::Serialize;
 
@@ -40,15 +41,16 @@ pub mod builtin;
 pub use builtin::{builtin_skill_file, enumerate_builtin, BUILTIN_PATH_PREFIX};
 
 // ---------------------------------------------------------------------------
-// The five special folders (DSL-FR-02)
+// The six special folders (DSL-FR-02)
 // ---------------------------------------------------------------------------
 
-/// Which of the four folder families a project skill was found in, `Synthesis`
+/// Which of the five folder families a project skill was found in, `Synthesis`
 /// for a skill of the project's `.synthesis/skills` folder (DSL-FR-NWKE), or
 /// `Builtin` for a skill the application ships (DSL-FR-YBDO).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Ecosystem {
+    Agents,
     Claude,
     Codex,
     Github,
@@ -60,6 +62,7 @@ pub enum Ecosystem {
 impl Ecosystem {
     pub fn as_str(self) -> &'static str {
         match self {
+            Ecosystem::Agents => "agents",
             Ecosystem::Claude => "claude",
             Ecosystem::Codex => "codex",
             Ecosystem::Github => "github",
@@ -70,11 +73,15 @@ impl Ecosystem {
     }
 }
 
-/// DSL-FR-02: the five special folders, relative to the project root and
+/// DSL-FR-02: the six special folders, relative to the project root and
 /// matched there alone. A package's own `.claude/skills/` deeper in a monorepo
 /// is not one of them, so two packages cannot collide over a skill name. The
 /// last one holds the synthesis skills (DSL-FR-NWKE).
-pub const SKILL_FOLDERS: [(&str, Ecosystem); 5] = [
+///
+/// DSL-FR-17: the order of the five project folders is also the tie order of
+/// two copies of one name with the same modification time.
+pub const SKILL_FOLDERS: [(&str, Ecosystem); 6] = [
+    (".agents/skills", Ecosystem::Agents),
     (".claude/skills", Ecosystem::Claude),
     (".codex/skills", Ecosystem::Codex),
     (".github/skills", Ecosystem::Github),
@@ -96,7 +103,7 @@ pub const SKILL_FILE: &str = "SKILL.md";
 /// Carries no scan node id: a skill is eligible whether or not the scan
 /// surfaced its file (DSL-FR-06, DSL-FR-11), so `path` is the only identity it
 /// always has — and it is what tells two skills of the same name apart
-/// (DSL-FR-17).
+/// (DSL-FR-QMRX).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkillDescriptor {
@@ -110,6 +117,11 @@ pub struct SkillDescriptor {
     pub name: String,
     /// The declared frontmatter description (DSL-FR-09).
     pub description: String,
+    /// DSL-FR-KWQE: the paths of the project copies of this name that
+    /// DSL-FR-17 drops in favour of this one, in path order. Empty for every
+    /// other skill. Not part of the descriptor a tool returns.
+    #[serde(skip)]
+    pub shadowed_paths: Vec<String>,
 }
 
 impl SkillDescriptor {
@@ -135,8 +147,9 @@ pub struct RankedSkill {
 /// Every built-in skill passes. A synthesis skill passes unless its `path` is
 /// one of `disabled_paths`, the agent's stored opt-outs (AGR-FR-HMVQ). A
 /// project skill passes only when its `path` is one of `project_paths`, the
-/// agent's stored selection (AGR-FR-IGIL). A path that names no skill of the
-/// matching kind has no effect.
+/// agent's stored selection (AGR-FR-IGIL), or when one of its shadowed copies
+/// is (DSL-FR-TBWE). A path that names no skill of the matching kind has no
+/// effect.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SkillFilter {
     project_paths: BTreeSet<String>,
@@ -198,7 +211,13 @@ impl SkillFilter {
         match skill.ecosystem {
             Ecosystem::Builtin => true,
             Ecosystem::Synthesis => !self.disabled_paths.contains(&skill.path),
-            _ => self.project_paths.contains(&skill.path),
+            // DSL-FR-TBWE: a stored path of a dropped copy admits the kept
+            // copy of that name, so a persona keeps the skill when an older
+            // copy is edited and becomes the kept one.
+            _ => {
+                self.project_paths.contains(&skill.path)
+                    || skill.shadowed_paths.iter().any(|p| self.project_paths.contains(p))
+            }
         }
     }
 
@@ -222,6 +241,8 @@ pub struct ProjectSkill {
     pub ecosystem: Ecosystem,
     pub name: String,
     pub description: String,
+    /// DSL-FR-KWQE: the dropped copies of this project skill's name.
+    pub shadowed_paths: Vec<String>,
 }
 
 /// A file at an eligible path that was excluded, and why (DSL-FR-24).
@@ -401,7 +422,7 @@ fn unquote(value: &str) -> &str {
 // Enumeration (DSL-FR-02 through DSL-FR-11, DSL-FR-23, DSL-FR-25)
 // ---------------------------------------------------------------------------
 
-/// Walk the five special folders under `root` and return every eligible skill,
+/// Walk the six special folders under `root` and return every eligible skill,
 /// together with the files that sat at an eligible path but were excluded.
 ///
 /// Pure over the filesystem alone — no Tauri runtime — so every eligibility
@@ -469,16 +490,21 @@ pub fn enumerate(root: &crate::fs::RootFs) -> (Vec<SkillDescriptor>, Vec<Exclusi
             let rel = format!("{folder}/{folder_name}/{SKILL_FILE}");
             let read = resolve_skill(root, &rel).and_then(|abs| read_skill(root, &abs));
             match read {
-                Ok(front) => match eligible(&front) {
-                    Ok(()) => skills.push(SkillDescriptor {
-                        // DSL-FR-10: a skill that declares no usable name goes
-                        // by its folder, rather than being excluded for it.
-                        name: front.name.clone().unwrap_or_else(|| folder_name.clone()),
-                        description: front.description.clone().unwrap_or_default(),
-                        path: rel,
-                        ecosystem,
-                        folder_name,
-                    }),
+                Ok((front, modified)) => match eligible(&front) {
+                    Ok(()) => skills.push((
+                        SkillDescriptor {
+                            // DSL-FR-10: a skill that declares no usable name
+                            // goes by its folder, rather than being excluded
+                            // for it.
+                            name: front.name.clone().unwrap_or_else(|| folder_name.clone()),
+                            description: front.description.clone().unwrap_or_default(),
+                            path: rel,
+                            ecosystem,
+                            folder_name,
+                            shadowed_paths: Vec::new(),
+                        },
+                        modified,
+                    )),
                     Err(reason) => excluded.push(Exclusion { path: rel, reason }),
                 },
                 Err(reason) => excluded.push(Exclusion { path: rel, reason }),
@@ -486,13 +512,63 @@ pub fn enumerate(root: &crate::fs::RootFs) -> (Vec<SkillDescriptor>, Vec<Exclusi
         }
     }
 
+    let mut skills = dedupe_project_skills(skills);
     skills.sort_by(|a, b| a.path.cmp(&b.path));
     (skills, excluded)
 }
 
-/// Read a `SKILL.md` and parse its frontmatter, refusing a symlink and anything
-/// over the ceiling (DSL-FR-05, DSL-FR-23).
-fn read_skill(root: &crate::fs::RootFs, abs: &Path) -> Result<Frontmatter, &'static str> {
+/// The rank of a folder family in the DSL-FR-17 tie order: the position of its
+/// folder in [`SKILL_FOLDERS`].
+fn folder_rank(ecosystem: Ecosystem) -> usize {
+    SKILL_FOLDERS.iter().position(|(_, e)| *e == ecosystem).unwrap_or(usize::MAX)
+}
+
+/// DSL-FR-17: project skills that resolve to one `name`, compared exactly, are
+/// one skill. The copy with the newest `SKILL.md` modification time is kept;
+/// on an equal time the earlier folder in [`SKILL_FOLDERS`] wins, then the
+/// lower path. A copy whose time is unknown counts as older than every copy
+/// with a time. The kept copy records the dropped paths (DSL-FR-KWQE).
+///
+/// DSL-FR-QMRX: synthesis skills are never merged, with each other or with a
+/// project skill. Built-in skills do not reach this function.
+pub(crate) fn dedupe_project_skills(
+    candidates: Vec<(SkillDescriptor, Option<SystemTime>)>,
+) -> Vec<SkillDescriptor> {
+    let mut kept = Vec::new();
+    let mut by_name: BTreeMap<String, Vec<(SkillDescriptor, Option<SystemTime>)>> = BTreeMap::new();
+    for (skill, modified) in candidates {
+        if matches!(skill.ecosystem, Ecosystem::Synthesis | Ecosystem::Builtin) {
+            kept.push(skill);
+        } else {
+            by_name.entry(skill.name.clone()).or_default().push((skill, modified));
+        }
+    }
+    for (_, mut copies) in by_name {
+        // Newest first, then folder order, then path: the first is kept.
+        copies.sort_by(|(a, at), (b, bt)| {
+            bt.cmp(at)
+                .then_with(|| folder_rank(a.ecosystem).cmp(&folder_rank(b.ecosystem)))
+                .then_with(|| a.path.cmp(&b.path))
+        });
+        let mut copies = copies.into_iter().map(|(skill, _)| skill);
+        let Some(mut winner) = copies.next() else {
+            continue;
+        };
+        let mut shadowed: Vec<String> = copies.map(|skill| skill.path).collect();
+        shadowed.sort();
+        winner.shadowed_paths = shadowed;
+        kept.push(winner);
+    }
+    kept
+}
+
+/// Read a `SKILL.md`, parse its frontmatter, and report its modification time
+/// (DSL-FR-17), refusing a symlink and anything over the ceiling (DSL-FR-05,
+/// DSL-FR-23).
+fn read_skill(
+    root: &crate::fs::RootFs,
+    abs: &Path,
+) -> Result<(Frontmatter, Option<SystemTime>), &'static str> {
     // The link itself is inspected rather than its target: a `SKILL.md`
     // symlinked at a file elsewhere on the machine would otherwise put that
     // file's frontmatter into the registry, and `search_skills` returns a
@@ -510,7 +586,8 @@ fn read_skill(root: &crate::fs::RootFs, abs: &Path) -> Result<Frontmatter, &'sta
     // DSL-FR-23: through the FSA gate, so a file that does not decode as UTF-8
     // is excluded rather than fatal.
     let text = root.read_text(abs).map_err(|_| REASON_NOT_TEXT)?;
-    parse_frontmatter(&text).ok_or(REASON_NO_FRONTMATTER)
+    let front = parse_frontmatter(&text).ok_or(REASON_NO_FRONTMATTER)?;
+    Ok((front, link.modified))
 }
 
 /// Resolve one skill's `SKILL.md` under `root` through the FSA gate, so
@@ -603,6 +680,7 @@ pub fn project_skills(indexer: &Bm25Indexer) -> Vec<ProjectSkill> {
             ecosystem: s.ecosystem,
             name: s.name.clone(),
             description: s.description.clone(),
+            shadowed_paths: s.shadowed_paths.clone(),
         })
         .collect()
 }
@@ -695,6 +773,8 @@ pub mod test_support {
 
 #[cfg(test)]
 mod builtin_tests;
+#[cfg(test)]
+mod dedupe_tests;
 #[cfg(test)]
 mod synthesis_tests;
 #[cfg(test)]

@@ -20,7 +20,7 @@ The fixed text the model reads (per TLC-FR-05):
 ```
 LoadSkillArgs {
   name:       string,     // required
-  ecosystem:  string?,    // optional; "claude" | "codex" | "github" | "opencode" | "synthesis" | "builtin"
+  ecosystem:  string?,    // optional; "agents" | "claude" | "codex" | "github" | "opencode" | "synthesis" | "builtin"
   file:       string?     // optional; a path relative to the skill's own folder
 }
 ```
@@ -28,7 +28,7 @@ LoadSkillArgs {
 Their descriptions in the parameter schema (per TLC-FR-06):
 
 - `name` — *"The skill's name, exactly as `list_skills` or `search_skills` reported it. Leading and trailing spaces and differences in letter case are ignored."*
-- `ecosystem` — *"Which ecosystem's copy to load, when two skills share a name: one of `claude`, `codex`, `github`, `opencode`, `synthesis`, or `builtin`. Leave it out unless you have been told the name is ambiguous."*
+- `ecosystem` — *"Which ecosystem's copy to load, when two skills share a name: one of `agents`, `claude`, `codex`, `github`, `opencode`, `synthesis`, or `builtin`. Leave it out unless you have been told the name is ambiguous."*
 - `file` — *"A file of the skill to read instead of its SKILL.md, as a path relative to the skill's own folder, exactly as the skill's instructions name it. For example: 'references/agentflow-beta.md'. Leave it out to read the skill's instructions."*
 
 ### Output
@@ -51,8 +51,8 @@ The skill's instructions, or the named file of the skill, as text (per TLC-FR-08
 4. **LSK-FR-04** Eligibility is `../core/DSL-dynamic-skills-loading.md`'s alone. A skill excluded there — one opting out of model invocation (DSL-FR-08), one declaring no description (DSL-FR-09), one reached through a symlink (DSL-FR-05), one whose frontmatter does not parse (DSL-FR-07), one that does not decode as UTF-8 or exceeds the indexing ceiling (DSL-FR-23) — has no descriptor to resolve to and is therefore unloadable through this tool, which reports it as the unknown-skill refusal. A skill that opts out of model invocation is unreachable through every tool in this group, this one included: opting out means a model may not use the skill, not merely that it may not find it.
 5. **LSK-FR-05** `name` is matched against the resolved `name` of each descriptor (DSL-FR-10) after both are trimmed of surrounding whitespace, compared without regard to letter case. A model retyping a name it was shown therefore reaches the skill it meant, which is the forgiveness TLC-FR-07 asks for applied to the one required argument this tool has.
 6. **LSK-FR-06** A `name` that is empty, or blank once trimmed, is the retryable `InvalidArgs` refusal of the contract surface. Guessing which skill was meant would answer a question the model did not ask (per TLC-FR-07).
-7. **LSK-FR-07** `ecosystem` narrows the candidates to those of that ecosystem and nothing else; `builtin` narrows them to the built-in skills, and `synthesis` to the synthesis skills. It is absent by default, in which case all six are considered. A value naming none of the six narrows the candidate set to nothing rather than being refused as malformed, so it reaches the model as the unknown-skill refusal along with every other way of naming a skill that is not there.
-8. **LSK-FR-08** Exactly one candidate is a success carrying that skill's instructions. This is the ordinary outcome, a name being unique in all but the collision DSL-FR-17 permits.
+7. **LSK-FR-07** `ecosystem` narrows the candidates to those of that ecosystem and nothing else; `builtin` narrows them to the built-in skills, and `synthesis` to the synthesis skills. It is absent by default, in which case all seven are considered. A value naming none of the seven narrows the candidate set to nothing rather than being refused as malformed, so it reaches the model as the unknown-skill refusal along with every other way of naming a skill that is not there.
+8. **LSK-FR-08** Exactly one candidate is a success carrying that skill's instructions. This is the ordinary outcome, a name being unique in all but the collision `../core/DSL-dynamic-skills-loading.md` DSL-FR-QMRX permits.
 9. **LSK-FR-09** No candidate is the retryable `NotFound` refusal of the contract surface, whether the name matches nothing, or matches only skills in other ecosystems than the one requested, or matches only skills the registry excludes. The refusal names `list_skills` as the way to learn what is available, because a model that guessed a name needs the set rather than another guess.
 10. **LSK-FR-10** More than one candidate spanning more than one ecosystem is the retryable `InvalidArgs` refusal of the contract surface, and the message names the ecosystems that hold the name. The tool never picks one: `SLT-skill-list-tool.md` shows the model whichever copy sorts first (SLT-FR-13) and `SST-skill-search-tool.md` shows it whichever matched better (SST-FR-12), so a silent choice here could hand back instructions the model never saw and believed it was following the ones it did.
 11. **LSK-FR-11** More than one candidate within a *single* ecosystem is the not-retryable `Other` refusal of the contract surface. A skill declares the name of its own folder, so two in one folder family declaring one name is a project that made its own name ambiguous rather than a call the model composed badly: `ecosystem` is the only disambiguator there is and it is already exhausted, so the message says outright that no further call resolves it and points at reading the file instead. Repeating the ecosystem advice here would send the model back for a call that refuses identically while the retryable flag promised otherwise (per TLC-FR-11).

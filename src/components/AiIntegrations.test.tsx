@@ -296,7 +296,8 @@ describe("the AI integrations section", () => {
       ],
       agentic: [
         cliVerified("claude_code", "/bin/claude"),
-        ...AGENTIC_ALL.slice(1).map((v) => agenticIntegration(v)),
+        cliVerified("codex", "/bin/codex"),
+        ...AGENTIC_ALL.slice(2).map((v) => agenticIntegration(v)),
       ],
     });
     render(<BothLevels />);
@@ -312,9 +313,9 @@ describe("the AI integrations section", () => {
     }
 
     // The complete set, not a couple of negatives: anything that reached a
-    // provider or ran a binary would show up here as a new name. Claude Code has
-    // a stored path, and every other tab is not implemented, so no tab detects
-    // (AII-FR-OTQY).
+    // provider or ran a binary would show up here as a new name. Claude Code and
+    // Codex have a stored path, and every other tab is not implemented, so no
+    // tab detects (AII-FR-17, AII-FR-OTQY).
     expect(new Set(commands())).toEqual(
       new Set([
         "list_ai_api_integrations",

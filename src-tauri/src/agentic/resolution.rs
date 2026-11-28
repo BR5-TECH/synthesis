@@ -37,7 +37,9 @@ pub fn state_of(
                     // the author has to correct — re-supplying a token against a
                     // binary that is not there would not fix anything.
                     IntegrationState::Missing
-                } else if descriptor.requires_oauth_token() && !key_present {
+                } else if requires_present_credential(record, descriptor) && !key_present {
+                    // AIC-FR-15: Claude Code's token, or Codex's access token
+                    // in `access_token` mode.
                     IntegrationState::KeyUnavailable
                 } else {
                     IntegrationState::Verified
@@ -72,6 +74,16 @@ pub fn state_of(
     }
 }
 
+/// AIC-FR-15: whether a CLI record cannot work without a credential in the
+/// vault — Claude Code always, Codex in `access_token` mode only.
+pub(super) fn requires_present_credential(
+    record: &AgenticRecord,
+    descriptor: &AgenticVendor,
+) -> bool {
+    descriptor.requires_oauth_token()
+        || (descriptor.holds_access_token() && record.codex_auth_mode == CodexAuthMode::AccessToken)
+}
+
 /// The credential-presence answer each record needs, gathered once per listing.
 ///
 /// A keychain that will not answer downgrades the records rather than failing
@@ -92,7 +104,7 @@ pub(super) fn key_presence(
 ) -> bool {
     let worth_probing = match descriptor.kind {
         VendorKind::Api => record.masked_hint.is_some(),
-        VendorKind::Cli => descriptor.requires_oauth_token(),
+        VendorKind::Cli => requires_present_credential(record, descriptor),
     };
     if !worth_probing {
         return false;
@@ -107,10 +119,11 @@ pub(super) fn key_presence(
 
 /// AIC-FR-02: which vendors hold a credential, asked of the vault **once**.
 ///
-/// Only the vendors that hold one are asked about: Codex authenticates through
-/// its own login directory and OpenCode through a mechanism this module knows
-/// nothing about, so neither has a path in the vault to ask after (AIC-FR-20,
-/// `ASV-application-secret-vault.md` ASV-FR-32). Asking about the rest together
+/// Only the vendors that can hold one are asked about: OpenCode authenticates
+/// through a mechanism this module knows nothing about, so it has no path in
+/// the vault to ask after (AIC-FR-20). Codex is asked about whatever its mode,
+/// because its access token stays stored across a mode change (AIC-FR-OFEO).
+/// Asking about the rest together
 /// costs the same single vault access as asking about one (ASV-FR-30).
 pub fn vendor_presence(secrets: &dyn SecretStore) -> KeyPresence {
     let mut ids: Vec<&str> =
@@ -199,10 +212,22 @@ pub fn integrations_from(
                 (false, false) => KeyState::Unset,
             };
             // AIC-FR-25: the credential fields follow the credential, not the
-            // kind. Codex and OpenCode hold nothing, so they never report a
-            // credential as set or as missing.
-            let key_state = if !descriptor.holds_credential() {
+            // kind. OpenCode holds nothing, and Codex in `login_folder` mode
+            // reads nothing, so neither reports a credential as set or missing.
+            let codex_token_mode = descriptor.holds_access_token()
+                && stored.codex_auth_mode == CodexAuthMode::AccessToken;
+            let key_state = if !descriptor.holds_credential()
+                || (descriptor.holds_access_token() && !codex_token_mode)
+            {
                 KeyState::Unset
+            } else if codex_token_mode {
+                // As Claude Code's token below: unavailable once a path is
+                // stored, unset before that.
+                match (present.has(&stored.vendor), configured) {
+                    (true, _) => KeyState::Set,
+                    (false, true) => KeyState::Unavailable,
+                    (false, false) => KeyState::Unset,
+                }
             } else if descriptor.requires_oauth_token() {
                 // Claude Code's token is mandatory, so "no entry" reads as
                 // unavailable once a path is stored and as unset before that —
@@ -242,12 +267,16 @@ pub fn integrations_from(
                 key_state,
                 // AIC-FR-25: a vendor that holds nothing reports no hint, even
                 // if a hand-edited store put one there.
-                masked_hint: if descriptor.holds_credential() {
+                // AIC-FR-25: Codex shows its hint in `access_token` mode only.
+                masked_hint: if descriptor.holds_credential()
+                    && (!descriptor.holds_access_token() || codex_token_mode)
+                {
                     stored.masked_hint.clone()
                 } else {
                     None
                 },
                 auth_mode: gateway.then_some(stored.auth_mode),
+                codex_auth_mode: descriptor.holds_access_token().then_some(stored.codex_auth_mode),
                 gateway_base_url: gateway.then(|| stored.gateway_base_url.clone()).flatten(),
                 gateway_token_var: gateway.then(|| stored.gateway_token_var.clone()).flatten(),
                 gateway_key_state,
@@ -277,11 +306,15 @@ pub fn integrations_from(
                 // dispatch. Nothing is written until the next selection.
                 model_overrides: offered_kinds_only(&stored.model_overrides),
                 // AIC-FR-09: always the descriptor's, never the store's — the
-                // levels are a property of the backend's interface.
+                // levels are a property of the backend's interface. A model's
+                // own ladder narrows what a selection offers (AIC-FR-SFMS).
                 reasoning_efforts: declared_efforts(descriptor),
-                selected_effort: stored.selected_effort.clone(),
-                // AIC-FR-10 / AIC-FR-QVWX: as the model overrides above.
-                effort_overrides: offered_kinds_only(&stored.effort_overrides),
+                // AIC-FR-TPKB: an effort the selection's model does not offer
+                // reads as absent. Nothing is written.
+                selected_effort: readable_selected_effort(descriptor, &stored),
+                // AIC-FR-10 / AIC-FR-QVWX / AIC-FR-TPKB: as the model overrides
+                // above, and only the levels each kind's model offers.
+                effort_overrides: readable_effort_overrides(descriptor, &stored),
                 active: active.as_deref() == Some(descriptor.vendor),
             }
         })

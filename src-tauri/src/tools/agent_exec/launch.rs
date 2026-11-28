@@ -5,11 +5,11 @@
 //! [`AgentCliExecutor`] and reads the module's own private items through
 //! `super`.
 
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Instant;
 
 use super::final_event::FinalEventRule;
+use super::launch_outcome::{remove_confirmed, resume_unavailable};
 use super::*;
 
 impl AgentCliExecutor {
@@ -131,20 +131,7 @@ impl AgentCliExecutor {
                 "agent session resumption unavailable",
                 log_fields! { "vendor" => vendor.as_str() },
             );
-            return Ok(AgentExecution {
-                process_outcome: ProcessOutcome::Terminated,
-                exit_code: None,
-                response: None,
-                stdout: CapturedStream::default(),
-                stderr: CapturedStream::default(),
-                duration_ms: started.elapsed().as_millis() as u64,
-                resume_unavailable: true,
-                session: None,
-                refusal: None,
-                // No container was ever created, so there is nothing to remove
-                // and nothing left behind.
-                container_removed: true,
-            });
+            return Ok(resume_unavailable(started));
         }
 
         // --- 4. The execution directory -------------------------------------
@@ -163,6 +150,31 @@ impl AgentCliExecutor {
             agentic::resolve_agent_launch_credential(context.store, context.integrations, &vendor)
                 .map_err(AgentExecutionError::CredentialUnavailable)?;
 
+        // EAC-FR-IGXZ: the two Codex modes keep sessions in different
+        // directories, and this CLI starts a fresh session silently for an
+        // identifier it cannot find (CDX-FR-22). A resume recorded under the
+        // other mode is therefore refused here, before any container exists.
+        let codex_auth_mode = credential.codex_auth_mode();
+        if let (Some(mode), Some(_)) = (codex_auth_mode, resume_session) {
+            let recorded = credential::recorded_codex_mode(
+                request.task.resume.as_ref().and_then(|r| r.continuation_token.as_deref()),
+            );
+            if recorded != mode {
+                logging::log_warn(
+                    sink,
+                    &BUFFER,
+                    &[Domain::Ai, Domain::Backend],
+                    "agent session resumption unavailable after an authentication mode change",
+                    log_fields! {
+                        "vendor" => vendor.as_str(),
+                        "recorded_mode" => recorded.as_str(),
+                        "current_mode" => mode.as_str(),
+                    },
+                );
+                return Ok(resume_unavailable(started));
+            }
+        }
+
         // EAC-FR-ZKMR: the execution directory alone decides the shape. Where
         // its host path is one a container can be given, the container names it
         // and the application and the turn inside name one string for one file;
@@ -175,57 +187,23 @@ impl AgentCliExecutor {
             target: workspace.clone(),
             read_only: false,
         }];
-        let mut env: BTreeMap<String, SecretString> = BTreeMap::new();
-        let mut env_names: Vec<String> = Vec::new();
-        // AIC-FR-ISOC: the variables whose values a record may not carry.
-        let mut masked_env: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-        let mut env_literals: Vec<(String, String)> = Vec::new();
-        // EAC-FR-29 bars the Codex configuration path from a record as firmly as
-        // it bars Claude's token, and this vendor's credential is a directory
-        // rather than an environment value — so the path is what has to be
-        // masked out of a stderr excerpt, and it is kept here for that.
-        let mut masked_paths: Vec<String> = Vec::new();
-
-        match credential {
-            AgentLaunchCredential::ClaudeEnvironment(variables) => {
-                // EAC-FR-15: the *name* goes in the argv, the value goes in the
-                // client process's environment, and Docker forwards it. No
-                // value reaches an argument vector.
-                for variable in variables {
-                    if variable.masked {
-                        masked_env.insert(variable.name.clone());
-                    }
-                    env_names.push(variable.name.clone());
-                    env.insert(variable.name, variable.value);
-                }
-            }
-            AgentLaunchCredential::CodexConfigMount { source, target } => {
-                let source = descriptor::mount_source(&source).ok_or(
-                    AgentExecutionError::CredentialUnavailable(
-                        agentic::ERR_CODEX_CONFIG_MISSING.to_string(),
-                    ),
-                )?;
-                let target = target.to_string_lossy().into_owned();
-                // EAC-FR-16 / CDX-FR-23: read/write, because this vendor writes
-                // its session rollout files beneath the same directory it reads
-                // its login from. A read-only mount leaves it unable to persist
-                // a session — which makes EAC-FR-30's resume unreachable — and
-                // unable to refresh a credential that has expired. Nothing here
-                // reads, copies, or logs a byte of it either way.
-                // Both spellings: the CLI names its own directory by the
-                // container path, and a Docker diagnostic names it by the host
-                // path it was mounted from.
-                masked_paths.push(source.clone());
-                masked_paths.push(target.clone());
-                mounts.push(BindMount { source, target: target.clone(), read_only: false });
-                // CDX-FR-24: the same directory, named to the CLI.
-                if let descriptor::SessionStateMount::SharedWithCredentialMount { env: name } =
-                    descriptor.session_state
-                {
-                    env_literals.push((name.to_string(), target));
-                }
-            }
-        }
+        // EAC-FR-15 / EAC-FR-16 / EAC-FR-QHIU: what the credential gives the
+        // container, composed as an interactive terminal composes it.
+        // AIC-FR-ISOC: `masked_env` holds the variables whose values a record
+        // may not carry. EAC-FR-29 bars a credential's location from a record
+        // as firmly as it bars a token, so `masked_paths` keeps a credential
+        // mount's paths, to be masked out of a stderr excerpt.
+        let credential::CredentialParts {
+            mut env_names,
+            mut env,
+            mut masked_env,
+            mounts: credential_mounts,
+            mut env_literals,
+            masked_paths,
+            session_state,
+        } = credential::credential_parts(credential)
+            .map_err(AgentExecutionError::CredentialUnavailable)?;
+        mounts.extend(credential_mounts);
 
         // EAC-FR-31: a vendor whose session directory is its own gets a
         // dedicated mount. Without it every session dies with the container that
@@ -235,7 +213,7 @@ impl AgentCliExecutor {
         // directory would sit behind a mount the container may **write** to.
         let mut session_state_dir: Option<PathBuf> = None;
         if let Some((host_dir, env_name, target)) =
-            self.session_state_for(context.fs, descriptor, context.project_key)?
+            self.session_state_for(context.fs, &vendor, session_state, context.project_key)?
         {
             let source = descriptor::mount_source(&host_dir).ok_or(
                 AgentExecutionError::ExecutionDirectoryInvalid(DirectoryProblem::Unmountable),
@@ -243,6 +221,28 @@ impl AgentCliExecutor {
             mounts.push(BindMount { source, target: target.to_string(), read_only: false });
             env_literals.push((env_name.to_string(), target.to_string()));
             session_state_dir = Some(host_dir);
+        }
+
+        // --- 5a. EAC-FR-BOXF: the vendor's launch files ----------------------
+        //
+        // EAC-FR-WBIF: a scanned turn whose instruction holds the milestone
+        // block carries the vendor's reminder.
+        let milestone_reminder = descriptor.milestone_reminder
+            && request.turn_kind.announces_milestones()
+            && milestone::instruction_holds_block(&request.task.instruction);
+        let argv_files = descriptor.launch_files();
+        let mut launch_files_dir: Option<PathBuf> = None;
+        if !argv_files.is_empty() {
+            let dir = self.launch_files_dir(context.fs, &argv_files)?;
+            let source = descriptor::mount_source(&dir).ok_or_else(|| {
+                AgentExecutionError::LaunchFailed("launch files: unmountable path".to_string())
+            })?;
+            mounts.push(BindMount {
+                source,
+                target: descriptor::LAUNCH_FILES_TARGET.to_string(),
+                read_only: true,
+            });
+            launch_files_dir = Some(dir);
         }
 
         // --- 5b. EAC-FR-40: the one typed supplementary mount ----------------
@@ -258,6 +258,7 @@ impl AgentCliExecutor {
                 host,
                 &mount_source,
                 session_state_dir.as_deref(),
+                launch_files_dir.as_deref(),
                 &masked_paths,
             )?;
             let source = descriptor::mount_source(host).ok_or_else(|| {
@@ -494,23 +495,18 @@ impl AgentCliExecutor {
         // and the value below is never placed in its vector.
         let assigned_session_id = descriptor::new_session_id();
 
-        let mut vendor_args = descriptor.vendor_args(
-            model_id.as_deref(),
-            effort_id.as_deref(),
-            &assigned_session_id,
+        let vendor_args = descriptor.argv(&descriptor::ArgvRequest {
+            model_id: model_id.as_deref(),
+            effort_id: effort_id.as_deref(),
+            assigned_session_id: &assigned_session_id,
             resume_session,
             // EAC-FR-43: the shape the caller named for its own answer, which
             // the vendor enforces where its CLI can.
-            request.task.result_contract,
-        );
-        // EAC-FR-WBIF: a scanned turn whose instruction holds the milestone
-        // block carries the vendor's reminder, at the end of its vector
-        // (CCP-FR-WZJS).
-        if request.turn_kind.announces_milestones()
-            && milestone::instruction_holds_block(&request.task.instruction)
-        {
-            vendor_args.extend(descriptor.milestone_reminder_args());
-        }
+            result_contract: request.task.result_contract,
+            // EAC-FR-WBIF: where the reminder stands is the vendor's protocol
+            // (CCP-FR-WZJS, CDX-FR-OQVA).
+            milestone_reminder,
+        });
         // EAC-FR-OWPP: a variable the executor sets itself is not overridden by
         // one of the launch environment. The name is logged and the value is not.
         let dropped = launch_env::drop_executor_set_variables(
@@ -611,6 +607,12 @@ impl AgentCliExecutor {
                 "task_bytes" => stdin_bytes.len(),
                 // EAC-FR-SNMS: whether this turn runs in a micro VM.
                 "isolation" => if sandboxed.is_some() { "microsandbox" } else { "none" },
+                // EAC-FR-BOXF: how many fixed files the vector names. A count,
+                // never their text.
+                "launch_files" => argv_files.len(),
+                // EAC-FR-IGXZ: which Codex mode the turn runs under. A mode
+                // name, never the credential.
+                "auth_mode" => codex_auth_mode.map(|mode| mode.as_str().to_string()),
             },
         );
 
@@ -799,8 +801,19 @@ impl AgentCliExecutor {
             .then_some(assigned_session_id.as_str());
 
         let ended_after_final_event = outcome.end == RunEnd::EndedAfterFinalEvent;
-        let mut execution =
-            self.interpret(descriptor, outcome, started, container_removed, expected_session_id);
+        let mut execution = self.interpret(
+            descriptor,
+            outcome,
+            started,
+            container_removed,
+            expected_session_id,
+            request.task.result_contract,
+        );
+        // EAC-FR-IGXZ: a Codex session says which mode it ran under, whatever
+        // the envelope reported, so a later resume can tell.
+        if let (Some(mode), Some(session)) = (codex_auth_mode, execution.session.as_mut()) {
+            session.continuation_token = Some(mode.as_str().to_string());
+        }
         if ended_after_final_event {
             super::finish::warn_stopped_after_answer(sink, &vendor, &container_name);
         }
@@ -940,45 +953,4 @@ impl AgentCliExecutor {
         execution.duration_ms = started.elapsed().as_millis() as u64;
         Ok(execution)
     }
-}
-
-/// EAC-FR-26: how many times a removal is asked for before it is reported as
-/// not confirmed, and the pause between two attempts.
-const REMOVE_ATTEMPTS: usize = 3;
-const REMOVE_RETRY_PAUSE: Duration = Duration::from_millis(500);
-
-/// EAC-FR-26: remove the container, and ask again where the runtime refused.
-/// A refusal can be short-lived, such as a removal that is already in progress.
-async fn remove_confirmed<S: LogSink + Clone + Send + Sync + 'static>(
-    sink: &S,
-    runtime: &dyn DockerRuntime,
-    name: &str,
-) -> bool {
-    for attempt in 1..=REMOVE_ATTEMPTS {
-        let refusal = match runtime.remove_container(name).await {
-            Ok(()) => return true,
-            Err(error) => error,
-        };
-        // The kind of refusal and no text of it: the runtime's own words stay
-        // out of the log.
-        logging::log_warn(
-            sink,
-            &BUFFER,
-            &[Domain::Ai, Domain::Backend],
-            "agent container removal was refused",
-            log_fields! {
-                "container" => name,
-                "attempt" => attempt as i64,
-                "kind" => match refusal {
-                    RuntimeError::Unavailable => "runtime_unavailable",
-                    RuntimeError::ImageUnavailable => "image_unavailable",
-                    RuntimeError::LaunchFailed(_) => "refused",
-                },
-            },
-        );
-        if attempt < REMOVE_ATTEMPTS {
-            tokio::time::sleep(REMOVE_RETRY_PAUSE).await;
-        }
-    }
-    false
 }

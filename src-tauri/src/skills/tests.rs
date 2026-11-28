@@ -40,11 +40,12 @@ fn reasons(excluded: &[Exclusion]) -> Vec<(&str, &str)> {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn all_four_special_folders_are_enumerated_with_their_ecosystem() {
-    // DSL-FR-02, DSL-FR-12, DSL-FR-15: the four folder families, each reporting which one it came
-    // from, in path order (DSL-FR-15).
+fn all_five_project_skill_folders_are_enumerated_with_their_ecosystem() {
+    // DSL-FR-02, DSL-FR-NWKE, DSL-FR-12, DSL-FR-15: the five project folder
+    // families, each reporting which one it came from, in path order.
     let dir = TempDir::new().unwrap();
     let root = &crate::fs::RootFs::for_root(dir.path());
+    write_skill(root, ".agents/skills", "e", "name: E\ndescription: does e");
     write_skill(root, ".claude/skills", "a", "name: A\ndescription: does a");
     write_skill(root, ".codex/skills", "b", "name: B\ndescription: does b");
     write_skill(root, ".github/skills", "c", "name: C\ndescription: does c");
@@ -54,28 +55,35 @@ fn all_four_special_folders_are_enumerated_with_their_ecosystem() {
     assert_eq!(
         paths(&skills),
         vec![
+            ".agents/skills/e/SKILL.md",
             ".claude/skills/a/SKILL.md",
             ".codex/skills/b/SKILL.md",
             ".github/skills/c/SKILL.md",
             ".opencode/skills/d/SKILL.md",
         ],
-        "all four folders are eligible, and the result is sorted by path"
+        "all five folders are eligible, and the result is sorted by path"
     );
     assert_eq!(
         skills.iter().map(|s| s.ecosystem).collect::<Vec<_>>(),
-        vec![Ecosystem::Claude, Ecosystem::Codex, Ecosystem::Github, Ecosystem::Opencode]
+        vec![
+            Ecosystem::Agents,
+            Ecosystem::Claude,
+            Ecosystem::Codex,
+            Ecosystem::Github,
+            Ecosystem::Opencode
+        ]
     );
     assert_eq!(
         skills.iter().map(|s| s.folder_name.as_str()).collect::<Vec<_>>(),
-        vec!["a", "b", "c", "d"],
+        vec!["e", "a", "b", "c", "d"],
         "the <skill-name> segment is reported (DSL-FR-12)"
     );
     assert!(excluded.is_empty(), "nothing was excluded: {excluded:?}");
 }
 
 #[test]
-fn a_special_folder_deeper_in_the_tree_is_not_one_of_the_four() {
-    // DSL-FR-02: the four are matched at the project root alone, so a
+fn a_special_folder_deeper_in_the_tree_is_not_one_of_the_six() {
+    // DSL-FR-02: the six are matched at the project root alone, so a
     // monorepo package's own `.claude/skills/` yields nothing and cannot
     // collide with the root's.
     let dir = TempDir::new().unwrap();
@@ -206,7 +214,7 @@ fn every_symlinked_path_component_disqualifies_a_skill() {
     let dir = TempDir::new().unwrap();
     let root = &crate::fs::RootFs::for_root(dir.path());
 
-    // A real skill living outside the four folders, to be pointed at.
+    // A real skill living outside the six folders, to be pointed at.
     let outside = root.join("outside/shared");
     std::fs::create_dir_all(&outside).unwrap();
     std::fs::write(
@@ -519,7 +527,7 @@ fn an_indented_key_belongs_to_something_else() {
 #[test]
 fn eligibility_ignores_the_resolved_artifact_type_in_both_directions() {
     // DSL-FR-11: a SKILL.md in a special folder qualifies whatever the scan
-    // made of it, and a file the scan types `skill` outside the four folders
+    // made of it, and a file the scan types `skill` outside the six folders
     // never does.
     //
     // The assignments below are what make this test mean anything: without
@@ -621,7 +629,9 @@ fn the_same_tree_enumerates_identically_every_time() {
             &format!("name: {name}\ndescription: about {name}"),
         );
     }
-    write_skill(root, ".codex/skills", "alpha", "description: a codex alpha");
+    // No declared name: it goes by its folder (DSL-FR-10), which no other
+    // project copy shares (DSL-FR-17).
+    write_skill(root, ".codex/skills", "echo", "description: a codex echo");
 
     // NOTE: `first == second` alone would NOT discriminate — `read_dir` order
     // is stable within a process, so two back-to-back walks of an unchanged
@@ -638,31 +648,32 @@ fn the_same_tree_enumerates_identically_every_time() {
             ".claude/skills/bravo/SKILL.md",
             ".claude/skills/mike/SKILL.md",
             ".claude/skills/zulu/SKILL.md",
-            ".codex/skills/alpha/SKILL.md",
+            ".codex/skills/echo/SKILL.md",
         ],
         "sorted by path rather than by directory order"
     );
 }
 
 // ---------------------------------------------------------------------------
-// DSL-FR-17 — a name is not an identity (DSL-FR-17)
+// DSL-FR-QMRX — a name is not an identity across kinds
 // ---------------------------------------------------------------------------
 
 #[test]
-fn two_skills_of_the_same_name_in_different_ecosystems_both_survive() {
-    // DSL-FR-17: neither displaces the other, and `path` tells them apart.
+fn a_project_skill_and_a_synthesis_skill_of_the_same_name_both_survive() {
+    // DSL-FR-QMRX: neither displaces the other, and `path` tells them apart.
     let dir = TempDir::new().unwrap();
     let root = &crate::fs::RootFs::for_root(dir.path());
     write_skill(root, ".claude/skills", "review", "name: Review\ndescription: claude's");
-    write_skill(root, ".codex/skills", "review", "name: Review\ndescription: codex's");
+    write_skill(root, ".synthesis/skills", "review", "name: Review\ndescription: synthesis's");
 
     let (skills, _) = enumerate(root);
     assert_eq!(skills.len(), 2);
     assert!(skills.iter().all(|s| s.name == "Review"));
     assert_eq!(
         skills.iter().map(|s| s.ecosystem).collect::<Vec<_>>(),
-        vec![Ecosystem::Claude, Ecosystem::Codex]
+        vec![Ecosystem::Claude, Ecosystem::Synthesis]
     );
+    assert!(skills.iter().all(|s| s.shadowed_paths.is_empty()), "nothing was dropped");
 }
 
 // ---------------------------------------------------------------------------

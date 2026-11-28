@@ -156,12 +156,17 @@ impl Fixture {
         // verification state rather than a daemon or a registry, so they are
         // exercisable here — with collaborators that reach neither the
         // machine's real filesystem nor its keychain.
-        handle.manage(crate::agentic::AgenticIntegrations::new(
-            Box::new(EverythingIsThere),
-            Box::new(NoCli),
-            Box::new(NoEndpoint),
-            Box::new(EveryKeyIsThere),
-        ));
+        // A home of its own, so a Codex login-folder handoff names a path under
+        // this fixture rather than the machine user's real `~/.codex`.
+        handle.manage(
+            crate::agentic::AgenticIntegrations::new(
+                Box::new(EverythingIsThere),
+                Box::new(NoCli),
+                Box::new(NoEndpoint),
+                Box::new(EveryKeyIsThere),
+            )
+            .with_home(store_root.join("home")),
+        );
 
         handle
             .state::<crate::fs::FsAccessState>()
@@ -209,24 +214,27 @@ impl Fixture {
     /// has verified. Nothing is probed, launched or contacted.
     fn allow_execution(&self) {
         use crate::agentic::{AgenticRecord, PathOrigin};
+        self.allow_execution_for(AgenticRecord {
+            vendor: "claude_code".into(),
+            binary_path: Some("/opt/agents/claude".into()),
+            path_origin: PathOrigin::Detected,
+            ..AgenticRecord::default()
+        });
+    }
+
+    /// The same, with `record` as the one verified CLI vendor of the machine
+    /// and its active integration, and the project's image committed for that
+    /// vendor (AIC-FR-33). A Codex record names its auth mode (AIC-FR-UFYH).
+    fn allow_execution_for(&self, record: crate::agentic::AgenticRecord) {
+        let vendor = record.vendor.clone();
         let store = self.app.state::<crate::global_settings::GlobalSettingsStore>();
-        store
-            .save_agentic_registry(
-                vec![AgenticRecord {
-                    vendor: "claude_code".into(),
-                    binary_path: Some("/opt/agents/claude".into()),
-                    path_origin: PathOrigin::Detected,
-                    ..AgenticRecord::default()
-                }],
-                Some("claude_code".into()),
-            )
-            .expect("a registry");
+        store.save_agentic_registry(vec![record], Some(vendor.clone())).expect("a registry");
 
         let access = self.app.state::<crate::fs::FsAccessState>().get().expect("an instance");
         let root = crate::fs::RootFs::new(self.root(), access);
         crate::project_settings::save_project_vendor_image_to(
             &root,
-            "claude_code",
+            &vendor,
             &crate::project_settings::images::ProjectVendorImage {
                 image_name: "acme/agent".into(),
                 tag: Some("latest".into()),
@@ -446,6 +454,8 @@ struct Seen {
     worktree_tree: Option<String>,
     /// GXD-FR-XPUR: the vendor session the dispatch asked to resume.
     resume_session: Option<String>,
+    /// EAC-FR-IGXZ: the continuation token of that session.
+    resume_token: Option<String>,
     /// GRB-FR-TOOU: whether the dispatch carried the semantic-rebase mount.
     semantic_mount: bool,
     /// GXD-FR-SHNW: the run queue the dispatch named as its sandbox scope.
@@ -671,6 +681,11 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                 .resume
                 .as_ref()
                 .and_then(|resume| resume.session_id.clone()),
+            resume_token: request
+                .task
+                .resume
+                .as_ref()
+                .and_then(|resume| resume.continuation_token.clone()),
             semantic_mount: request.supplementary_mount.is_some(),
             sandbox_scope: request.sandbox_scope.as_ref().map(|scope| scope.queue_key.clone()),
             project_key: project_key.to_string(),
@@ -889,13 +904,17 @@ impl crate::graduation::driver::GraduationDispatch<Runtime> for ScriptedDispatch
                     failure: reported,
                     escalation,
                     session: turn
-                        .session
+                        .envelope_session
                         .clone()
+                        .unwrap_or_else(|| turn.session.clone())
                         .map(|id| SessionRef { session_id: Some(id), continuation_token: None }),
                     metadata: None,
                 }),
                 turn.session.clone(),
             );
+            if let (Some(session), Some(token)) = (completed.session.as_mut(), &turn.continuation) {
+                session.continuation_token = Some(token.clone());
+            }
             completed.duration_ms = turn.duration_ms;
             Ok(completed)
         })

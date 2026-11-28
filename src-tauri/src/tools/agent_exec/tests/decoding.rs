@@ -494,10 +494,26 @@ fn each_descriptor_declares_the_positions_its_specification_defines() {
     assert!(descriptor::CLAUDE_CODE.supports_resume());
     assert!(descriptor::CODEX.supports_resume());
     assert!(matches!(descriptor::CLAUDE_CODE.session_state, SessionStateMount::Dedicated { .. }));
+    // EAC-FR-QHIU: Codex's session state follows its credential.
+    assert!(matches!(descriptor::CODEX.session_state, SessionStateMount::ByCredential { .. }));
     assert!(matches!(
-        descriptor::CODEX.session_state,
-        SessionStateMount::SharedWithCredentialMount { .. }
+        descriptor::CODEX.session_state.for_credential(true),
+        SessionStateMount::SharedWithCredentialMount { env: "CODEX_HOME" }
     ));
+    assert_eq!(
+        descriptor::CODEX.session_state.for_credential(false),
+        SessionStateMount::Dedicated { env: "CODEX_HOME", target: "/home/agent/.codex" }
+    );
+    // CDX-FR-24, CDX-FR-EUBZ: Codex's credential is a mount or AIC's variable.
+    assert_eq!(
+        descriptor::CODEX.credential_form,
+        descriptor::CredentialForm::MountOrEnvironmentVariable(agentic::CODEX_ACCESS_TOKEN_ENV)
+    );
+    // A vendor whose state is its own is not changed by the credential.
+    assert_eq!(
+        descriptor::CLAUDE_CODE.session_state.for_credential(true),
+        descriptor::CLAUDE_CODE.session_state
+    );
 }
 
 /// A mount source Docker would misread is refused rather than passed through:

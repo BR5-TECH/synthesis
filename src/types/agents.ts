@@ -91,9 +91,16 @@ export interface AgentDraft {
 export interface ProjectSkill {
   /** The project-relative path of its `SKILL.md`: the skill's identity. */
   path: string;
-  ecosystem: "claude" | "codex" | "github" | "opencode" | "synthesis";
+  ecosystem: "agents" | "claude" | "codex" | "github" | "opencode" | "synthesis";
   name: string;
   description: string;
+  /**
+   * DSL-FR-KWQE: a project skill's dropped copies — the paths of the skills of
+   * the same name that DSL-FR-17 drops in its favour, in path order. Empty when
+   * no copy is dropped, and always empty for a synthesis skill. Absent from a
+   * record of an older build, which reads as empty.
+   */
+  shadowedPaths?: string[];
 }
 
 /**

@@ -152,9 +152,8 @@ fn a_normal_exit_gets_no_warning_and_no_stop_in_its_line() {
     assert_eq!(summary.matches('.').count(), 1, "{summary}");
 }
 
-// EAC-FR-HZIE, EAC-FR-QHAY, CCP-FR-RGVA: a Claude Code launch hands the runtime
-// the result line as its final event and the grace of 30 seconds. A Codex
-// launch hands it no rule.
+// EAC-FR-HZIE, CCP-FR-RGVA, CDX-FR-RJPF: each vendor launch hands the runtime
+// its own final event and the grace of 30 seconds.
 #[test]
 fn each_vendor_launch_hands_the_runtime_its_own_rule() {
     let claude = harness_for("claude_code");
@@ -169,10 +168,17 @@ fn each_vendor_launch_hands_the_runtime_its_own_rule() {
     assert!(finals[0].contains(r#""type":"result""#));
     assert!(stream.lines().count() > 1);
 
+    // CDX-FR-RJPF: a Codex launch hands it the turn end and the same grace.
     let codex = harness_for("codex");
-    let runtime = RecordingRuntime::replying(&codex_stdout(&envelope_json("success")));
+    let stream = codex_stdout(&envelope_json("success"));
+    let runtime = RecordingRuntime::replying(&stream);
     run(&codex, runtime.clone(), task("go")).expect("ran");
-    assert!(runtime.only_run().final_event.is_none());
+    let rule = runtime.only_run().final_event.expect("Codex has a rule");
+    assert_eq!(rule.grace, Duration::from_secs(30));
+    let finals: Vec<&str> =
+        stream.lines().filter(|line| (rule.is_final)(line.as_bytes())).collect();
+    assert_eq!(finals.len(), 1, "{stream}");
+    assert!(finals[0].contains(r#""type":"turn.completed""#));
 }
 
 // EAC-FR-HZIE, EAC-FR-THUT, EAC-FR-PPXB: an error result stopped after its

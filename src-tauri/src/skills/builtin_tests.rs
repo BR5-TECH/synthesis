@@ -348,7 +348,7 @@ fn builtin_skill_file_reads_inside_one_skill_folder_and_nowhere_else() {
 }
 
 // ---------------------------------------------------------------------------
-// DSL-FR-ZUFC / DSL-FR-17 / DSL-FR-RJKY — the built-in skills join every pass
+// DSL-FR-ZUFC / DSL-FR-QMRX / DSL-FR-RJKY — the built-in skills join every pass
 // ---------------------------------------------------------------------------
 
 // DSL-FR-ZUFC: an open project with no skill folder holds the built-in skills,
@@ -401,7 +401,7 @@ fn a_calm_query_ranks_calm_first_and_a_mermaid_query_ranks_mermaid_first() {
     }
 }
 
-// DSL-FR-17 / DSL-FR-RJKY: a project skill named like a built-in skill is a
+// DSL-FR-QMRX / DSL-FR-RJKY: a project skill named like a built-in skill is a
 // second skill, not a replacement.
 #[test]
 fn a_project_skill_named_like_a_builtin_skill_does_not_replace_it() {
@@ -529,7 +529,8 @@ fn list_project_skills_returns_the_project_skills_and_logs_their_count() {
     let json = serde_json::to_value(&skills[0]).unwrap();
     let mut keys: Vec<&str> = json.as_object().unwrap().keys().map(String::as_str).collect();
     keys.sort();
-    assert_eq!(keys, vec!["description", "ecosystem", "name", "path"]);
+    // DSL-FR-KWQE: the wire record also names the dropped copies.
+    assert_eq!(keys, vec!["description", "ecosystem", "name", "path", "shadowedPaths"]);
 
     let closed = closed_project();
     let refused =

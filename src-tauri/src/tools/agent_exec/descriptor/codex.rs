@@ -9,24 +9,68 @@
 
 use serde_json::{Map, Value};
 
-use super::{ActivityKind, ExtractContext, Extracted, TextFilter, VendorActivity};
-use crate::tools::agent_exec::protocol::{decode_envelope, EnvelopeInvalid};
+use super::{
+    ActivityKind, ArgvRequest, ExtractContext, Extracted, LaunchFile, TextFilter, VendorActivity,
+    LAUNCH_FILES_TARGET,
+};
+use crate::tools::agent_exec::protocol::{decode_envelope, EnvelopeInvalid, ResultContract};
+
+mod strict;
+
+pub use strict::{output_schema, strip_optional_nulls, to_strict};
 
 /// The specification this module transcribes (EAC-FR-10's `protocol_spec`).
 pub const SPEC: &str = "specifications/infra/CDX-codex-cli-protocol.md";
 
-/// CDX-FR-24: the variable addressing the mount this CLI reads its login from
-/// and writes its session state beneath. One directory serves both, which is why
-/// CDX-FR-23 makes that mount read/write.
+/// CDX-FR-24: the variable addressing the directory this CLI keeps its session
+/// state in. In the `login_folder` mode it is also where the CLI reads its
+/// login from, which is why CDX-FR-23 makes that mount read/write.
 pub const SESSION_STATE_ENV: &str = "CODEX_HOME";
+
+/// CDX-FR-24: where that directory is in the container, in both modes.
+pub const SESSION_STATE_TARGET: &str = "/home/agent/.codex";
+
+/// CDX-FR-EUBZ: the variable that carries the access token in the
+/// `access_token` mode.
+pub const ACCESS_TOKEN_ENV: &str = "CODEX_ACCESS_TOKEN";
 
 /// CDX-FR-07's config-override key. This CLI has no reasoning-effort flag, so a
 /// resolved effort reaches it as a configuration override or not at all.
 const EFFORT_KEY: &str = "model_reasoning_effort";
-/// CDX-FR-10's config-override key, used on a resumed turn because `exec resume`
-/// does not accept `--sandbox`.
-const SANDBOX_KEY: &str = "sandbox_mode";
-const SANDBOX_VALUE: &str = "danger-full-access";
+
+/// CDX-FR-SDOV: the six reasoning-effort identifiers this CLI accepts.
+pub const EFFORT_LEVELS: &[&str] = &["low", "medium", "high", "xhigh", "max", "ultra"];
+
+/// CDX-FR-04: the container is the isolation boundary, and this one flag
+/// removes both the CLI's own sandbox and every approval request.
+const BYPASS_FLAG: &str = "--dangerously-bypass-approvals-and-sandbox";
+
+/// CDX-FR-14: every result contract, in the order the launch files list them.
+pub const RESULT_CONTRACTS: [ResultContract; 4] = [
+    ResultContract::ReviewVerdict,
+    ResultContract::GraduationVerdict,
+    ResultContract::PullRequestSummary,
+    ResultContract::WorkResult,
+];
+
+/// CDX-FR-14: the file that holds the strict schema of `contract`.
+pub fn output_schema_file(contract: ResultContract) -> &'static str {
+    match contract {
+        ResultContract::ReviewVerdict => "output-schema-review_verdict.json",
+        ResultContract::GraduationVerdict => "output-schema-graduation_verdict.json",
+        ResultContract::PullRequestSummary => "output-schema-pull_request_summary.json",
+        ResultContract::WorkResult => "output-schema-work_result.json",
+    }
+}
+/// CDX-FR-WJZY: the fixed output of the milestone reminder hook.
+pub const MILESTONE_REMINDER_FILE: &str = "milestone-reminder.json";
+
+/// The contract surface's fixed reminder text (CDX-FR-WJZY).
+pub const MILESTONE_REMINDER: &str = "Milestone reminder: if you are now in a different milestone, \
+write its start marker in your next text message. A start marker marks every earlier milestone done.";
+
+/// CDX-FR-OQVA: an override hook runs without stored trust only with this.
+const HOOK_TRUST_BYPASS_FLAG: &str = "--dangerously-bypass-hook-trust";
 
 // ---------------------------------------------------------------------------
 // The argument vectors (CDX-FR-02, CDX-FR-09)
@@ -48,47 +92,73 @@ fn config_override(key: &str, value: &str) -> [String; 2] {
 /// application's own vendor descriptor, so this is a guard against a future
 /// identifier rather than against a caller — but it is the difference between
 /// "a bad effort id is refused" and "a bad effort id silently rewrites the
-/// sandbox policy", and it costs one comparison.
+/// configuration", and it costs one comparison.
 fn is_safe_override_value(value: &str) -> bool {
     !value.chars().any(|c| c == '"' || c == '\\' || c == '\n' || c == '\r' || c.is_control())
 }
 
-fn model_and_effort(model_id: Option<&str>, effort_id: Option<&str>) -> Vec<String> {
+/// The path of a launch file in the container (CDX-FR-14, CDX-FR-WJZY).
+fn launch_file_path(name: &str) -> String {
+    format!("{LAUNCH_FILES_TARGET}/{name}")
+}
+
+/// CDX-FR-OQVA: the `hooks.PreToolUse` override. One hook for every tool, whose
+/// command prints the fixed reminder file.
+pub fn reminder_hook_override() -> String {
+    let command = format!("cat {}", launch_file_path(MILESTONE_REMINDER_FILE));
+    format!(
+        "hooks.PreToolUse=[{{matcher=\"*\",hooks=[{{type=\"command\",command=\"{command}\"}}]}}]"
+    )
+}
+
+/// CDX-FR-10: the conditional elements of both vectors, in the order of the
+/// contract surface.
+fn conditional_elements(request: &ArgvRequest<'_>) -> Vec<String> {
     let mut args: Vec<String> = Vec::new();
-    if let Some(model) = model_id.filter(|m| !m.is_empty()) {
+    // CDX-FR-14: the strict schema, only for a turn that names a contract.
+    if let Some(contract) = request.result_contract {
+        args.push("--output-schema".into());
+        args.push(launch_file_path(output_schema_file(contract)));
+    }
+    // CDX-FR-OQVA: the reminder, and the flag that lets its hook run.
+    if request.milestone_reminder {
+        args.push(HOOK_TRUST_BYPASS_FLAG.into());
+        args.push("-c".into());
+        args.push(reminder_hook_override());
+    }
+    // CDX-FR-06 / CDX-FR-07.
+    if let Some(model) = request.model_id.filter(|m| !m.is_empty()) {
         args.push("--model".into());
         args.push(model.to_string());
     }
-    if let Some(effort) = effort_id.filter(|e| !e.is_empty() && is_safe_override_value(e)) {
+    if let Some(effort) = request.effort_id.filter(|e| !e.is_empty() && is_safe_override_value(e)) {
         args.extend(config_override(EFFORT_KEY, effort));
     }
     args
 }
 
-/// CDX-FR-07: an effort identifier this CLI's override syntax can carry. Every
-/// value the application offers passes; the CLI itself validates the rest.
+/// CDX-FR-SDOV: an effort identifier this CLI accepts, and that its override
+/// syntax can carry.
 pub fn effort_supported(effort_id: &str) -> bool {
-    is_safe_override_value(effort_id)
+    EFFORT_LEVELS.contains(&effort_id) && is_safe_override_value(effort_id)
 }
 
-/// CDX-FR-02: `exec --json --sandbox danger-full-access --skip-git-repo-check
-/// [--model M] [-c model_reasoning_effort="E"] -`.
-pub fn fresh_argv(model_id: Option<&str>, effort_id: Option<&str>) -> Vec<String> {
+/// CDX-FR-02: `exec --json --dangerously-bypass-approvals-and-sandbox
+/// --skip-git-repo-check [conditional elements] -`.
+pub fn fresh_argv(request: &ArgvRequest<'_>) -> Vec<String> {
     let mut args: Vec<String> = vec![
         // CDX-FR-03: the subcommand that makes the CLI non-interactive, and the
         // flag that turns stdout into an event stream rather than prose.
         "exec".into(),
         "--json".into(),
-        // CDX-FR-04: the container is already the isolation boundary, and a
-        // narrower sandbox would refuse the writes the turn exists to make.
-        "--sandbox".into(),
-        SANDBOX_VALUE.into(),
+        // CDX-FR-04.
+        BYPASS_FLAG.into(),
         // CDX-FR-05: without this the CLI refuses to run outside a Git
         // repository, making the outcome depend on whether the supplied
         // execution directory happened to be one.
         "--skip-git-repo-check".into(),
     ];
-    args.extend(model_and_effort(model_id, effort_id));
+    args.extend(conditional_elements(request));
     // CDX-FR-08: the positional prompt, which is what directs the CLI to take
     // the instructions from stdin. Always last, so the task never occupies an
     // argument vector position.
@@ -100,21 +170,49 @@ pub fn fresh_argv(model_id: Option<&str>, effort_id: Option<&str>) -> Vec<String
 /// inserted.
 ///
 /// `exec resume` takes `[SESSION_ID] [PROMPT]` positionally in that order, and
-/// its option set is a strict subset of `exec`'s — so the sandbox policy arrives
-/// as a configuration override (CDX-FR-10) and none of the options this
+/// its option set is a strict subset of `exec`'s, so none of the options this
 /// subcommand does not accept is generated (CDX-FR-11).
-pub fn resume_argv(
-    model_id: Option<&str>,
-    effort_id: Option<&str>,
-    resume_session_id: &str,
-) -> Vec<String> {
-    let mut args: Vec<String> =
-        vec!["exec".into(), "resume".into(), "--json".into(), "--skip-git-repo-check".into()];
-    args.extend(config_override(SANDBOX_KEY, SANDBOX_VALUE));
-    args.extend(model_and_effort(model_id, effort_id));
+pub fn resume_argv(request: &ArgvRequest<'_>, resume_session_id: &str) -> Vec<String> {
+    let mut args: Vec<String> = vec![
+        "exec".into(),
+        "resume".into(),
+        "--json".into(),
+        BYPASS_FLAG.into(),
+        "--skip-git-repo-check".into(),
+    ];
+    args.extend(conditional_elements(request));
     args.push(resume_session_id.to_string());
     args.push("-".into());
     args
+}
+
+/// CDX-FR-WJZY: the fixed object the reminder hook prints.
+pub fn milestone_reminder_output() -> String {
+    let output = serde_json::json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "additionalContext": MILESTONE_REMINDER,
+        }
+    });
+    format!("{output}\n")
+}
+
+/// EAC-FR-BOXF / EAC-FR-VTLG: the full fixed set of files the vectors can
+/// name. It does not depend on the turn, so every Codex launch of one build
+/// mounts the same directory and a reused container keeps its mount set.
+pub fn launch_files() -> Vec<LaunchFile> {
+    let mut files: Vec<LaunchFile> = RESULT_CONTRACTS
+        .iter()
+        .map(|contract| LaunchFile {
+            name: output_schema_file(*contract),
+            contents: output_schema(*contract).into_bytes(),
+        })
+        .collect();
+    files.push(LaunchFile {
+        name: MILESTONE_REMINDER_FILE,
+        contents: milestone_reminder_output().into_bytes(),
+    });
+    files
 }
 
 // ---------------------------------------------------------------------------
@@ -129,6 +227,19 @@ const ITEM_AGENT_MESSAGE: &str = "agent_message";
 const KEY_ITEM: &str = "item";
 const KEY_ITEM_TYPE: &str = "type";
 const KEY_ITEM_TEXT: &str = "text";
+
+/// CDX-FR-RJPF: the final event of this CLI is a stdout line whose `type` is
+/// `turn.completed` or `turn.failed`. A line that is not a JSON object is not
+/// one.
+pub fn is_final_event(line: &[u8]) -> bool {
+    let Ok(Value::Object(event)) = serde_json::from_slice::<Value>(line.trim_ascii()) else {
+        return false;
+    };
+    matches!(
+        event.get("type").and_then(Value::as_str),
+        Some(EVENT_TURN_COMPLETED | EVENT_TURN_FAILED)
+    )
+}
 
 pub fn extract(context: &ExtractContext<'_>) -> Result<Extracted, EnvelopeInvalid> {
     let mut session_id: Option<String> = None;
@@ -183,8 +294,9 @@ pub fn extract(context: &ExtractContext<'_>) -> Result<Extracted, EnvelopeInvali
             }
             // CDX-FR-15: a top-level `error` event is not by itself fatal — the
             // CLI emits transient reconnect notices under that type while
-            // retrying a dropped stream. It is a diagnostic on the captured
-            // stream rather than a signal to abandon extraction.
+            // retrying a dropped stream — and neither is an `error` item, which
+            // the bypass flags make the CLI write. Each is a diagnostic on the
+            // captured stream rather than a signal to abandon extraction.
             _ => {}
         }
     }
@@ -193,12 +305,15 @@ pub fn extract(context: &ExtractContext<'_>) -> Result<Extracted, EnvelopeInvali
         return Err(EnvelopeInvalid::VendorRunFailed);
     }
 
-    // CDX-FR-13 / CDX-FR-14: the envelope's shape is not enforced by the CLI,
-    // because `--output-schema` takes a filesystem path and would require
-    // mounting a schema file. A malformed envelope is therefore an expected
-    // failure mode of this vendor rather than a rare one.
+    // CDX-FR-13: a stream with no extraction position is a protocol failure.
     let text = last_agent_message.ok_or(EnvelopeInvalid::NotFound)?;
-    let envelope = decode_envelope(&text)?;
+    // CDX-FR-TPFM / EAC-FR-RBLI: under the strict schema of a contract turn, a
+    // `null` at an optional position is how the agent leaves the field out. A
+    // turn with no contract is held to no strict schema (CDX-FR-14).
+    let envelope = match context.result_contract {
+        Some(contract) => decode_envelope(&strip_optional_nulls(&text, contract))?,
+        None => decode_envelope(&text)?,
+    };
 
     Ok(Extracted { envelope, session_id })
 }
@@ -232,6 +347,7 @@ const ITEM_FILE_CHANGE: &str = "file_change";
 const ITEM_MCP_TOOL_CALL: &str = "mcp_tool_call";
 const ITEM_WEB_SEARCH: &str = "web_search";
 const ITEM_TODO_LIST: &str = "todo_list";
+const ITEM_COLLAB_TOOL_CALL: &str = "collab_tool_call";
 const ITEM_ERROR: &str = "error";
 
 /// CDX-FR-28: one line of the event stream, read as an activity.
@@ -338,6 +454,15 @@ fn item_activity(
         }
         ITEM_WEB_SEARCH => {
             (ActivityKind::ToolCall, format!("web search · {}", text("query").unwrap_or_default()))
+        }
+        ITEM_COLLAB_TOOL_CALL => {
+            let tool = item.get("tool").and_then(Value::as_str).unwrap_or("?");
+            let agents = item
+                .get("receiver_thread_ids")
+                .and_then(Value::as_array)
+                .map(Vec::len)
+                .unwrap_or(0);
+            (ActivityKind::ToolCall, format!("{tool} · {agents} agents"))
         }
         ITEM_TODO_LIST => {
             let items = item.get("items").and_then(Value::as_array).map(Vec::len).unwrap_or(0);

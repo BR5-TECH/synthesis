@@ -279,8 +279,8 @@ fn argv_of(vendor: &str, kind: TurnKind, instruction: &str) -> Vec<String> {
 const WITH_BLOCK: &str =
     "Do the work.\n\n## Milestones\n\nSYNTHESIS_MILESTONE {\"event\":\"start\",\"index\":1}\n";
 
-/// EAC-FR-WBIF, CCP-FR-WZJS — a Claude Code launch of a scanned kind whose instruction holds the
-/// block ends its vector with `--settings` and the reminder hook, and no other launch carries it.
+/// EAC-FR-WBIF, CCP-FR-WZJS, CDX-FR-OQVA — a launch of a scanned kind whose instruction holds the
+/// block carries its vendor's reminder hook, and no other launch carries it.
 #[test]
 fn only_a_scanned_turn_with_the_block_carries_the_reminder() {
     let reminder = descriptor::claude_code::milestone_reminder_args();
@@ -298,9 +298,20 @@ fn only_a_scanned_turn_with_the_block_carries_the_reminder() {
         let argv = argv_of("claude_code", kind, WITH_BLOCK);
         assert!(!argv.iter().any(|a| a == "--settings"), "{kind:?}");
     }
-    // A vendor with no reminder mechanism gets none.
-    let argv = argv_of("codex", TurnKind::Work, WITH_BLOCK);
-    assert!(!argv.iter().any(|a| a == "--settings" || a.contains("PostToolUse")), "{argv:?}");
+    // CDX-FR-OQVA: Codex carries its own reminder, a `PreToolUse` override, on
+    // the same turns and before its `-` prompt.
+    for kind in [TurnKind::Work, TurnKind::Review, TurnKind::MergeWork, TurnKind::MergeReview] {
+        let argv = argv_of("codex", kind, WITH_BLOCK);
+        assert!(!argv.iter().any(|a| a == "--settings" || a.contains("PostToolUse")), "{argv:?}");
+        assert_eq!(argv.iter().filter(|a| a.starts_with("hooks.PreToolUse=")).count(), 1);
+        assert_eq!(argv.last().map(String::as_str), Some("-"), "{kind:?}");
+    }
+    for kind in [TurnKind::SemanticRebase, TurnKind::PrMaintenance] {
+        let argv = argv_of("codex", kind, WITH_BLOCK);
+        assert!(!argv.iter().any(|a| a.starts_with("hooks.")), "{kind:?}");
+    }
+    let argv = argv_of("codex", TurnKind::Review, "Correct the verdict.");
+    assert!(!argv.iter().any(|a| a.starts_with("hooks.")), "{argv:?}");
 }
 
 /// CCP-FR-WZJS — the settings object holds one `PostToolUse` hook for every tool, and its command

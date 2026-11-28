@@ -24,8 +24,8 @@ import {
   commandsFor,
 } from "../test/aiIntegrationsFixtures";
 
-// AII-FR-OTQY: only Claude Code is implemented. Every other vendor keeps its
-// tab, but the tab is read-only and the section invokes nothing for it. These
+// AII-FR-OTQY: only Claude Code and Codex are implemented. Every other vendor
+// keeps its tab, but the tab is read-only and the section invokes nothing for it. These
 // tests use the real gate and never open it.
 const invokeMock = vi.fn();
 
@@ -65,21 +65,27 @@ describe("an agentic vendor that is not implemented", () => {
     render(<BothLevels />);
     const user = userEvent.setup();
 
-    const codexTab = await agenticLevel().findByRole("tab", { name: /Codex/ });
-    await user.click(codexTab);
+    const openCodeTab = await agenticLevel().findByRole("tab", { name: /OpenCode/ });
+    await user.click(openCodeTab);
 
     // The tab is selected, and its label is marked as not implemented.
-    expect(codexTab).toHaveAttribute("aria-selected", "true");
-    expect(codexTab).toHaveAttribute("data-unimplemented", "true");
-    expect(
-      agenticLevel().getByRole("tab", { name: /Claude Code/ }),
-    ).toHaveAttribute("data-unimplemented", "false");
+    expect(openCodeTab).toHaveAttribute("aria-selected", "true");
+    expect(openCodeTab).toHaveAttribute("data-unimplemented", "true");
+    for (const name of [/Claude Code/, /Codex/]) {
+      expect(agenticLevel().getByRole("tab", { name })).toHaveAttribute(
+        "data-unimplemented",
+        "false",
+      );
+    }
 
     // The statement comes first in the panel.
-    const panel = await agenticLevel().findByTestId("agentic-panel-codex");
+    const panel = await agenticLevel().findByTestId("agentic-panel-opencode");
     const notice = within(panel).getByTestId("to-be-implemented");
     expect(notice).toHaveAttribute("role", "note");
     expect(notice).toHaveTextContent("To Be Implemented...");
+    expect(notice).toHaveTextContent(
+      "Only Claude Code and Codex are tested. This integration cannot be configured yet.",
+    );
     expect(panel.firstElementChild).toBe(notice);
 
     // Every field, selector, and action is disabled, Verify included.
@@ -97,7 +103,7 @@ describe("an agentic vendor that is not implemented", () => {
     const detected = invokeMock.mock.calls
       .filter((c) => c[0] === "detect_agentic_cli_binary")
       .map((c) => (c[1] as { vendor: string }).vendor);
-    expect(detected).not.toContain("codex");
+    expect(detected).not.toContain("opencode");
     expect(commands()).not.toContain("verify_agentic_integration");
   });
 
@@ -152,7 +158,7 @@ describe("an agentic vendor that is not implemented", () => {
     }
   });
 
-  it("AII-FR-03, AII-FR-17, AII-FR-OTQY: the gate applies per tab, and Claude Code stays editable", async () => {
+  it("AII-FR-03, AII-FR-17, AII-FR-OTQY: the gate applies per tab, and Claude Code and Codex stay editable", async () => {
     backend({
       agentic: AGENTIC_ALL.map((v) => agenticIntegration(v)),
     });
@@ -167,7 +173,6 @@ describe("an agentic vendor that is not implemented", () => {
     );
 
     for (const [name, vendor] of [
-      [/Codex/, "codex"],
       [/OpenCode/, "opencode"],
       [/Claude Agent API/, "claude_agent_api"],
       [/Custom agent API/, "custom_agent_api"],
@@ -177,17 +182,25 @@ describe("an agentic vendor that is not implemented", () => {
       expect(within(panel).getByTestId("to-be-implemented")).toBeInTheDocument();
     }
 
-    await user.click(agenticLevel().getByRole("tab", { name: /Claude Code/ }));
-    const panel = await agenticLevel().findByTestId("agentic-panel-claude_code");
-    expect(within(panel).queryByTestId("to-be-implemented")).toBeNull();
-    expect(within(panel).getByLabelText("Binary")).toBeEnabled();
+    for (const [name, vendor] of [
+      [/Claude Code/, "claude_code"],
+      [/Codex/, "codex"],
+    ] as const) {
+      await user.click(agenticLevel().getByRole("tab", { name }));
+      const panel = await agenticLevel().findByTestId(`agentic-panel-${vendor}`);
+      expect(within(panel).queryByTestId("to-be-implemented")).toBeNull();
+      expect(within(panel).getByLabelText("Binary")).toBeEnabled();
+    }
 
-    // Every detection was for Claude Code.
+    // Every detection was for an implemented CLI: Claude Code, which opens
+    // first, and Codex, which opens with no stored path.
+    await waitFor(() =>
+      expect(argsOf("detect_agentic_cli_binary")).toEqual({ vendor: "codex" }),
+    );
     const detections = invokeMock.mock.calls
       .filter((c) => c[0] === "detect_agentic_cli_binary")
       .map((c) => (c[1] as { vendor: string }).vendor);
-    expect(detections.length).toBeGreaterThan(0);
-    expect(new Set(detections)).toEqual(new Set(["claude_code"]));
+    expect(new Set(detections)).toEqual(new Set(["claude_code", "codex"]));
   });
 
   it("AII-FR-OTQY: opening a read-only tab logs one debug record with the vendor alone", async () => {
@@ -200,7 +213,7 @@ describe("an agentic vendor that is not implemented", () => {
     render(<BothLevels />);
     const user = userEvent.setup();
 
-    await user.click(await agenticLevel().findByRole("tab", { name: /Codex/ }));
+    await user.click(await agenticLevel().findByRole("tab", { name: /OpenCode/ }));
     await agenticLevel().findByTestId("to-be-implemented");
     await user.click(agenticLevel().getByRole("tab", { name: /Claude Code/ }));
     await agenticLevel().findByTestId("agentic-panel-claude_code");
@@ -210,7 +223,7 @@ describe("an agentic vendor that is not implemented", () => {
     );
     expect(records).toHaveLength(1);
     expect(records[0].level).toBe("DEBUG");
-    expect(records[0].fields).toEqual({ vendor: "codex" });
+    expect(records[0].fields).toEqual({ vendor: "opencode" });
   });
 });
 
@@ -221,12 +234,12 @@ describe("the project agentic override", () => {
         agentic: [
           cliVerified("claude_code", "/bin/claude", { active: true }),
           cliVerified("codex", "/bin/codex"),
-          agenticIntegration("opencode"),
+          cliVerified("opencode", "/bin/opencode"),
         ],
         project: {
-          vendor: "codex",
+          vendor: "opencode",
           resolution: "overridden",
-          overrideVendor: "codex",
+          overrideVendor: "opencode",
         },
       },
       {
@@ -247,25 +260,27 @@ describe("the project agentic override", () => {
     await waitFor(() =>
       expect(
         control.getByTestId("settings-agentic-integration-resolution"),
-      ).toHaveTextContent(/Codex · overrides the global choice/),
+      ).toHaveTextContent(/OpenCode · overrides the global choice/),
     );
 
     await user.click(control.getByRole("button", { name: /change/i }));
     const select = control.getByLabelText("Agentic integration");
-    // Codex is verified, but it is not implemented, so it is not offered. It
-    // stays the shown value as a disabled entry, so that choosing the inherit
-    // entry is a change.
+    // OpenCode is verified, but it is not implemented, so it is not offered.
+    // It stays the shown value as a disabled entry, so that choosing the
+    // inherit entry is a change. Claude Code and Codex are both offered.
     const options = within(select).getAllByRole("option") as HTMLOptionElement[];
     expect(options.map((o) => o.textContent)).toEqual([
       "Inherit the global choice",
-      "Codex",
+      "OpenCode",
       "Claude Code",
+      "Codex",
     ]);
     expect(options.filter((o) => !o.disabled).map((o) => o.textContent)).toEqual([
       "Inherit the global choice",
       "Claude Code",
+      "Codex",
     ]);
-    expect(select).toHaveValue("codex");
+    expect(select).toHaveValue("opencode");
 
     // The author can still leave the override.
     await user.selectOptions(select, "");
@@ -279,17 +294,18 @@ describe("the project agentic override", () => {
       {
         agentic: [
           agenticIntegration("claude_code"),
-          cliVerified("codex", "/bin/codex", { active: true }),
+          agenticIntegration("codex"),
+          cliVerified("opencode", "/bin/opencode", { active: true }),
         ],
         project: {
-          vendor: "codex",
+          vendor: "opencode",
           resolution: "overridden",
-          overrideVendor: "codex",
+          overrideVendor: "opencode",
         },
       },
       {
         set_project_agentic_integration: () => ({
-          vendor: "codex",
+          vendor: "opencode",
           resolution: "inherited",
           overrideVendor: null,
         }),

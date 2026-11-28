@@ -3639,11 +3639,69 @@ const githubTokens = [
  * other or from `TURN_KINDS` in src-tauri/src/agentic.rs.
  */
 const AGENTIC_TURN_KINDS = [
-  "authoring",
-  "implementation",
+  "work",
   "review",
   "semantic_rebase",
+  "pr_maintenance",
 ];
+
+/**
+ * AIC-FR-09: the six levels Codex declares, with the labels the vendor list
+ * gives them. Each Codex model declares its own ladder (AIC-FR-SFMS).
+ */
+const CODEX_EFFORTS = [
+  { id: "low", label: "Low" },
+  { id: "medium", label: "Medium" },
+  { id: "high", label: "High" },
+  { id: "xhigh", label: "Extra high" },
+  { id: "max", label: "Max" },
+  { id: "ultra", label: "Ultra" },
+];
+
+/** A Codex model with its own ladder (AIC-FR-TBTH). */
+function codexModel(id: string, label: string, efforts: string[], defaultEffort: string) {
+  return {
+    id,
+    label,
+    reasoning: { mandatory: true, supportedEfforts: efforts, defaultEffort },
+  };
+}
+
+const ALL_CODEX = ["low", "medium", "high", "xhigh", "max", "ultra"];
+
+/** A part of the bundled Codex catalog: one model with no `ultra`, one that
+ * stops at `xhigh`, and two with the whole ladder. */
+const CODEX_MODELS = [
+  codexModel("gpt-6.2-sol", "GPT-6.2-Sol", ALL_CODEX, "low"),
+  codexModel("gpt-6.2-astra", "GPT-6.2-Astra", ALL_CODEX, "low"),
+  codexModel("gpt-6-luna", "GPT-6-Luna", ALL_CODEX.slice(0, 5), "medium"),
+  codexModel("gpt-5.5", "GPT-5.5", ALL_CODEX.slice(0, 4), "medium"),
+];
+
+/** AIC-FR-SFMS: the levels offered for a record's selection. */
+function offeredAgenticEfforts(record: any, turnKind: string | null): string[] {
+  const ladders = (record.models as any[])
+    .map((m) => m.reasoning?.supportedEfforts)
+    .filter(Array.isArray) as string[][];
+  const vendor = (record.reasoningEfforts as Array<{ id: string }>).map((e) => e.id);
+  if (ladders.length === 0) return vendor;
+  const modelId = (turnKind ? record.modelOverrides[turnKind] : undefined) ?? record.selectedModel;
+  const own = (record.models as any[]).find((m) => m.id === modelId)?.reasoning?.supportedEfforts;
+  if (Array.isArray(own)) return own;
+  return vendor.filter((id) => ladders.every((l) => l.includes(id)));
+}
+
+/** AIC-FR-TPKB: drop every stored effort the record no longer offers. */
+function dropUnofferedEfforts(record: any) {
+  if (record.selectedEffort && !offeredAgenticEfforts(record, null).includes(record.selectedEffort)) {
+    record.selectedEffort = null;
+  }
+  for (const kind of Object.keys(record.effortOverrides)) {
+    if (!offeredAgenticEfforts(record, kind).includes(record.effortOverrides[kind])) {
+      delete record.effortOverrides[kind];
+    }
+  }
+}
 
 const agentics = [
   {
@@ -3688,16 +3746,20 @@ const agentics = [
     binaryPath: null,
     pathOrigin: "unset",
     baseUrl: null,
+    // AIC-FR-25: Codex's key fields describe its access token, in
+    // `access_token` mode only.
     keyState: "unset",
     maskedHint: null,
     keyRequired: false,
+    // AIC-FR-UFYH: a record with no stored mode reads as `login_folder`.
+    codexAuthMode: "login_folder",
     state: "unconfigured",
     version: null,
     verifiedAt: null,
-    models: [],
+    models: CODEX_MODELS as any[],
     modelsOrigin: "catalog",
     selectedModel: null,
-    reasoningEfforts: [],
+    reasoningEfforts: CODEX_EFFORTS,
     selectedEffort: null,
     modelOverrides: {} as Record<string, string>,
     effortOverrides: {} as Record<string, string>,
@@ -8540,6 +8602,22 @@ export async function invoke(cmd: string, args?: Record<string, any>): Promise<a
   return unifiedInvoke(cmd, args, legacyInvoke);
 }
 
+/** PSS-FR-CQML: the agent group settings the harness project holds. */
+const mockAgentGroupSettings = { enabled: false, joinTimeoutSecs: 60 };
+
+/**
+ * AIC-FR-04 / AIC-FR-07: the path detection finds for a CLI vendor, and the
+ * origin a verified path takes. A verified path equal to what detection would
+ * find is `detected`; any other is `user_supplied`, as `operations.rs` decides.
+ */
+function mockDetectedCliPath(vendor: string): string {
+  return vendor === "codex" ? "/opt/homebrew/bin/codex" : "/opt/homebrew/bin/claude";
+}
+
+function mockPathOrigin(vendor: string, path: string): "detected" | "user_supplied" {
+  return path.trim() === mockDetectedCliPath(vendor) ? "detected" : "user_supplied";
+}
+
 async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<any> {
   const a = args ?? {};
   invokeLog.push({ cmd, args: a });
@@ -11710,10 +11788,15 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         record.state = "unconfigured";
         record.version = null;
         record.verifiedAt = null;
-        record.models = [];
+        // Codex's descriptor ships its catalog and its levels (AIC-FR-08,
+        // AIC-FR-09), so a cleared Codex record keeps them.
+        const codex = record.vendor === "codex";
+        record.models = codex ? (CODEX_MODELS as any[]) : [];
         record.modelsOrigin = "catalog";
         record.selectedModel = null;
-        record.reasoningEfforts = [];
+        record.reasoningEfforts = codex ? CODEX_EFFORTS : [];
+        // AIC-FR-14: clear returns Codex to the login folder mode.
+        if (codex) (record as Record<string, unknown>).codexAuthMode = "login_folder";
         record.selectedEffort = null;
         // AIC-FR-10 / AIC-FR-24: clearing drops the whole record in the real
         // backend, so **both** override maps go with it. A cleared and
@@ -11726,7 +11809,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return agentics;
     }
     case "detect_agentic_cli_binary":
-      return { path: "/opt/homebrew/bin/claude" };
+      return { path: mockDetectedCliPath(a.vendor as string) };
     // SET-FR-21 / PSS-FR-29: the project's Docker images, so the Docker section
     // of Project settings renders its joined `name:tag` field. Claude Code is
     // configured with a tag; the other vendors are unset.
@@ -11734,6 +11817,21 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       return mockDockerImages;
     // SET-FR-NXDV: the project-local Docker-in-Docker settings. The save keeps
     // the four values, so a reload shows what the section wrote.
+    // PSS-FR-CQML: the agent group switch and join timeout of the open project.
+    // The save keeps both values, so a reload shows what the section wrote, and
+    // refuses a timeout outside 5 to 600 seconds as the backend does.
+    case "load_agent_group_settings":
+      return { ...mockAgentGroupSettings };
+    case "save_agent_group_settings": {
+      const next = (a.settings ?? {}) as { enabled?: boolean; joinTimeoutSecs?: number };
+      const timeout = Number(next.joinTimeoutSecs);
+      if (!Number.isInteger(timeout) || timeout < 5 || timeout > 600) {
+        throw "join_timeout_out_of_range";
+      }
+      mockAgentGroupSettings.enabled = Boolean(next.enabled);
+      mockAgentGroupSettings.joinTimeoutSecs = timeout;
+      return { ...mockAgentGroupSettings };
+    }
     case "load_docker_in_docker_settings":
       return {
         enabled: mockDockerInDocker.enabled,
@@ -11899,6 +11997,34 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
         record.state = "verified";
         return record;
       }
+      // AIC-FR-ISWS / AIC-FR-BXFL / AIC-FR-OFEO: Codex's two modes.
+      if (record.vendor === "codex") {
+        const ext = record as Record<string, unknown>;
+        const mode = config.authMode ?? "login_folder";
+        if (mode !== "login_folder" && mode !== "access_token") throw "wrong_config_kind";
+        if (mode === "access_token") {
+          const token = typeof config.accessToken === "string" ? config.accessToken.trim() : null;
+          if (token === null && record.keyState !== "set") throw "token_missing";
+          if (token !== null && (token === "" || /[\s\u0000-\u001f\u007f-\u009f]/u.test(token))) {
+            throw "token_malformed";
+          }
+          if (token !== null) {
+            record.keyState = "set";
+            record.maskedHint = token.length >= 8 ? token.slice(-4) : null;
+          }
+        } else if (config.accessToken !== undefined) {
+          throw "wrong_config_kind";
+        }
+        ext.codexAuthMode = mode;
+        if (typeof config.path === "string") {
+          record.binaryPath = config.path;
+          record.pathOrigin = mockPathOrigin(record.vendor, config.path);
+        }
+        record.version = "0.172.0";
+        record.modelsOrigin = "probed";
+        record.state = "verified";
+        return record;
+      }
       if (record.kind === "cli" && record.keyRequired) {
         const token = typeof config.oauthToken === "string" ? config.oauthToken.trim() : null;
         if (token === null && record.keyState !== "set") throw "token_missing";
@@ -11912,6 +12038,7 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       }
       if (record.kind === "cli" && typeof config.path === "string") {
         record.binaryPath = config.path;
+        record.pathOrigin = mockPathOrigin(record.vendor, config.path);
       }
       record.state = "verified";
       return record;
@@ -11942,6 +12069,8 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       } else {
         record.modelOverrides[turnKind] = modelId;
       }
+      // AIC-FR-TPKB: an effort the new model does not offer reads as absent.
+      dropUnofferedEfforts(record);
       return record;
     }
     // AIC-FR-10: a null `turnKind` sets the default every kind falls back to; a
@@ -11955,7 +12084,9 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
       if (turnKind !== null && !AGENTIC_TURN_KINDS.includes(turnKind)) {
         throw "unknown_turn_kind";
       }
-      if (effortId !== null && !record.reasoningEfforts.some((e) => e.id === effortId)) {
+      // AIC-FR-10 / AIC-FR-SFMS: a level the kind's effective model does not
+      // offer is refused.
+      if (effortId !== null && !offeredAgenticEfforts(record, turnKind).includes(effortId)) {
         throw "unknown_effort";
       }
       if (turnKind === null) {
@@ -12143,23 +12274,29 @@ async function legacyInvoke(cmd: string, args?: Record<string, any>): Promise<an
        (AGT-FR-KVDA). Never a built-in skill. */
     case "list_project_skills":
       return [
+        /* DSL-FR-17 / DSL-FR-KWQE: `review` is in two IDE folders. The
+           `.agents` copy is the newer one, so the registry keeps it and lists
+           the `.codex` copy as shadowed. */
+        {
+          path: ".agents/skills/review/SKILL.md",
+          ecosystem: "agents",
+          name: "review",
+          description: "Review a change for defects.",
+          shadowedPaths: [".codex/skills/review/SKILL.md"],
+        },
         {
           path: ".claude/skills/analyst/SKILL.md",
           ecosystem: "claude",
           name: "analyst",
           description: "Capture a feature request as specifications.",
+          shadowedPaths: [],
         },
         {
           path: ".claude/skills/engineer/SKILL.md",
           ecosystem: "claude",
           name: "engineer",
           description: "Implement a specification.",
-        },
-        {
-          path: ".codex/skills/review/SKILL.md",
-          ecosystem: "codex",
-          name: "review",
-          description: "Review a change for defects.",
+          shadowedPaths: [],
         },
         /* DSL-FR-NWKE: the synthesis skills of `.synthesis/skills`. */
         {

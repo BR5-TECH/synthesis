@@ -35,7 +35,7 @@ pub struct AgenticVendor {
     /// CLI kind: how to ask this installation which models it offers, when the
     /// vendor has such a subcommand at all (AIC-FR-08). `None` means the probe
     /// is unsupported and the bundled catalog is used.
-    pub model_probe_args: Option<&'static [&'static str]>,
+    pub model_probe: Option<ModelProbe>,
     /// API kind: the endpoint prefilled in the UI (AIC-FR-23). `None` for
     /// `custom_agent_api`, whose whole purpose is a URL only the author knows.
     pub default_base_url: Option<&'static str>,
@@ -52,6 +52,13 @@ pub struct AgenticVendor {
     pub key_required: bool,
     /// The bundled fallback list (AIC-FR-08). May be empty.
     pub model_catalog: &'static [(&'static str, &'static str)],
+    /// AIC-FR-09 / AIC-FR-SFMS: the effort ladder each bundled model declares.
+    /// A model with no entry here carries no ladder, and the vendor list
+    /// applies to it. Empty for every vendor but Codex.
+    pub model_ladders: &'static [ModelLadder],
+    /// AIC-FR-KAVY: the environment variable that carries this vendor's
+    /// optional access token. `Some` for Codex alone.
+    pub access_token_env: Option<&'static str>,
     /// Fixed per vendor (AIC-FR-09). May be empty, which is what renders no
     /// effort selector at all (`../ui/AII-ai-integrations.md` AII-FR-24).
     pub reasoning_efforts: &'static [(&'static str, &'static str)],
@@ -64,6 +71,23 @@ pub struct AgenticVendor {
     /// authenticates through a directory rather than through a credential this
     /// module holds (AIC-FR-30). `None` for every vendor but Codex.
     pub config_mount: Option<CliConfigMount>,
+}
+
+/// How a CLI-kind vendor lists the models its installation offers (AIC-FR-08).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModelProbe {
+    /// The arguments print one model id per line (OpenCode).
+    Lines(&'static [&'static str]),
+    /// AIC-FR-TBTH: the arguments print the Codex `{"models":[...]}` document.
+    CodexCatalog(&'static [&'static str]),
+}
+
+/// AIC-FR-09: the effort ladder one bundled model declares, and its default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ModelLadder {
+    pub model: &'static str,
+    pub efforts: &'static [&'static str],
+    pub default_effort: &'static str,
 }
 
 /// Where a CLI's own login directory is, and where its pinned container
@@ -120,6 +144,43 @@ pub(super) const EFFORTS_CLAUDE_CODE: &[(&str, &str)] = &[
     ("max", "Max"),
 ];
 
+/// AIC-FR-09: the six levels the pinned Codex CLI accepts
+/// (`../infra/CDX-codex-cli-protocol.md` CDX-FR-SDOV). Each model offers a part
+/// of this list (AIC-FR-SFMS); the list is also where each level's label comes
+/// from.
+pub(super) const EFFORTS_CODEX: &[(&str, &str)] = &[
+    ("low", "Low"),
+    ("medium", "Medium"),
+    ("high", "High"),
+    ("xhigh", "Extra high"),
+    ("max", "Max"),
+    ("ultra", "Ultra"),
+];
+
+const CODEX_LADDER_FULL: &[&str] = &["low", "medium", "high", "xhigh", "max", "ultra"];
+const CODEX_LADDER_NO_ULTRA: &[&str] = &["low", "medium", "high", "xhigh", "max"];
+const CODEX_LADDER_TO_XHIGH: &[&str] = &["low", "medium", "high", "xhigh"];
+
+/// AIC-FR-09: the ladder of each bundled Codex model, as `codex-cli 0.172.0`
+/// lists it (`AIC-agentic-integrations.md`, "The Codex model catalog").
+///
+/// The CLI accepts a level a model does not declare and reports no error
+/// (CDX-FR-OOCJ), so this list is the only thing that keeps such a level out
+/// of a run when the probe cannot answer.
+const CODEX_LADDERS: &[ModelLadder] = &[
+    ModelLadder { model: "gpt-6.2-sol", efforts: CODEX_LADDER_FULL, default_effort: "low" },
+    ModelLadder { model: "gpt-6.2-astra", efforts: CODEX_LADDER_FULL, default_effort: "low" },
+    ModelLadder { model: "gpt-6-astra", efforts: CODEX_LADDER_FULL, default_effort: "low" },
+    ModelLadder { model: "gpt-6.1-sol", efforts: CODEX_LADDER_FULL, default_effort: "low" },
+    ModelLadder { model: "gpt-6.1-terra", efforts: CODEX_LADDER_FULL, default_effort: "low" },
+    ModelLadder { model: "gpt-6-sol", efforts: CODEX_LADDER_FULL, default_effort: "medium" },
+    ModelLadder { model: "gpt-6-luna", efforts: CODEX_LADDER_NO_ULTRA, default_effort: "medium" },
+    ModelLadder { model: "gpt-5.6-sol", efforts: CODEX_LADDER_FULL, default_effort: "low" },
+    ModelLadder { model: "gpt-5.6-terra", efforts: CODEX_LADDER_FULL, default_effort: "medium" },
+    ModelLadder { model: "gpt-5.6-luna", efforts: CODEX_LADDER_NO_ULTRA, default_effort: "medium" },
+    ModelLadder { model: "gpt-5.5", efforts: CODEX_LADDER_TO_XHIGH, default_effort: "medium" },
+];
+
 /// The five supported vendors, in the stable order `list_agentic_integrations`
 /// returns them (AIC-FR-02): the three CLIs first, then the two API agents.
 ///
@@ -137,7 +198,7 @@ pub const VENDORS: &[AgenticVendor] = &[
         identity_markers: &["claude"],
         // Claude Code has no model-enumeration subcommand, so the catalog is
         // authoritative for it rather than a fallback.
-        model_probe_args: None,
+        model_probe: None,
         default_base_url: None,
         auth: AuthStyle::Bearer,
         models_path: "",
@@ -146,6 +207,8 @@ pub const VENDORS: &[AgenticVendor] = &[
         // OAuth token is what makes the integration usable at all.
         key_required: true,
         model_catalog: &[("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku")],
+        model_ladders: &[],
+        access_token_env: None,
         reasoning_efforts: EFFORTS_CLAUDE_CODE,
         container_executable: true,
         config_mount: None,
@@ -157,17 +220,31 @@ pub const VENDORS: &[AgenticVendor] = &[
         executable_names: &["codex"],
         version_args: &["--version"],
         identity_markers: &["codex"],
-        model_probe_args: None,
+        // AIC-FR-TBTH: the installation's own catalog, as JSON. It answers
+        // with no login at all (`../infra/CDX-codex-cli-protocol.md`
+        // CDX-FR-BQNL), so the probe carries no credential.
+        model_probe: Some(ModelProbe::CodexCatalog(&["debug", "models"])),
         default_base_url: None,
         auth: AuthStyle::Bearer,
         models_path: "",
+        // AIC-FR-25: the access token is optional, so it is not "required".
         key_required: false,
         model_catalog: &[
-            ("gpt-5.1-codex", "GPT-5.1 Codex"),
-            ("gpt-5.1", "GPT-5.1"),
-            ("gpt-5", "GPT-5"),
+            ("gpt-6.2-sol", "GPT-6.2-Sol"),
+            ("gpt-6.2-astra", "GPT-6.2-Astra"),
+            ("gpt-6-astra", "GPT-6-Astra"),
+            ("gpt-6.1-sol", "GPT-6.1-Sol"),
+            ("gpt-6.1-terra", "GPT-6.1 Terra"),
+            ("gpt-6-sol", "GPT-6-Sol"),
+            ("gpt-6-luna", "GPT-6-Luna"),
+            ("gpt-5.6-sol", "GPT-5.6-Sol"),
+            ("gpt-5.6-terra", "GPT-5.6-Terra"),
+            ("gpt-5.6-luna", "GPT-5.6-Luna"),
+            ("gpt-5.5", "GPT-5.5"),
         ],
-        reasoning_efforts: EFFORTS_LOW_MED_HIGH,
+        model_ladders: CODEX_LADDERS,
+        access_token_env: Some(CODEX_ACCESS_TOKEN_ENV),
+        reasoning_efforts: EFFORTS_CODEX,
         container_executable: true,
         config_mount: Some(CliConfigMount {
             host_home_relative: ".codex",
@@ -184,12 +261,14 @@ pub const VENDORS: &[AgenticVendor] = &[
         // OpenCode is provider-agnostic: which models exist depends entirely on
         // the author's configured providers, so the installation is the only
         // thing that can answer and there is nothing sensible to bundle.
-        model_probe_args: Some(&["models"]),
+        model_probe: Some(ModelProbe::Lines(&["models"])),
         default_base_url: None,
         auth: AuthStyle::Bearer,
         models_path: "",
         key_required: false,
         model_catalog: &[],
+        model_ladders: &[],
+        access_token_env: None,
         reasoning_efforts: &[],
         container_executable: false,
         config_mount: None,
@@ -201,7 +280,7 @@ pub const VENDORS: &[AgenticVendor] = &[
         executable_names: &[],
         version_args: &[],
         identity_markers: &[],
-        model_probe_args: None,
+        model_probe: None,
         default_base_url: Some("https://api.anthropic.com/v1"),
         auth: AuthStyle::AnthropicApiKey,
         models_path: "/models",
@@ -210,6 +289,8 @@ pub const VENDORS: &[AgenticVendor] = &[
             ("claude-opus-5", "Claude Opus 5"),
             ("claude-sonnet-5", "Claude Sonnet 5"),
         ],
+        model_ladders: &[],
+        access_token_env: None,
         reasoning_efforts: EFFORTS_LOW_MED_HIGH,
         container_executable: false,
         config_mount: None,
@@ -221,7 +302,7 @@ pub const VENDORS: &[AgenticVendor] = &[
         executable_names: &[],
         version_args: &[],
         identity_markers: &[],
-        model_probe_args: None,
+        model_probe: None,
         // AIC-FR-23: no default, because this vendor exists precisely so that a
         // self-hosted, proxied, or otherwise relocated deployment of the same
         // protocol can be pointed at by URL.
@@ -231,6 +312,8 @@ pub const VENDORS: &[AgenticVendor] = &[
         // A deployment on the author's own machine may authenticate nobody.
         key_required: false,
         model_catalog: &[],
+        model_ladders: &[],
+        access_token_env: None,
         reasoning_efforts: EFFORTS_LOW_MED_HIGH,
         container_executable: false,
         config_mount: None,
@@ -251,10 +334,23 @@ impl AgenticVendor {
         self.kind == VendorKind::Cli && self.key_required
     }
 
-    /// Whether this vendor holds a credential in the keychain at all, of either
+    /// Whether this vendor can hold a credential in the vault at all, of any
     /// sort (AIC-FR-20). What decides whether `key_state` and `masked_hint` mean
-    /// anything for its records (AIC-FR-25).
+    /// anything for its records (AIC-FR-25), and whether clearing it deletes a
+    /// vault entry (AIC-FR-14).
     pub fn holds_credential(&self) -> bool {
+        self.kind == VendorKind::Api || self.requires_oauth_token() || self.holds_access_token()
+    }
+
+    /// AIC-FR-UFYH: whether this vendor holds an optional access token, which
+    /// it reads only in its `access_token` mode. Codex alone.
+    pub fn holds_access_token(&self) -> bool {
+        self.access_token_env.is_some()
+    }
+
+    /// AIC-FR-32: whether an earlier keyring layout stored this vendor's
+    /// credential. No earlier layout stored the Codex access token.
+    pub fn had_legacy_credential(&self) -> bool {
         self.kind == VendorKind::Api || self.requires_oauth_token()
     }
 }
@@ -264,8 +360,25 @@ pub fn vendor_descriptor(vendor: &str) -> Option<&'static AgenticVendor> {
     VENDORS.iter().find(|v| v.vendor == vendor)
 }
 
+/// AIC-FR-08 / AIC-FR-09: the bundled list, each model carrying the ladder the
+/// descriptor declares for it.
 pub(super) fn catalog_models(descriptor: &AgenticVendor) -> Vec<ModelOption> {
-    descriptor.model_catalog.iter().map(|(id, label)| ModelOption::new(id, label)).collect()
+    descriptor
+        .model_catalog
+        .iter()
+        .map(|(id, label)| {
+            let mut option = ModelOption::new(id, label);
+            if let Some(ladder) = descriptor.model_ladders.iter().find(|l| l.model == *id) {
+                option.reasoning = Some(ModelReasoning {
+                    mandatory: true,
+                    default_enabled: None,
+                    supported_efforts: Some(ladder.efforts.iter().map(|e| e.to_string()).collect()),
+                    default_effort: Some(ladder.default_effort.to_string()),
+                });
+            }
+            option
+        })
+        .collect()
 }
 
 pub(super) fn declared_efforts(descriptor: &AgenticVendor) -> Vec<EffortOption> {

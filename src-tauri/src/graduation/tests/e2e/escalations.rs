@@ -44,6 +44,59 @@ fn an_answered_escalation_resumes_the_session_that_asked() {
         .expect_commits(1);
 }
 
+// GTE-FR-XKGB / GXD-FR-XPUR, EAC-FR-IGXZ, EAC-FR-30: an escalated work turn
+// records the session the executor reported, not the one the agent's own
+// envelope names, so the answer resumes the executor's session with its
+// continuation token.
+#[test]
+fn an_answer_resumes_the_session_the_executor_reported() {
+    Scenario::named("answers resume the executor's session")
+        .work_turn(Script::escalates(&["Which panel is meant?"]).leaves_an_executor_session())
+        .run()
+        .answered(
+            &["The editor's."],
+            vec![
+                Script::reports_success().writes("src/panel.ts", "1\n"),
+                Script::answers_ready("The work answers the prompt."),
+            ],
+        )
+        .expect_state(GraduationRunState::Completed)
+        .expect_dispatch(0, |d| {
+            d.purpose("escalation_answer")
+                .resumes_session("s-exec")
+                .resumes_with_token("access_token");
+        })
+        .expect_commits(1);
+}
+
+// GTE-FR-XKGB / GXD-FR-XPUR, GXD-FR-BJYT, GRL-FR-SMQK: a work turn's answers go
+// into a fresh work turn where the vendor cannot resume the session that
+// asked. The fresh turn still carries the answers, and asks for no session.
+#[test]
+fn an_answered_escalation_the_vendor_cannot_resume_goes_into_a_fresh_work_turn() {
+    Scenario::named("answers in a fresh turn")
+        .work_turn(Script::escalates(&["Which panel is meant?"]).leaves_a_session())
+        .run()
+        .answered(
+            &["The editor's."],
+            vec![
+                Script::cannot_resume(),
+                Script::reports_success().writes("src/panel.ts", "1\n"),
+                Script::answers_ready("The work answers the prompt."),
+            ],
+        )
+        .expect_state(GraduationRunState::Completed)
+        .expect_dispatch_order(&["work", "work", "review"])
+        .expect_dispatch(0, |d| d.purpose("escalation_answer").resumes_session("s1"))
+        .expect_dispatch(1, |d| {
+            d.purpose("escalation_answer")
+                .resumes_no_session()
+                .escalation_answers(&["The editor's."]);
+        })
+        .expect_commits(1)
+        .expect_committed_paths(&["src/panel.ts"]);
+}
+
 // GTE-FR-RZKC / GXD-FR-BJYT: a set that does not answer every question is
 // refused and records nothing. The whole set then continues the run.
 #[test]

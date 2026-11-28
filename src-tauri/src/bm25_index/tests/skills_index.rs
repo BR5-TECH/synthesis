@@ -305,7 +305,7 @@ fn a_drafts_scoped_pass_still_reconciles_the_skills_index() {
 
 #[test]
 fn skills_rank_by_relevance_and_honour_the_limit() {
-    // DSL-FR-16 / DSL-FR-17: with more than one skill in the
+    // DSL-FR-16 / DSL-FR-QMRX: with more than one skill in the
     // registry, ordering and truncation become assertable — and so does the
     // `filter_map` in `search_skills` not silently dropping entries.
     use crate::skills::test_support::searched_project as search_skills;
@@ -323,8 +323,8 @@ fn skills_rank_by_relevance_and_honour_the_limit() {
     write(".claude/skills", "specs", "reviews and critiques a specification document");
     write(".claude/skills", "fonts", "enumerates the fonts installed on this machine");
     write(".claude/skills", "ports", "checks which network ports are listening");
-    // Same name as the first, different ecosystem (DSL-FR-17).
-    write(".codex/skills", "specs", "an unrelated skill about baking bread");
+    // Same name as the first, a different kind (DSL-FR-QMRX).
+    write(".synthesis/skills", "specs", "an unrelated skill about baking bread");
 
     let app = indexed(&root);
     let indexer = app.state::<Bm25Indexer>();
@@ -351,8 +351,8 @@ fn skills_rank_by_relevance_and_honour_the_limit() {
         both.iter().filter(|r| r.skill.name == "specs").map(|r| r.skill.path.as_str()).collect();
     assert_eq!(
         named,
-        vec![".claude/skills/specs/SKILL.md", ".codex/skills/specs/SKILL.md"],
-        "a name is not an identity (DSL-FR-17): {named:?}"
+        vec![".claude/skills/specs/SKILL.md", ".synthesis/skills/specs/SKILL.md"],
+        "a name is not an identity across kinds (DSL-FR-QMRX): {named:?}"
     );
 
     // And the limit truncates rather than being advisory: the capped result is
@@ -386,12 +386,15 @@ fn a_registry_reached_incrementally_equals_one_enumerated_fresh() {
         std::fs::create_dir_all(&d).unwrap();
         std::fs::write(d.join("SKILL.md"), body).unwrap();
     };
-    let front = |desc: &str| format!("---\nname: N\ndescription: {desc}\n---\n\n# Body\n");
+    // Each skill declares its own name: project copies of one name are one
+    // skill (DSL-FR-17), and this test is about the passes, not the dedupe.
+    let front =
+        |name: &str, desc: &str| format!("---\nname: {name}\ndescription: {desc}\n---\n\n# Body\n");
 
     // Reach the target tree through a series of passes: add, edit, delete,
     // opt out and back in.
-    write(".claude/skills", "alpha", &front("about alpha"));
-    write(".claude/skills", "doomed", &front("about to be deleted"));
+    write(".claude/skills", "alpha", &front("alpha", "about alpha"));
+    write(".claude/skills", "doomed", &front("doomed", "about to be deleted"));
     let app = indexed(&root);
     let handle = app.handle().clone();
     let indexer = app.state::<Bm25Indexer>();
@@ -402,19 +405,19 @@ fn a_registry_reached_incrementally_equals_one_enumerated_fresh() {
             .run_pass(&handle, &crate::fs::RootFs::for_root(root), PassScope::ARTIFACTS, generation)
             .expect("the pass publishes");
     };
-    write(".codex/skills", "bravo", &front("about bravo"));
+    write(".codex/skills", "bravo", &front("bravo", "about bravo"));
     step(&root);
-    write(".claude/skills", "alpha", &front("about alpha, revised"));
+    write(".claude/skills", "alpha", &front("alpha", "about alpha, revised"));
     step(&root);
     std::fs::remove_dir_all(root.join(".claude/skills/doomed")).unwrap();
     step(&root);
     write(
         ".claude/skills",
         "toggled",
-        "---\nname: N\ndescription: toggled\ndisable-model-invocation: true\n---\n",
+        "---\nname: toggled\ndescription: toggled\ndisable-model-invocation: true\n---\n",
     );
     step(&root);
-    write(".claude/skills", "toggled", &front("toggled"));
+    write(".claude/skills", "toggled", &front("toggled", "toggled"));
     step(&root);
 
     let incremental = list_skills(&indexer);
@@ -565,4 +568,41 @@ fn an_excluded_skill_is_logged_once_per_time_the_exclusion_arises() {
         "and it is the new reason: {:?}",
         after[1]
     );
+}
+
+// DSL-FR-17, DSL-FR-18, DSL-FR-KWQE: a dropped project copy is absent from the
+// registry and from the `skills` index alike, and `list_project_skills` names it
+// among the kept copy's shadowed paths.
+#[test]
+fn a_dropped_project_copy_is_absent_from_the_registry_and_the_index() {
+    use crate::skills::test_support::{listed_project, searched_project};
+    let dir = tempfile::TempDir::new().unwrap();
+    let root = crate::changes::canonicalize_lenient(dir.path());
+    for (folder, secs) in [(".claude/skills", 100u64), (".agents/skills", 200)] {
+        let d = root.join(folder).join("review");
+        std::fs::create_dir_all(&d).unwrap();
+        let file = d.join("SKILL.md");
+        std::fs::write(
+            &file,
+            format!("---\nname: review\ndescription: review a {folder} change\n---\n"),
+        )
+        .unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&file)
+            .unwrap()
+            .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs))
+            .unwrap();
+    }
+
+    let app = indexed(&root);
+    let indexer = app.state::<Bm25Indexer>();
+    let listed: Vec<String> = listed_project(&indexer).into_iter().map(|s| s.path).collect();
+    assert_eq!(listed, vec![".agents/skills/review/SKILL.md"]);
+    let searched: Vec<String> =
+        searched_project(&indexer, "review change", 10).into_iter().map(|r| r.skill.path).collect();
+    assert_eq!(searched, vec![".agents/skills/review/SKILL.md"], "the index agrees");
+    let project = crate::skills::project_skills(&indexer);
+    assert_eq!(project.len(), 1);
+    assert_eq!(project[0].shadowed_paths, vec![".claude/skills/review/SKILL.md"]);
 }

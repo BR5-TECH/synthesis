@@ -120,8 +120,9 @@ fn aic_ts37_legacy_credentials_are_adopted_and_codex_is_left_alone() {
 
     assert!(keyring.legacy(LEGACY_KEYCHAIN_SERVICE, "claude_agent_api").is_none());
     assert!(keyring.legacy(LEGACY_KEYCHAIN_SERVICE, "claude_code").is_none());
-    // AIC-FR-32 / ASV-FR-32: Codex holds no credential here, so migration
-    // never named it — its legacy entry was not read and not deleted.
+    // AIC-FR-32 / ASV-FR-20: no earlier layout stored a Codex token, so
+    // migration never names Codex — its legacy entry was not read and not
+    // deleted.
     assert_eq!(
         keyring.legacy(LEGACY_KEYCHAIN_SERVICE, "codex").as_deref(),
         Some("not ours to touch")
@@ -332,8 +333,15 @@ fn every_vendor_worth_probing_is_one_the_presence_query_asks_about() {
 
     let present = vendor_presence(&EverythingPresent);
     for descriptor in VENDORS {
+        // AIC-FR-15: Codex reads its access token in `access_token` mode only,
+        // so the record is in that mode here.
         let record = AgenticRecord {
             masked_hint: Some("1234".into()),
+            codex_auth_mode: if descriptor.holds_access_token() {
+                CodexAuthMode::AccessToken
+            } else {
+                CodexAuthMode::LoginFolder
+            },
             ..AgenticRecord::empty(descriptor.vendor)
         };
         if !descriptor.holds_credential() {

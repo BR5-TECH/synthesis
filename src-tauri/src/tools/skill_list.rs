@@ -98,10 +98,11 @@ pub fn parameters() -> serde_json::Value {
 /// so two calls against an unchanged project agree and a model can refer back
 /// to what it saw (SLT-FR-08).
 ///
-/// SLT-FR-13: a name appears at most once. Keeping the *first* occurrence in an
-/// already path-sorted list is the whole rule — which prefers `.claude` over
-/// `.codex`, `.codex` over `.github`, `.github` over `.opencode`, `.opencode`
-/// over `.synthesis`, and every skill on disk over a built-in skill, those
+/// SLT-FR-13: a name appears at most once. Project copies of one name are
+/// already one skill in the registry (DSL-FR-17), so what remains here is a
+/// name held across kinds (DSL-FR-QMRX). Keeping the *first* occurrence in an
+/// already path-sorted list is the whole rule — which prefers a project skill
+/// over a synthesis skill and every skill on disk over a built-in skill, those
 /// paths sorting that way. Entries are removed from the order without
 /// reordering what remains (SLT-FR-08).
 ///

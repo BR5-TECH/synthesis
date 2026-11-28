@@ -319,11 +319,11 @@ fn clearing_codex_deletes_the_token_and_the_mode() {
 fn codex_supplies_no_migration_candidate() {
     let records: Vec<AgenticRecord> =
         VENDORS.iter().map(|d| AgenticRecord::empty(d.vendor)).collect();
-    let accounts: Vec<String> =
+    let vendors: Vec<String> =
         migration_candidates(&records).into_iter().map(|c| c.legacy_account).collect();
-    assert!(!accounts.iter().any(|a| a == "codex"), "{accounts:?}");
-    assert!(!accounts.iter().any(|a| a == "opencode"), "{accounts:?}");
-    assert!(accounts.iter().any(|a| a == "claude_code"), "{accounts:?}");
+    assert!(!vendors.iter().any(|v| v == "codex"), "Codex is a migration candidate");
+    assert!(!vendors.iter().any(|v| v == "opencode"), "OpenCode is a migration candidate");
+    assert!(vendors.iter().any(|v| v == "claude_code"), "Claude Code is not a migration candidate");
 }
 
 // AIC-FR-KAVY / AIC-FR-30: in `access_token` mode the handoff is one masked

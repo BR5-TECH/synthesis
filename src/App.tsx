@@ -31,6 +31,7 @@ import { NotificationToasts } from "./components/NotificationToasts";
 import { useThemePreference } from "./hooks/useThemePreference";
 import { useFontRoles } from "./hooks/useFontRoles";
 import { useEditorZoomSync } from "./hooks/useEditorZoom";
+import { useEditorPageWidthSync } from "./hooks/useEditorPageWidth";
 import { useTerminalThemeSync } from "./hooks/useTerminalThemeSync";
 import { useEditorZoomGestures } from "./hooks/useEditorZoomGestures";
 import { useEditorZoomMenu } from "./hooks/useEditorZoomMenu";
@@ -88,6 +89,8 @@ function App({ projectWindowBoot = null }: AppProps = {}) {
   // EZM-FR-HYQD / EZM-FR-GMSX: the editor zoom level, read at startup and kept
   // in step with the other windows, and the gestures that change it.
   useEditorZoomSync();
+  // EPW-FR-ZCBT: the page width of every document page.
+  useEditorPageWidthSync();
   useEditorZoomGestures();
   // TRM-FR-IUMC / GLS-FR-VTVK: the Terminal theme of Settings, read at startup
   // and kept in step with the Settings window.

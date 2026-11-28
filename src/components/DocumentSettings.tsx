@@ -1,8 +1,9 @@
 /**
- * Global settings → **Documents** (GLS-FR-KWVN, GLS-FR-PBXM, GLS-FR-MRGQ,
- * GLS-FR-DCMT).
+ * Global settings → **Documents** (GLS-FR-IXAQ, GLS-FR-NOWF, GLS-FR-KWVN,
+ * GLS-FR-PBXM, GLS-FR-MRGQ, GLS-FR-DCMT).
  *
- * The pages of a DOCX export: the **Landscape pages for wide diagrams**
+ * The **Page width** of the document page (`EPW-editor-page-width.md`), which
+ * applies at once to every open page, and the pages of a DOCX export: the **Landscape pages for wide diagrams**
  * switch, the **Landscape below** threshold, and the four **Page margins**.
  * The export reads them when it starts (`DXP-document-export.md`
  * DXP-FR-PGMR, DXP-FR-LQWZ).
@@ -19,6 +20,15 @@ import {
   updateAppPreferences,
 } from "../state/appPreferences";
 import { logWarn } from "../logging";
+import { useEditorPageWidth, useEditorPageWidthSync } from "../hooks/useEditorPageWidth";
+import {
+  PAGE_WIDTH_DEFAULT,
+  PAGE_WIDTH_MAX,
+  PAGE_WIDTH_MIN,
+  commitEditorPageWidth,
+  getEditorPageWidth,
+  restoreEditorPageWidth,
+} from "../state/editorPageWidth";
 import type { DocxMarginsMm } from "../types";
 import { limitToCommit } from "./AiApiPercentLimitRow";
 
@@ -117,7 +127,7 @@ function WholeField({
     } catch (e) {
       setEdit(null);
       setError(`The value could not be saved: ${e instanceof Error ? e.message : String(e)}`);
-      logWarn(["frontend"], `document export ${label.toLowerCase()} not saved`, {
+      logWarn(["frontend"], `document setting ${label.toLowerCase()} not saved`, {
         value: toCommit,
         error: String(e),
       });
@@ -192,6 +202,14 @@ function MarginsPreview({ margins }: { margins: DocxMarginsMm }) {
 export function DocumentSettings() {
   // Null until the stored record has landed, so no control asserts a value
   // nobody chose.
+  // GLS-FR-IXAQ / EPW-FR-ZCBT: the field shows the width of the page width
+  // store of this window, which reads the stored width and follows the saves
+  // of the other windows. Null until the first read answers.
+  useEditorPageWidthSync();
+  const storeWidth = useEditorPageWidth();
+  const [widthLoaded, setWidthLoaded] = useState(false);
+  const pageWidth = widthLoaded ? storeWidth : null;
+  const [pageWidthError, setPageWidthError] = useState<string | null>(null);
   const [landscape, setLandscape] = useState<boolean | null>(null);
   const [threshold, setThreshold] = useState<number | null>(null);
   const [margins, setMargins] = useState<DocxMarginsMm | null>(null);
@@ -221,6 +239,8 @@ export function DocumentSettings() {
     let cancelled = false;
     void loadAppPreferences().then((prefs) => {
       if (cancelled) return;
+      // GLS-FR-IXAQ: the sync hook adopted the same record, which is cached.
+      setWidthLoaded(true);
       // GSS-FR-JTZE: absent means never chosen, which is off.
       setLandscape(prefs.docxLandscapeDiagrams === true);
       const t = prefs.docxLandscapeThresholdPercent;
@@ -248,6 +268,34 @@ export function DocumentSettings() {
         requested: next,
         error: message,
       });
+    }
+  }, []);
+
+  // GLS-FR-IXAQ / GLS-FR-DCMT / EPW-FR-XOMR: the width goes through the page
+  // width store, so the pages of this window show it at once and the other
+  // windows hear of it with the save.
+  // A refused save restores the stored width (GLS-FR-DCMT).
+  const savePageWidth = async (value: number) => {
+    const before = getEditorPageWidth();
+    try {
+      await commitEditorPageWidth(value);
+    } catch (e) {
+      restoreEditorPageWidth(before);
+      throw e;
+    }
+  };
+
+  // GLS-FR-NOWF: Reset sets 820 and saves at once.
+  const resetPageWidth = useCallback(async () => {
+    setPageWidthError(null);
+    const before = getEditorPageWidth();
+    try {
+      await commitEditorPageWidth(PAGE_WIDTH_DEFAULT);
+    } catch (e) {
+      restoreEditorPageWidth(before);
+      setPageWidthError(
+        `The value could not be saved: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }, []);
 
@@ -297,6 +345,42 @@ export function DocumentSettings() {
 
   return (
     <div data-testid="document-settings">
+      <h3 className="t-ui-sm" style={{ marginTop: 0, marginBottom: 12, fontWeight: 600 }}>
+        Document page
+      </h3>
+      <div className="document-settings__page-width">
+        <WholeField
+          id="document-page-width"
+          label="Page width"
+          suffix="px"
+          stored={pageWidth}
+          min={PAGE_WIDTH_MIN}
+          max={PAGE_WIDTH_MAX}
+          save={savePageWidth}
+        />
+        <button
+          type="button"
+          className="btn btn--ghost btn--sm"
+          data-testid="document-page-width-reset"
+          disabled={pageWidth === null || pageWidth === PAGE_WIDTH_DEFAULT}
+          onClick={() => void resetPageWidth()}
+        >
+          Reset
+        </button>
+      </div>
+      {pageWidthError && (
+        <p className="picker-error" style={{ marginTop: 4 }} role="alert">
+          ✗ {pageWidthError}
+        </p>
+      )}
+      <p className="t-ui-xs t-muted" style={{ marginTop: 12, maxWidth: 520 }}>
+        The largest width of the text on the document page at 100% zoom. You can also drag the
+        ruler below the editor to set it.
+      </p>
+
+      <h3 className="t-ui-sm" style={{ marginTop: 28, marginBottom: 12, fontWeight: 600 }}>
+        DOCX export
+      </h3>
       <p className="t-p" style={{ marginBottom: 20 }}>
         Set the pages of a DOCX export, so that the diagrams in it stay readable.
       </p>

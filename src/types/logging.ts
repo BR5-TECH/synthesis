@@ -274,6 +274,12 @@ export interface AppPreferences {
    * a backend that predates the field still types.
    */
   editorZoomPercent?: number;
+  /**
+   * GSS-FR-UYXH / EPW-FR-QGUZ: the page width of the document page at 100%
+   * zoom, in whole pixels from 560 to 1800, 820 when unset. Optional so a
+   * record from a backend that predates the field still types.
+   */
+  editorPageWidthPx?: number;
   /** GSS-FR-FRBK: the Terminal theme of Settings, `app` when unset. */
   terminalTheme?: TerminalThemePreference;
   /**

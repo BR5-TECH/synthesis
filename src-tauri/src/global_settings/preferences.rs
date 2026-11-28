@@ -77,6 +77,11 @@ where
 pub const DOCX_LANDSCAPE_THRESHOLD_DEFAULT: u32 = 75;
 pub const DOCX_LANDSCAPE_THRESHOLD_RANGE: std::ops::RangeInclusive<u32> = 10..=100;
 
+/// GSS-FR-UYXH: the page width of the document page at 100% zoom, in whole
+/// pixels, and the widths it may be.
+pub const EDITOR_PAGE_WIDTH_DEFAULT: u32 = 820;
+pub const EDITOR_PAGE_WIDTH_RANGE: std::ops::RangeInclusive<u32> = 560..=1800;
+
 /// GSS-FR-MGNV: the whole millimetres a DOCX page margin may be, and the
 /// default of the top and of the other sides.
 pub const DOCX_MARGIN_MM_RANGE: std::ops::RangeInclusive<u32> = 5..=60;
@@ -110,6 +115,15 @@ fn docx_landscape_threshold_default() -> u32 {
 /// GSS-FR-TLHZ: a threshold out of 10 to 100 reads as 75.
 fn lenient_docx_threshold<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u32, D::Error> {
     lenient_whole(deserializer, DOCX_LANDSCAPE_THRESHOLD_RANGE, DOCX_LANDSCAPE_THRESHOLD_DEFAULT)
+}
+
+fn editor_page_width_default() -> u32 {
+    EDITOR_PAGE_WIDTH_DEFAULT
+}
+
+/// GSS-FR-UYXH: a page width out of 560 to 1800 reads as 820.
+fn lenient_editor_page_width<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u32, D::Error> {
+    lenient_whole(deserializer, EDITOR_PAGE_WIDTH_RANGE, EDITOR_PAGE_WIDTH_DEFAULT)
 }
 
 fn docx_margin_top_default() -> u32 {
@@ -603,6 +617,11 @@ pub struct AppPreferences {
     /// module does not limit the range.
     #[serde(default = "editor_zoom_default", deserialize_with = "lenient_editor_zoom")]
     pub editor_zoom_percent: u32,
+    /// GSS-FR-UYXH: the page width of the document page at 100% zoom, in
+    /// whole pixels from 560 to 1800, 820 when unset or out of range
+    /// (`EPW-editor-page-width.md` EPW-FR-QGUZ).
+    #[serde(default = "editor_page_width_default", deserialize_with = "lenient_editor_page_width")]
+    pub editor_page_width_px: u32,
     /// GSS-FR-FRBK: the Terminal theme, `app` when unset or unknown.
     #[serde(default, deserialize_with = "lenient_or_default")]
     pub terminal_theme: TerminalThemePreference,
@@ -720,6 +739,7 @@ impl Default for AppPreferences {
             graduation_paths_width_fraction: graduation_paths_width_default(),
             git_files_width_fraction: git_files_width_default(),
             editor_zoom_percent: editor_zoom_default(),
+            editor_page_width_px: EDITOR_PAGE_WIDTH_DEFAULT,
             terminal_theme: TerminalThemePreference::default(),
             voice_vad_silence_ms: voice_vad_silence_default(),
             voice_vad_sensitivity: VoiceVadSensitivity::default(),

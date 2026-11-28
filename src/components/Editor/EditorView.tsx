@@ -26,6 +26,7 @@ import { ReviewOverlay } from "./ReviewOverlay";
 import { SourceReview } from "./SourceReview";
 import type { HunkOpening } from "../DraftDiscussion/OpenDiscussion";
 import { ActionControl } from "../ActionControl";
+import { PageWidthRuler } from "./PageWidthRuler";
 import { openExportDialog } from "../../state/exportDialog";
 import { EditSessionStore } from "../../state/editSessions";
 import type { EditSession } from "../../state/editSessions/types";
@@ -394,7 +395,7 @@ export function EditorView(props: EditorViewProps) {
    * frontmatter region, the page in whichever surface is showing, and the
    * review bar at its foot.
    */
-  const documentColumn = (
+  const zoomRegion = (
     // EZM-FR-QGOU: the document column is a zoom region. The toolbar above it
     // and the discussion column beside it are not. `display: contents`, so the
     // region adds no box to the layout.
@@ -581,6 +582,17 @@ export function EditorView(props: EditorViewProps) {
           formatting toolbar and the first line of the prompt. */}
       {review?.bar ?? props.reviewFooter}
     </div>
+  );
+  /**
+   * EPW-FR-ADPJ: the page width ruler stands at the foot of the document
+   * column, outside the zoom region (EZM-FR-UJWE), so it keeps its own size and
+   * does not scroll with the page.
+   */
+  const documentColumn = (
+    <>
+      {zoomRegion}
+      <PageWidthRuler />
+    </>
   );
 
   return (

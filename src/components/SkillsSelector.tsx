@@ -1,14 +1,16 @@
 /**
  * The Skills selector of the persona editor
  * (`specifications/ui/AGT-agents.md` AGT-FR-KVDA, AGT-FR-PQSM, AGT-FR-JRWE,
- * AGT-FR-XGWD, AGT-FR-LCMT, AGT-FR-WTSR).
+ * AGT-FR-XGWD, AGT-FR-LCMT, AGT-FR-WTSR, AGT-FR-HZPN).
  *
  * Two groups. The synthesis skills of `.synthesis/skills` are on for every
  * agent until the author clears one here, so the group edits a list of
- * opt-outs (AGR-FR-HMVQ). The project skills of the four agent-ecosystem
+ * opt-outs (AGR-FR-HMVQ). The project skills of the five agent-ecosystem
  * folders are off until the author selects one, and only a Project agent can
- * (AGR-FR-IGIL). Every skill is named by its path, because a skill's name is
- * not its identity. The built-in skills reach every agent and are not listed.
+ * (AGR-FR-IGIL). The registry keeps one project skill for each name
+ * (DSL-FR-17), so the project group lists one entry for each name, and a
+ * stored path of a dropped copy selects the copy that is kept (AGT-FR-HZPN).
+ * Every skill is stored by its path. The built-in skills reach every agent and are not listed.
  * Nothing is written from here: both lists travel with the editor's confirm
  * (AGT-FR-19).
  */
@@ -25,6 +27,7 @@ export const SYNTHESIS_SKILL_FOLDER = ".synthesis/skills";
 
 /** AGT-FR-LCMT: where a project skill is found. */
 export const PROJECT_SKILL_FOLDERS = [
+  ".agents/skills",
   ".claude/skills",
   ".codex/skills",
   ".github/skills",
@@ -49,6 +52,23 @@ interface SkillsSelectorProps {
 interface Entry {
   path: string;
   name: string | null;
+  /** AGT-FR-HZPN: the paths of the copies the registry drops for this name. */
+  shadowedPaths: string[];
+}
+
+/** AGT-FR-HZPN: is this entry selected — by its own path, or by a stored path
+ * of a copy it shadows? */
+export function entrySelected(entry: Entry, selected: string[]): boolean {
+  return selected.includes(entry.path) || entry.shadowedPaths.some((p) => selected.includes(p));
+}
+
+/** AGT-FR-HZPN: select or clear one project entry. Selecting adds its own path
+ * when nothing selects it yet. Clearing removes its path and every stored path
+ * of a copy it shadows. Every other stored path stays as it is. */
+export function toggledProjectSelection(selected: string[], entry: Entry, on: boolean): string[] {
+  if (on) return entrySelected(entry, selected) ? selected : [...selected, entry.path];
+  const gone = new Set([entry.path, ...entry.shadowedPaths]);
+  return selected.filter((p) => !gone.has(p));
 }
 
 /** AGT-FR-KVDA / AGT-FR-XGWD: the project group — the registry's project
@@ -56,11 +76,16 @@ interface Entry {
  * the author sees and can clear every selected path. */
 export function selectorEntries(skills: ProjectSkill[], selected: string[]): Entry[] {
   const projectSkills = skills.filter((s) => s.ecosystem !== "synthesis");
-  const known = new Set(projectSkills.map((s) => s.path));
-  const listed: Entry[] = projectSkills.map((s) => ({ path: s.path, name: s.name }));
+  // AGT-FR-HZPN: a stored path of a dropped copy is found, not missing.
+  const known = new Set(projectSkills.flatMap((s) => [s.path, ...(s.shadowedPaths ?? [])]));
+  const listed: Entry[] = projectSkills.map((s) => ({
+    path: s.path,
+    name: s.name,
+    shadowedPaths: s.shadowedPaths ?? [],
+  }));
   const missing: Entry[] = selected
     .filter((path) => !known.has(path))
-    .map((path) => ({ path, name: null }));
+    .map((path) => ({ path, name: null, shadowedPaths: [] }));
   return [...listed, ...missing];
 }
 
@@ -70,7 +95,7 @@ export function selectorEntries(skills: ProjectSkill[], selected: string[]): Ent
 export function synthesisEntries(skills: ProjectSkill[]): Entry[] {
   return skills
     .filter((s) => s.ecosystem === "synthesis")
-    .map((s) => ({ path: s.path, name: s.name }));
+    .map((s) => ({ path: s.path, name: s.name, shadowedPaths: [] }));
 }
 
 /** AGT-FR-PQSM / AGT-FR-JRWE: turn one synthesis skill on or off. Only the
@@ -166,12 +191,9 @@ export function SkillsSelector({
     };
   }, []);
 
-  const toggleProject = (path: string, on: boolean) => {
-    if (on) {
-      if (!selected.includes(path)) onSelectedChange([...selected, path]);
-    } else {
-      onSelectedChange(selected.filter((p) => p !== path));
-    }
+  const toggleProject = (entry: Entry, on: boolean) => {
+    const next = toggledProjectSelection(selected, entry, on);
+    if (next !== selected) onSelectedChange(next);
   };
 
   const synthesis = synthesisEntries(skills ?? []);
@@ -244,8 +266,8 @@ export function SkillsSelector({
                   <SkillOption
                     key={entry.path}
                     entry={entry}
-                    checked={selected.includes(entry.path)}
-                    onToggle={(on) => toggleProject(entry.path, on)}
+                    checked={entrySelected(entry, selected)}
+                    onToggle={(on) => toggleProject(entry, on)}
                     missingNote={entry.name === null && skills !== null}
                   />
                 ))}

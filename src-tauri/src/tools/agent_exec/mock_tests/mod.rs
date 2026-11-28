@@ -290,8 +290,7 @@ fn required_args(vendor: &str, extra_vendor_args: &[&str]) -> Vec<serde_json::Va
         "codex" => values.extend([
             "exec",
             "--json",
-            "--sandbox",
-            "danger-full-access",
+            "--dangerously-bypass-approvals-and-sandbox",
             "--skip-git-repo-check",
             "-",
         ]),

@@ -21,7 +21,7 @@
 
 #[cfg(test)]
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 #[cfg(test)]
 use std::sync::OnceLock;
 
@@ -32,6 +32,9 @@ use super::protocol::{AgentResponseEnvelope, EnvelopeInvalid, ResultContract};
 
 pub mod claude_code;
 pub mod codex;
+mod container;
+
+pub use container::*;
 
 /// AVI-FR-07: the one record of what each **shipped** image is.
 ///
@@ -374,6 +377,28 @@ pub enum SessionStateMount {
     /// coincide and that mount is read/write. Its target is whatever AIC
     /// supplied, so there is none to name here.
     SharedWithCredentialMount { env: &'static str },
+    /// EAC-FR-QHIU: the credential decides. A credential that is a mount is
+    /// also the session directory, as [`Self::SharedWithCredentialMount`]; a
+    /// credential in the environment leaves a dedicated directory at
+    /// `dedicated_target`, as [`Self::Dedicated`].
+    ByCredential { env: &'static str, dedicated_target: &'static str },
+}
+
+impl SessionStateMount {
+    /// EAC-FR-31 / EAC-FR-QHIU: the mount a launch gets, for a credential that
+    /// is a mount (`true`) or one in the environment (`false`). Never
+    /// [`Self::ByCredential`].
+    pub fn for_credential(self, credential_is_mount: bool) -> SessionStateMount {
+        match self {
+            SessionStateMount::ByCredential { env, .. } if credential_is_mount => {
+                SessionStateMount::SharedWithCredentialMount { env }
+            }
+            SessionStateMount::ByCredential { env, dedicated_target } => {
+                SessionStateMount::Dedicated { env, target: dedicated_target }
+            }
+            other => other,
+        }
+    }
 }
 
 /// How a vendor's credential reaches its container.
@@ -383,6 +408,9 @@ pub enum CredentialForm {
     EnvironmentVariable(&'static str),
     /// A directory mounted at the target AIC supplied.
     Mount,
+    /// EAC-FR-16 / EAC-FR-QHIU: a directory mount in one mode, and this named
+    /// environment variable in the other.
+    MountOrEnvironmentVariable(&'static str),
 }
 
 /// What extraction is handed.
@@ -391,6 +419,9 @@ pub struct ExtractContext<'a> {
     /// The identifier the executor assigned before the run, for a vendor that
     /// permits one. `None` on a resumed turn and for a vendor that does not.
     pub assigned_session_id: Option<&'a str>,
+    /// EAC-FR-43: the result contract the task named, for a vendor whose
+    /// reading of the answer depends on it (EAC-FR-RBLI).
+    pub result_contract: Option<ResultContract>,
 }
 
 /// What extraction produces.
@@ -401,27 +432,61 @@ pub struct Extracted {
     pub session_id: Option<String>,
 }
 
+/// What one turn's vendor argument vector, and its launch files, are made
+/// from (EAC-FR-10, EAC-FR-BOXF).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ArgvRequest<'a> {
+    pub model_id: Option<&'a str>,
+    pub effort_id: Option<&'a str>,
+    /// EAC-FR-21: the identifier the executor generated, for a vendor that
+    /// takes one. A vendor that reports its own ignores it.
+    pub assigned_session_id: &'a str,
+    /// EAC-FR-30: the session a resumed turn continues. `None` for a fresh turn.
+    pub resume_session: Option<&'a str>,
+    /// EAC-FR-43: the result contract the task named. What a vendor does with
+    /// it is that vendor's own protocol.
+    pub result_contract: Option<ResultContract>,
+    /// EAC-FR-WBIF: whether this launch carries the vendor's milestone reminder.
+    pub milestone_reminder: bool,
+}
+
+/// EAC-FR-BOXF / EAC-FR-VTLG: one fixed file a vendor's argument vector names.
+/// It holds fixed text compiled into the binary and nothing of the task.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LaunchFile {
+    pub name: &'static str,
+    pub contents: Vec<u8>,
+}
+
+/// EAC-FR-BOXF: where a launch's files are mounted, read-only, in the container.
+pub const LAUNCH_FILES_TARGET: &str = "/opt/synthesis/vendor";
+
+/// EAC-FR-BOXF: the SHA-256 of what `files` hold, as the name of the directory
+/// that holds them. Each file's name and length are hashed before its bytes, in
+/// name order, so two different sets never share a name.
+pub fn launch_files_digest(files: &[LaunchFile]) -> String {
+    use sha2::{Digest, Sha256};
+
+    let mut sorted: Vec<&LaunchFile> = files.iter().collect();
+    sorted.sort_by_key(|file| file.name);
+    let mut hasher = Sha256::new();
+    for file in sorted {
+        hasher.update(file.name.as_bytes());
+        hasher.update([0u8]);
+        hasher.update((file.contents.len() as u64).to_le_bytes());
+        hasher.update(&file.contents);
+    }
+    hasher.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
 /// The whole vendor argument vector for a fresh turn.
-///
-/// EAC-FR-43: the result contract the task named is handed to every vendor.
-/// What a vendor does with it is that vendor's own protocol — Claude Code
-/// enforces it inside the run (CCP-FR-28), Codex carries it in the task document
-/// alone (CDX-FR-14).
-type FreshArgv = fn(
-    model_id: Option<&str>,
-    effort_id: Option<&str>,
-    session_id: &str,
-    result_contract: Option<ResultContract>,
-) -> Vec<String>;
-/// The whole vendor argument vector for a resumed turn. Generated separately
-/// rather than derived from the fresh one, because a resumed turn is not a fresh
-/// turn with an addition (CDX-FR-09).
-type ResumeArgv = fn(
-    model_id: Option<&str>,
-    effort_id: Option<&str>,
-    resume_session_id: &str,
-    result_contract: Option<ResultContract>,
-) -> Vec<String>;
+type FreshArgv = fn(&ArgvRequest<'_>) -> Vec<String>;
+/// The whole vendor argument vector for a resumed turn, given the session it
+/// continues. Generated separately rather than derived from the fresh one,
+/// because a resumed turn is not a fresh turn with an addition (CDX-FR-09).
+type ResumeArgv = fn(&ArgvRequest<'_>, &str) -> Vec<String>;
+/// EAC-FR-BOXF: the full fixed set of files the vendor's vectors can name.
+type LaunchFiles = fn() -> Vec<LaunchFile>;
 type Extractor = fn(&ExtractContext<'_>) -> Result<Extracted, EnvelopeInvalid>;
 type EffortSupported = fn(&str) -> bool;
 /// One line of this vendor's stdout, read as an activity (EAC-FR-33).
@@ -442,9 +507,10 @@ pub struct VendorExecutionDescriptor {
     fresh_argv: FreshArgv,
     resume_argv: Option<ResumeArgv>,
     effort_supported: Option<EffortSupported>,
-    /// EAC-FR-WBIF: the arguments that carry this vendor's milestone reminder,
-    /// or `None` for a vendor that has no reminder.
-    milestone_reminder: Option<fn() -> Vec<String>>,
+    /// EAC-FR-WBIF: whether this vendor's protocol states a milestone reminder.
+    /// The vector functions place it, because where it goes is that protocol's.
+    pub milestone_reminder: bool,
+    launch_files: LaunchFiles,
     extractor: Extractor,
     /// EAC-FR-21: the session the stream reports, at the position
     /// `session_source` names.
@@ -479,11 +545,33 @@ impl std::fmt::Debug for VendorExecutionDescriptor {
 pub static CLAUDE_CODE: VendorExecutionDescriptor = VendorExecutionDescriptor {
     vendor: "claude_code",
     protocol_spec: claude_code::SPEC,
-    fresh_argv: claude_code::fresh_argv,
-    resume_argv: Some(claude_code::resume_argv),
+    fresh_argv: |request| {
+        with_claude_reminder(
+            claude_code::fresh_argv(
+                request.model_id,
+                request.effort_id,
+                request.assigned_session_id,
+                request.result_contract,
+            ),
+            request,
+        )
+    },
+    resume_argv: Some(|request, session| {
+        with_claude_reminder(
+            claude_code::resume_argv(
+                request.model_id,
+                request.effort_id,
+                session,
+                request.result_contract,
+            ),
+            request,
+        )
+    }),
     effort_supported: Some(claude_code::effort_supported),
     // CCP-FR-WZJS: a `PostToolUse` hook through `--settings`.
-    milestone_reminder: Some(claude_code::milestone_reminder_args),
+    milestone_reminder: true,
+    // CCP-FR-07: the schema rides on the vector, so no file is needed.
+    launch_files: Vec::new,
     extractor: claude_code::extract,
     session_reader: claude_code::reported_session,
     activity: claude_code::activity_filtered,
@@ -509,19 +597,14 @@ pub static CODEX: VendorExecutionDescriptor = VendorExecutionDescriptor {
     protocol_spec: codex::SPEC,
     // This vendor cannot be told which session id to use for a new session, so
     // the assigned identifier it is handed is ignored (CDX-FR-20).
-    // CDX-FR-14: this vendor's CLI enforces no schema, so a named result
-    // contract changes nothing about its vector; the document reaches its agent
-    // in the task alone.
-    fresh_argv: |model, effort, _assigned, _contract| codex::fresh_argv(model, effort),
-    resume_argv: Some(|model, effort, session, _contract| {
-        codex::resume_argv(model, effort, session)
-    }),
-    // The CLI validates the identifier itself; what this checks is only that the
-    // value can be carried inside a quoted config override without changing what
-    // the override means.
+    fresh_argv: codex::fresh_argv,
+    resume_argv: Some(codex::resume_argv),
+    // CDX-FR-SDOV: the six levels this CLI accepts.
     effort_supported: Some(codex::effort_supported),
-    // EAC-FR-WBIF: the pinned Codex CLI has no reminder mechanism.
-    milestone_reminder: None,
+    // CDX-FR-OQVA: a `PreToolUse` hook through an inline override.
+    milestone_reminder: true,
+    // CDX-FR-14 / CDX-FR-WJZY: the strict schema and the reminder output.
+    launch_files: codex::launch_files,
     extractor: codex::extract,
     session_reader: codex::reported_session,
     activity: codex::activity_filtered,
@@ -536,12 +619,24 @@ pub static CODEX: VendorExecutionDescriptor = VendorExecutionDescriptor {
         event_type: "thread.started",
         key: "thread_id",
     },
-    // CDX-FR-23: login directory and session directory are the same directory.
-    session_state: SessionStateMount::SharedWithCredentialMount { env: codex::SESSION_STATE_ENV },
-    credential_form: CredentialForm::Mount,
-    // EAC-FR-QHAY: this vendor declares no final event.
-    final_event: None,
+    // CDX-FR-23 / CDX-FR-EUBZ: the login directory is the session directory in
+    // the `login_folder` mode; the `access_token` mode has a dedicated one.
+    session_state: SessionStateMount::ByCredential {
+        env: codex::SESSION_STATE_ENV,
+        dedicated_target: codex::SESSION_STATE_TARGET,
+    },
+    credential_form: CredentialForm::MountOrEnvironmentVariable(codex::ACCESS_TOKEN_ENV),
+    // CDX-FR-RJPF: `turn.completed` or `turn.failed`.
+    final_event: Some(codex::is_final_event),
 };
+
+/// CCP-FR-WZJS: Claude Code's reminder stands at the end of its vector.
+fn with_claude_reminder(mut args: Vec<String>, request: &ArgvRequest<'_>) -> Vec<String> {
+    if request.milestone_reminder {
+        args.extend(claude_code::milestone_reminder_args());
+    }
+    args
+}
 
 pub fn descriptor_for(vendor: &str) -> Option<&'static VendorExecutionDescriptor> {
     match vendor {
@@ -552,11 +647,8 @@ pub fn descriptor_for(vendor: &str) -> Option<&'static VendorExecutionDescriptor
 }
 
 impl VendorExecutionDescriptor {
-    /// The complete vendor argument vector for one turn.
-    ///
-    /// A fresh turn and a resumed turn are generated by different functions
-    /// rather than by one with a branch, because for at least one pinned vendor
-    /// they are different grammars accepting different options (CDX-FR-09).
+    /// The complete vendor argument vector for one turn, with no milestone
+    /// reminder.
     pub fn vendor_args(
         &self,
         model_id: Option<&str>,
@@ -565,25 +657,37 @@ impl VendorExecutionDescriptor {
         resume_session: Option<&str>,
         result_contract: Option<ResultContract>,
     ) -> Vec<String> {
-        match resume_session {
-            Some(session) => match self.resume_argv {
-                Some(build) => build(model_id, effort_id, session, result_contract),
-                // Unreachable in practice: a vendor that cannot resume is
-                // refused before launch (EAC-FR-30). Falling back to a fresh
-                // vector rather than panicking keeps a programming error from
-                // taking the process down.
-                None => {
-                    (self.fresh_argv)(model_id, effort_id, assigned_session_id, result_contract)
-                }
-            },
-            None => (self.fresh_argv)(model_id, effort_id, assigned_session_id, result_contract),
+        self.argv(&ArgvRequest {
+            model_id,
+            effort_id,
+            assigned_session_id,
+            resume_session,
+            result_contract,
+            milestone_reminder: false,
+        })
+    }
+
+    /// The complete vendor argument vector for one turn.
+    ///
+    /// A fresh turn and a resumed turn are generated by different functions
+    /// rather than by one with a branch, because for at least one pinned vendor
+    /// they are different grammars accepting different options (CDX-FR-09). A
+    /// vendor with no reminder ignores `milestone_reminder` (EAC-FR-WBIF).
+    pub fn argv(&self, request: &ArgvRequest<'_>) -> Vec<String> {
+        match (request.resume_session, self.resume_argv) {
+            (Some(session), Some(build)) => build(request, session),
+            // Unreachable in practice: a vendor that cannot resume is refused
+            // before launch (EAC-FR-30). Falling back to a fresh vector rather
+            // than panicking keeps a programming error from taking the process
+            // down.
+            _ => (self.fresh_argv)(request),
         }
     }
 
-    /// EAC-FR-WBIF: the arguments that carry the milestone reminder, appended
-    /// to the vector of a launch that carries it. Empty for a vendor with none.
-    pub fn milestone_reminder_args(&self) -> Vec<String> {
-        self.milestone_reminder.map(|build| build()).unwrap_or_default()
+    /// EAC-FR-BOXF: the fixed files this turn's vector names. Empty where the
+    /// vector names none.
+    pub fn launch_files(&self) -> Vec<LaunchFile> {
+        (self.launch_files)()
     }
 
     /// Whether the pinned CLI can resume a session at all (EAC-FR-30).
@@ -617,7 +721,18 @@ impl VendorExecutionDescriptor {
         stdout: &str,
         assigned_session_id: Option<&str>,
     ) -> Result<(AgentResponseEnvelope, Option<String>), EnvelopeInvalid> {
-        let extracted = (self.extractor)(&ExtractContext { stdout, assigned_session_id })?;
+        self.extract_for(stdout, assigned_session_id, None)
+    }
+
+    /// [`Self::extract`] for a task that named `result_contract` (EAC-FR-RBLI).
+    pub fn extract_for(
+        &self,
+        stdout: &str,
+        assigned_session_id: Option<&str>,
+        result_contract: Option<ResultContract>,
+    ) -> Result<(AgentResponseEnvelope, Option<String>), EnvelopeInvalid> {
+        let extracted =
+            (self.extractor)(&ExtractContext { stdout, assigned_session_id, result_contract })?;
         Ok((extracted.envelope, extracted.session_id))
     }
 
@@ -644,289 +759,4 @@ impl VendorExecutionDescriptor {
     pub fn activity_filtered(&self, line: &str, filter: TextFilter<'_>) -> VendorActivity {
         (self.activity)(line, filter)
     }
-}
-
-// ---------------------------------------------------------------------------
-// The Docker invocation
-// ---------------------------------------------------------------------------
-
-/// What one container launch needs, as a mount the invocation will express.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct BindMount {
-    pub source: String,
-    pub target: String,
-    pub read_only: bool,
-}
-
-impl BindMount {
-    fn as_argument(&self) -> String {
-        let mut value = format!("type=bind,source={},target={}", self.source, self.target);
-        if self.read_only {
-            value.push_str(",readonly");
-        }
-        value
-    }
-}
-
-/// EAC-FR-10 / EAC-FR-39: one container launch, described whole.
-///
-/// Every field is a named constant, a field of the vendor's descriptor, or the
-/// one resolved value that is not — the image, which is the project's own
-/// (EAC-FR-38). It exists because two backends have to create the *same*
-/// container: the Docker CLI backend renders it into the `docker run` vector
-/// below, and the Docker Engine backend creates and starts it over Bollard's
-/// connection. Neither composes a parameter of its own, so which backend a
-/// machine uses changes how Docker is reached and nothing about what the agent
-/// runs in.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ContainerSpec {
-    pub name: String,
-    pub image: String,
-    pub host_uid: u32,
-    pub host_gid: u32,
-    /// EAC-FR-ZKMR: the directory the turn stands in — the execution
-    /// directory's own host path, or [`WORKSPACE_TARGET`] in the fallback shape.
-    pub workdir: String,
-    pub mounts: Vec<BindMount>,
-    /// EAC-FR-DKRS: supplementary groups. Empty unless Docker-in-Docker is
-    /// enabled, when it holds the group of the Docker socket.
-    pub groups: Vec<u32>,
-    /// EAC-FR-DKRS: host mappings. Empty unless Docker-in-Docker is enabled and
-    /// the host gateway toggle is on.
-    pub extra_hosts: Vec<String>,
-    /// Variables the runtime forwards **by name**, taking their values from the
-    /// client's own environment, so a secret never reaches an argument vector
-    /// (EAC-FR-15).
-    pub env_names: Vec<String>,
-    /// Variables carried with their values, every one of them a container path
-    /// or a host name this application chose rather than a secret.
-    pub env_literals: Vec<(String, String)>,
-    pub vendor_args: Vec<String>,
-    /// EAC-FR-GKSW: the program that replaces the image entrypoint. `None` for
-    /// every agent launch, which runs the entrypoint of the image.
-    pub entrypoint: Option<String>,
-    /// EAC-FR-13: [`NETWORK`] for every agent launch, and [`HELPER_NETWORK`]
-    /// for the helper of EAC-FR-GKSW.
-    pub network: &'static str,
-}
-
-impl ContainerSpec {
-    /// The Docker CLI backend's rendering of this specification: the complete
-    /// `docker run` argument vector (EAC-FR-13).
-    ///
-    /// The `env_names` field names variables whose *values* the runtime takes
-    /// from the docker client's own environment. That indirection is the whole
-    /// reason Claude's token never reaches an argument vector (EAC-FR-15):
-    /// `--env NAME` is a name, and a name is not a secret.
-    ///
-    /// The `env_literals` field carries its values in the argv instead, which is
-    /// correct only because every one of them is a container path this
-    /// application chose — a mount target, never a secret. The two mechanisms are separate so that
-    /// "forwarded by name" and "written in the vector" are decisions a reader makes
-    /// per variable rather than one this method makes for all of them.
-    pub fn docker_run_args(&self) -> Vec<String> {
-        let mut args: Vec<String> = vec![
-            "run".into(),
-            // EAC-FR-26: removed when the agent exits, on every path.
-            "--rm".into(),
-            // EAC-FR-09: the task reaches the agent on the container's stdin and
-            // nowhere else, and `docker run` connects the client's stdin to the
-            // container only when asked. Without this the payload is written to a
-            // stream nothing reads, and both pinned CLIs — each of which takes its
-            // whole prompt from stdin — exit non-zero on an empty one. Not `--tty`:
-            // a terminal would let the CLI print progress decoration into the very
-            // stream EAC-FR-19 parses for an envelope.
-            "--interactive".into(),
-            "--name".into(),
-            self.name.clone(),
-            "--network".into(),
-            self.network.into(),
-            // EAC-FR-14: the container's non-root user is mapped to the host user,
-            // so a file the agent creates in the mount belongs to whoever launched
-            // it rather than to a uid that exists only inside the container.
-            "--user".into(),
-            self.user(),
-            "--workdir".into(),
-            self.workdir.clone(),
-        ];
-
-        for option in SECURITY_OPTS {
-            args.push((*option).to_string());
-        }
-        for mount in &self.mounts {
-            args.push("--mount".into());
-            args.push(mount.as_argument());
-        }
-        // EAC-FR-DKRS: the socket's group, so the non-root user can use it.
-        for group in &self.groups {
-            args.push("--group-add".into());
-            args.push(group.to_string());
-        }
-        for host in &self.extra_hosts {
-            args.push("--add-host".into());
-            args.push(host.clone());
-        }
-        for name in &self.env_names {
-            args.push("--env".into());
-            args.push(name.clone());
-        }
-        for (name, value) in &self.env_literals {
-            args.push("--env".into());
-            args.push(format!("{name}={value}"));
-        }
-
-        if let Some(entrypoint) = &self.entrypoint {
-            args.push("--entrypoint".into());
-            args.push(entrypoint.clone());
-        }
-        args.push(self.image.clone());
-        args.extend(self.vendor_args.iter().cloned());
-        args
-    }
-
-    /// `--user` as the Engine API expects it, which is the same string the CLI
-    /// vector carries.
-    pub fn user(&self) -> String {
-        format!("{}:{}", self.host_uid, self.host_gid)
-    }
-
-    /// The security options of [`SECURITY_OPTS`], as the Engine API's own
-    /// `HostConfig` spells them: `--cap-drop ALL` is a dropped capability list
-    /// and `--security-opt no-new-privileges` is a security option, where the
-    /// CLI takes both as flags.
-    pub fn dropped_capabilities(&self) -> Vec<String> {
-        vec!["ALL".to_string()]
-    }
-
-    pub fn security_options(&self) -> Vec<String> {
-        vec!["no-new-privileges".to_string()]
-    }
-
-    /// `--group-add` as the Engine API's `GroupAdd` spells it.
-    pub fn group_add(&self) -> Vec<String> {
-        self.groups.iter().map(u32::to_string).collect()
-    }
-}
-
-/// A container name no other request has used or will reuse (EAC-FR-13).
-///
-/// Process id, a monotonic counter, and the nanoseconds since the epoch
-/// together: the counter separates two launches in one process, the pid
-/// separates two processes, and the timestamp separates a relaunch that
-/// happened to be given a recycled pid.
-pub fn unique_container_name() -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let sequence = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos());
-    format!("synthesis-agent-{}-{}-{}", std::process::id(), nanos, sequence)
-}
-
-/// A session identifier for a vendor that lets the executor assign one
-/// (EAC-FR-21, CCP-FR-16).
-///
-/// Shaped as a v4 UUID because the pinned CLI that accepts one requires that
-/// shape. The bytes are derived from a SHA-256 over the process id, the
-/// nanosecond clock, and a monotonic counter rather than from a random source:
-/// what this value has to be is *unique*, not unguessable. It names a
-/// conversation inside a container this application launched, it is not a
-/// credential, and nothing authenticates with it — so a counter that cannot
-/// repeat is exactly the property worth buying, and it is bought without adding
-/// a dependency.
-pub fn new_session_id() -> String {
-    use sha2::{Digest, Sha256};
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let sequence = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos());
-
-    let mut hasher = Sha256::new();
-    hasher.update(std::process::id().to_le_bytes());
-    hasher.update(nanos.to_le_bytes());
-    hasher.update(sequence.to_le_bytes());
-    let digest = hasher.finalize();
-
-    let mut bytes = [0u8; 16];
-    bytes.copy_from_slice(&digest[..16]);
-    // Version 4 and the RFC 4122 variant, so the value parses as the UUID the
-    // CLI asks for rather than merely looking like one.
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-
-    let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
-    format!("{}-{}-{}-{}-{}", &hex[0..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..32])
-}
-
-/// The host directory a vendor's session state lives in (EAC-FR-31).
-///
-/// Per vendor and per project: two projects driving the same vendor keep
-/// separate transcripts, and one vendor's state is never visible to the other.
-/// The project key is hashed rather than used as a path component — it is an
-/// absolute path, so it cannot be one, and hashing also keeps a project's
-/// location off the filesystem under `app_data_dir()`.
-pub fn session_state_dir(root: &Path, vendor: &str, project_key: &str) -> PathBuf {
-    use sha2::{Digest, Sha256};
-
-    let mut hasher = Sha256::new();
-    hasher.update(project_key.as_bytes());
-    let digest = hasher.finalize();
-    let slug: String = digest[..8].iter().map(|b| format!("{b:02x}")).collect();
-
-    root.join(vendor).join(slug)
-}
-
-/// EAC-FR-FNFV: a short, stable name for a path, which is what distinguishes the
-/// generated files one execution's repository access is made of.
-///
-/// Those files are a function of the execution directory alone: two launches
-/// against one directory write the same bytes, and two against different ones
-/// write different files. Without the distinction they share one path, and one
-/// launch replaces the other's between the write and the moment the runtime
-/// resolves the mount — leaving a turn standing on a `.git` that names some
-/// other working copy.
-pub fn path_slug(path: &Path) -> String {
-    use sha2::{Digest, Sha256};
-
-    let mut hasher = Sha256::new();
-    hasher.update(path.to_string_lossy().as_bytes());
-    hasher.finalize()[..8].iter().map(|b| format!("{b:02x}")).collect()
-}
-
-/// The host user the container runs as (EAC-FR-14).
-#[cfg(unix)]
-pub fn host_ids() -> (u32, u32) {
-    // SAFETY: `getuid`/`getgid` cannot fail and touch no memory the caller owns.
-    unsafe { (libc_getuid(), libc_getgid()) }
-}
-
-#[cfg(unix)]
-extern "C" {
-    #[link_name = "getuid"]
-    fn libc_getuid() -> u32;
-    #[link_name = "getgid"]
-    fn libc_getgid() -> u32;
-}
-
-/// Windows has no uid/gid to map, and Docker Desktop handles ownership in the
-/// mount layer, so the manifest's own ids are used unchanged.
-#[cfg(not(unix))]
-pub fn host_ids() -> (u32, u32) {
-    (0, 0)
-}
-
-/// Whether a path is usable as a bind-mount source, as a string.
-///
-/// Docker's `--mount` value is comma-separated, so a source containing a comma
-/// would be read as a second option. Rejecting it here turns a confusing
-/// runtime failure into a typed refusal.
-pub fn mount_source(path: &Path) -> Option<String> {
-    let text = path.to_str()?;
-    if text.contains(',') || text.is_empty() {
-        return None;
-    }
-    Some(text.to_string())
 }

@@ -79,42 +79,9 @@ pub fn interactive_exec_args(
     args
 }
 
-/// The credential of an agent CLI, as a launch passes it (EAC-FR-DQZP).
-#[derive(Default)]
-pub struct CredentialParts {
-    pub env_names: Vec<String>,
-    pub env: BTreeMap<String, SecretString>,
-    pub mounts: Vec<BindMount>,
-    pub env_literals: Vec<(String, String)>,
-}
-
 /// EAC-FR-DQZP: the launch credential of AIC-FR-30, in the form a turn gets
 /// it. A value goes to the environment of the client process alone.
-pub fn credential_parts(credential: AgentLaunchCredential) -> Result<CredentialParts, String> {
-    let mut parts = CredentialParts::default();
-    match credential {
-        AgentLaunchCredential::ClaudeEnvironment(variables) => {
-            for variable in variables {
-                parts.env_names.push(variable.name.clone());
-                parts.env.insert(variable.name, variable.value);
-            }
-        }
-        AgentLaunchCredential::CodexConfigMount { source, target } => {
-            let source = descriptor::mount_source(&source)
-                .ok_or_else(|| agentic::ERR_CODEX_CONFIG_MISSING.to_string())?;
-            let target = target.to_string_lossy().into_owned();
-            parts.mounts.push(BindMount { source, target: target.clone(), read_only: false });
-            if let Some(codex) = descriptor::descriptor_for("codex") {
-                if let descriptor::SessionStateMount::SharedWithCredentialMount { env } =
-                    codex.session_state
-                {
-                    parts.env_literals.push((env.to_string(), target));
-                }
-            }
-        }
-    }
-    Ok(parts)
-}
+pub use super::super::credential::credential_parts;
 
 /// What an interactive container is given beyond its image and its program.
 #[derive(Default)]
@@ -172,10 +139,15 @@ pub fn takes_credential(program: &InteractiveProgram) -> Option<CliVendor> {
 }
 
 /// EAC-FR-DQZP: the dedicated session-state mount of `vendor`, where it has
-/// one: the environment name and the container target.
-pub fn dedicated_session_state(vendor: CliVendor) -> Option<(&'static str, &'static str)> {
+/// one for a credential that is a mount (`true`) or one in the environment
+/// (`false`): the environment name and the container target. Codex in the
+/// `access_token` mode has one, and in the `login_folder` mode has none.
+pub fn dedicated_session_state(
+    vendor: CliVendor,
+    credential_is_mount: bool,
+) -> Option<(&'static str, &'static str)> {
     let descriptor = descriptor::descriptor_for(vendor.id())?;
-    match descriptor.session_state {
+    match descriptor.session_state.for_credential(credential_is_mount) {
         descriptor::SessionStateMount::Dedicated { env, target } => Some((env, target)),
         _ => None,
     }
@@ -227,6 +199,8 @@ impl AgentCliExecutor {
             ..Default::default()
         };
 
+        let credential_is_mount =
+            matches!(credential, Some(AgentLaunchCredential::CodexConfigMount { .. }));
         if let Some(credential) = credential {
             let parts = credential_parts(credential)?;
             composed.env_names.extend(parts.env_names);
@@ -236,7 +210,7 @@ impl AgentCliExecutor {
         }
 
         if let (InteractiveProgram::AgentCli(vendor), Some(root)) = (program, session_root) {
-            if let Some((env, target)) = dedicated_session_state(*vendor) {
+            if let Some((env, target)) = dedicated_session_state(*vendor, credential_is_mount) {
                 let dir = session_dir_for(root, terminal_id);
                 fs.create_dir(&dir).map_err(|e| format!("session state: {e}"))?;
                 let source = descriptor::mount_source(&dir)

@@ -467,32 +467,32 @@ fn a_call_against_a_root_that_has_been_deleted_still_answers_from_the_snapshot()
 fn a_colliding_name_is_kept_by_whichever_copy_matched_better() {
     let fixture = collision_project();
 
-    // Every query here leads with `review`, which all three copies share, so
-    // all three are genuinely candidates and deduplication has a choice to
-    // make. Querying only the discriminating terms would match one copy alone,
-    // and the assertion below would then hold under any dedup rule at all —
+    // Every query here leads with `review`, which both copies share, so both
+    // are genuinely candidates and deduplication has a choice to make.
+    // Querying only the discriminating terms would match one copy alone, and
+    // the assertion below would then hold under any dedup rule at all —
     // including one that keeps the *worst* match.
     assert_eq!(
         candidates(&fixture, "review"),
-        3,
-        "the fixture must put all three copies in front of the dedup rule",
+        2,
+        "the fixture must put both copies in front of the dedup rule",
     );
 
-    // `.codex` is neither first nor last in path order, so a `.codex` survivor
-    // cannot be produced by path order, by walk order, or by chance.
+    // The synthesis copy sorts last in path order, so a synthesis survivor
+    // cannot be produced by path order.
     let output = call(&fixture, "review pull request diff regressions", None).unwrap();
     let reviews: Vec<&SkillMatch> = output.skills.iter().filter(|s| s.name == "review").collect();
     assert_eq!(reviews.len(), 1, "SST-FR-12: a name appears at most once");
     assert_eq!(
         reviews[0].ecosystem,
-        Ecosystem::Codex,
+        Ecosystem::Synthesis,
         "SST-FR-12: the higher-scoring copy is the one kept",
     );
-    assert_eq!(reviews[0].path, ".codex/skills/review/SKILL.md");
+    assert_eq!(reviews[0].path, ".synthesis/skills/review/SKILL.md");
 
     // The complement: lead with the `.claude` copy's terms instead and the
-    // survivor changes. Without this, a fixed preference for `.codex` — or for
-    // the last path — would satisfy the assertions above.
+    // survivor changes. Without this, a fixed preference for the synthesis
+    // copy — or for the last path — would satisfy the assertions above.
     let other = call(&fixture, "review specification internal contradictions", None).unwrap();
     let reviews: Vec<&SkillMatch> = other.skills.iter().filter(|s| s.name == "review").collect();
     assert_eq!(reviews.len(), 1);
@@ -501,23 +501,6 @@ fn a_colliding_name_is_kept_by_whichever_copy_matched_better() {
         Ecosystem::Claude,
         "SST-FR-12: the survivor follows the score, not the path",
     );
-
-    // And once more with the words of the copy that sorts last. The scores
-    // rest on the statistics of the index shard that holds each copy, and the
-    // built-in skills join the index too (DSL-FR-ZUFC), so which copy ranks
-    // first is not fixed here. What is checked is the rule itself: of the
-    // copies that match, the one the delegated call ranks first is kept.
-    let query = "review a database migration for destructive operations";
-    assert!(candidates(&fixture, query) >= 2, "the dedup rule has a choice to make");
-    let third = call(&fixture, query, None).unwrap();
-    let reviews: Vec<&SkillMatch> = third.skills.iter().filter(|s| s.name == "review").collect();
-    assert_eq!(reviews.len(), 1);
-    let indexer = fixture.app.state::<crate::bm25_index::Bm25Indexer>();
-    let best = crate::skills::test_support::searched_project(&indexer, query, 25)
-        .into_iter()
-        .find(|r| r.skill.name == "review")
-        .expect("a review copy matches");
-    assert_eq!(reviews[0].path, best.skill.path, "SST-FR-12: the higher-scoring copy is kept");
 }
 
 #[test]
@@ -572,7 +555,7 @@ fn deduplication_does_not_refill_the_limit_from_lower_in_the_ranking() {
     let fixture = collision_project();
 
     // All four skills describe reviewing or authoring; `limit` 2 fetches the
-    // two best, which for this query are two of the three `review` copies.
+    // two best, which for this query are the two `review` copies.
     let output = call(&fixture, "review", Some(2)).unwrap();
     assert_eq!(
         output.skills.len(),

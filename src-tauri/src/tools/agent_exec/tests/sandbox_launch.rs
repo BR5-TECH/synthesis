@@ -921,3 +921,33 @@ fn each_gateway_form_adds_what_it_names() {
 
 #[path = "sandbox_launch_docker.rs"]
 mod docker;
+
+/// EAC-FR-BJLI, EAC-FR-BOXF — a Codex turn in the VM mounts its fixed launch files read-only at
+/// `/opt/synthesis/vendor`, beside the execution directory and the session state.
+#[test]
+fn a_codex_vm_mounts_the_launch_files_read_only() {
+    let harness = harness_for("codex");
+    let sandbox = RecordingSandbox::replying(&codex_stdout(&envelope_json("success")));
+    launch(
+        &harness,
+        RecordingRuntime::replying(""),
+        sandbox.clone(),
+        microsandbox(),
+        scope(),
+        TurnKind::Work,
+    )
+    .expect("runs");
+    let spec = sandbox.only_boot();
+    let files = spec
+        .mounts
+        .iter()
+        .find(|m| m.target == "/opt/synthesis/vendor")
+        .unwrap_or_else(|| panic!("no launch files mount: {:?}", spec.mounts));
+    assert!(files.read_only);
+    let root = crate::changes::canonicalize_lenient(&harness.sessions_root());
+    assert!(
+        std::path::Path::new(&files.source).starts_with(root.join("vendor-files")),
+        "{}",
+        files.source
+    );
+}

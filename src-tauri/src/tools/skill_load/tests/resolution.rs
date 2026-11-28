@@ -222,12 +222,9 @@ fn the_ecosystem_argument_narrows_and_an_unknown_value_narrows_to_nothing() {
     assert!(call(&fixture, "review", Some("claude"))
         .unwrap()
         .contains("The claude copy's instructions"));
-    assert!(call(&fixture, "review", Some("codex"))
+    assert!(call(&fixture, "review", Some("synthesis"))
         .unwrap()
-        .contains("The codex copy's instructions"));
-    assert!(call(&fixture, "review", Some("opencode"))
-        .unwrap()
-        .contains("The opencode copy's instructions"));
+        .contains("The synthesis copy's instructions"));
 
     // `.github` holds no `review`, so narrowing to it leaves nothing.
     assert_eq!(
@@ -236,14 +233,14 @@ fn the_ecosystem_argument_narrows_and_an_unknown_value_narrows_to_nothing() {
         "LSK-FR-09: a name held by no skill in the ecosystem asked for",
     );
 
-    // LSK-FR-07: a value naming none of the four narrows to nothing rather
+    // LSK-FR-07: a value naming none of the seven narrows to nothing rather
     // than being refused as malformed — the same answer, not a second failure
     // mode for a model to learn.
     for nonsense in ["nonsense", "CLAUDE-2", ""] {
         assert_eq!(
             call(&fixture, "review", Some(nonsense)).unwrap_err(),
             ToolRefusal::SkillNotFound,
-            "LSK-FR-07: {nonsense:?} names none of the four",
+            "LSK-FR-07: {nonsense:?} names none of the seven",
         );
     }
     // Spelled as the model was told, whatever the casing.
@@ -269,6 +266,7 @@ fn an_ecosystem_of_the_wrong_json_shape_does_not_lose_the_name_beside_it() {
     assert_eq!(null.ecosystem, None, "an explicit null means any ecosystem");
 
     assert_eq!(parse_ecosystem("claude"), Some(Ecosystem::Claude));
+    assert_eq!(parse_ecosystem("Agents"), Some(Ecosystem::Agents));
     assert_eq!(parse_ecosystem(" GITHUB "), Some(Ecosystem::Github));
     assert_eq!(parse_ecosystem("Synthesis"), Some(Ecosystem::Synthesis));
     assert_eq!(parse_ecosystem("elsewhere"), None);
@@ -283,7 +281,7 @@ fn an_ecosystem_of_the_wrong_json_shape_does_not_lose_the_name_beside_it() {
 fn a_unique_name_with_no_ecosystem_returns_that_skills_instructions() {
     let fixture = collision_project();
     let body = call(&fixture, "analyst", None).unwrap();
-    // Equality, not `contains`: the whole body, and nothing from the three
+    // Equality, not `contains`: the whole body, and nothing from the two
     // `review` skills sitting beside it in the same project.
     assert_eq!(body, "\n# Analyst\n\nFirst line of the analyst body.\n\nSecond paragraph.\n",);
 }
@@ -323,7 +321,7 @@ fn an_ambiguous_name_refuses_naming_the_ecosystems_and_never_picks_one() {
 
     assert_eq!(
         refusal,
-        ToolRefusal::SkillAmbiguous(vec![Ecosystem::Claude, Ecosystem::Codex, Ecosystem::Opencode]),
+        ToolRefusal::SkillAmbiguous(vec![Ecosystem::Claude, Ecosystem::Synthesis]),
         "LSK-FR-10: the tool never picks one",
     );
     let error = refusal.to_execution_error();
@@ -337,7 +335,7 @@ fn an_ambiguous_name_refuses_naming_the_ecosystems_and_never_picks_one() {
     assert_eq!(
         error.message(),
         "More than one skill goes by that name. Call again with `ecosystem` \
-         set to one of: claude, codex, opencode.",
+         set to one of: claude, synthesis.",
         "LSK-FR-10: the ecosystems that hold the name, and nothing else",
     );
     assert!(!error.message().contains("github"), "and only those that do");
@@ -346,28 +344,29 @@ fn an_ambiguous_name_refuses_naming_the_ecosystems_and_never_picks_one() {
 #[test]
 fn a_name_two_skills_in_one_ecosystem_share_is_refused_as_unresolvable() {
     // LSK-FR-10 assumes a collision spans ecosystems, and DSL does not
-    // guarantee that: two skill folders in one family may each declare the
-    // same name. Narrowing by `ecosystem` then re-selects the same candidates,
+    // guarantee that: two synthesis skill folders may each declare the same
+    // name (DSL-FR-QMRX). Narrowing by `ecosystem` then re-selects the same
+    // candidates,
     // so advising it would send the model back for a call that refuses
     // identically while `retryable` promised otherwise (TLC-FR-11).
     let dir = tempfile::TempDir::new().unwrap();
     write_skill(
         dir.path(),
-        ".claude/skills",
+        ".synthesis/skills",
         "alpha",
         "name: review\ndescription: Review a specification.",
         "# Alpha",
     );
     write_skill(
         dir.path(),
-        ".claude/skills",
+        ".synthesis/skills",
         "beta",
         "name: review\ndescription: Review a diff.",
         "# Beta",
     );
     let fixture = mounted(dir);
 
-    for narrowing in [None, Some("claude")] {
+    for narrowing in [None, Some("synthesis")] {
         let refusal = call(&fixture, "review", narrowing).unwrap_err();
         assert_eq!(
             refusal,

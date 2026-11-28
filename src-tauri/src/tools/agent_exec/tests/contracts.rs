@@ -110,7 +110,7 @@ fn schema_argument_of(argv: &[String]) -> String {
 }
 
 /// EAC-FR-43, EAC-FR-07 / CDX-FR-14 — the named document reaches every vendor in the task
-/// document, and only one vendor's vector carries it.
+/// document, and only Claude Code's vector carries it; Codex's names its file.
 #[test]
 fn a_named_result_contract_reaches_every_vendors_task_document() {
     let mut schemas = Vec::new();
@@ -133,32 +133,43 @@ fn a_named_result_contract_reaches_every_vendors_task_document() {
             "{vendor} was handed the caller's task unaltered",
         );
         let schema = schema.expect("every dispatched document carries the named schema");
-        // CDX-FR-14: the vendor that enforces nothing carries the document in
-        // the task alone, and its vector is the vector it always is.
+        // CDX-FR-14: Codex's vector names the strict schema file and carries no
+        // part of the document itself, which reaches the CLI in a launch file.
         if vendor == "codex" {
             for resume in [None, Some("thread")] {
-                assert_eq!(
-                    descriptor::CODEX.vendor_args(
-                        Some("gpt-5"),
-                        Some("low"),
-                        "IGNORED",
-                        resume,
-                        None
-                    ),
-                    descriptor::CODEX.vendor_args(
-                        Some("gpt-5"),
-                        Some("low"),
-                        "IGNORED",
-                        resume,
-                        Some(ResultContract::ReviewVerdict),
-                    ),
-                    "a named contract changes nothing about Codex's vector",
+                let plain = descriptor::CODEX.vendor_args(
+                    Some("gpt-6.1-sol"),
+                    Some("low"),
+                    "IGNORED",
+                    resume,
+                    None,
                 );
+                let named = descriptor::CODEX.vendor_args(
+                    Some("gpt-6.1-sol"),
+                    Some("low"),
+                    "IGNORED",
+                    resume,
+                    Some(ResultContract::ReviewVerdict),
+                );
+                let at = plain.iter().position(|a| a == "--skip-git-repo-check").unwrap() + 1;
+                let mut expected = plain.clone();
+                expected.splice(
+                    at..at,
+                    ["--output-schema", "/opt/synthesis/vendor/output-schema-review_verdict.json"]
+                        .map(String::from),
+                );
+                assert_eq!(named, expected, "a named contract adds the schema file alone");
             }
+            let at = recorded.argv.iter().position(|a| a == "--output-schema").expect("schema");
+            assert_eq!(
+                recorded.argv[at + 1],
+                "/opt/synthesis/vendor/output-schema-review_verdict.json"
+            );
             assert!(
-                !recorded.argv.iter().any(|a| a.contains("review_verdict")
-                    || a.contains("--output-schema")
-                    || a.contains("\"oneOf\"")),
+                !recorded.argv.iter().any(|a| (a.contains("review_verdict")
+                    && !a.starts_with("/opt/synthesis/vendor/"))
+                    || a.contains("\"oneOf\"")
+                    || a.contains("\"anyOf\"")),
                 "no part of the document may reach Codex's vector",
             );
         }
@@ -623,6 +634,7 @@ fn eac_ts53_a_bundle_under_either_root_is_accepted_and_one_outside_both_is_not()
             &roots,
             host,
             &outside.path().join("execution").to_string_lossy(),
+            None,
             None,
             &[],
         )

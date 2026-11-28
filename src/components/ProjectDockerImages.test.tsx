@@ -701,27 +701,28 @@ describe("Project settings → Docker, a vendor that is not implemented (SET-FR-
     backend({
       statuses: [
         unset("claude_code"),
-        configured("codex", { dockerfile: "docker/agent.Dockerfile", dockerfileState: "valid" }),
-        unset("opencode"),
+        unset("codex"),
+        configured("opencode", { dockerfile: "docker/agent.Dockerfile", dockerfileState: "valid" }),
       ],
-      resolved: "codex",
-      save: () => configured("codex"),
+      resolved: "opencode",
+      save: () => configured("opencode"),
       build: () => ({ operationId: "op-1" }),
     });
     render(<ProjectDockerImages />);
     // Wait for the resolution and the backend state, so the mark and the Build
     // control below do not depend on how fast the reads land.
     await waitFor(() =>
-      expect(tab("Codex")).toHaveAttribute("data-graduates", "true"),
+      expect(tab("OpenCode")).toHaveAttribute("data-graduates", "true"),
     );
     await screen.findByText("Docker backend verified");
 
     // Still selectable, with a grayed label. The graduation mark stays.
-    await user.click(tab("Codex"));
-    expect(tab("Codex")).toHaveAttribute("aria-selected", "true");
-    expect(tab("Codex")).toHaveAttribute("data-unimplemented", "true");
-    expect(tab("Codex")).toHaveAttribute("data-graduates", "true");
+    await user.click(tab("OpenCode"));
+    expect(tab("OpenCode")).toHaveAttribute("aria-selected", "true");
+    expect(tab("OpenCode")).toHaveAttribute("data-unimplemented", "true");
+    expect(tab("OpenCode")).toHaveAttribute("data-graduates", "true");
     expect(tab("Claude Code")).toHaveAttribute("data-unimplemented", "false");
+    expect(tab("Codex")).toHaveAttribute("data-unimplemented", "false");
 
     const panel = screen.getByRole("tabpanel");
     const notice = screen.getByTestId("to-be-implemented");
@@ -750,13 +751,17 @@ describe("Project settings → Docker, a vendor that is not implemented (SET-FR-
     expect(calls("save_project_vendor_image")).toHaveLength(0);
   });
 
-  it("SET-FR-GVED, SET-FR-23: an unset OpenCode tab shows the statement and no configuration sentence; Claude Code shows no statement", async () => {
+  it("SET-FR-GVED, SET-FR-23: an unset OpenCode tab shows the statement and no configuration sentence; Claude Code and Codex show no statement", async () => {
     const user = userEvent.setup();
     backend({});
     render(<ProjectDockerImages />);
     await waitFor(() => expect(tab("OpenCode")).toBeInTheDocument());
 
     expect(screen.queryByTestId("to-be-implemented")).toBeNull();
+    await user.click(tab("Codex"));
+    expect(screen.queryByTestId("to-be-implemented")).toBeNull();
+    expect(screen.getByLabelText("Image name")).toBeEnabled();
+    await user.click(tab("Claude Code"));
     expect(screen.getByRole("tabpanel")).toHaveTextContent(
       /Nothing is configured for this agent yet/,
     );

@@ -222,3 +222,18 @@ fn a_cancellation_inside_the_grace_is_a_cancellation() {
     );
     assert_eq!(outcome.end, RunEnd::Cancelled);
 }
+
+// EAC-FR-HZIE, CDX-FR-RJPF: a Codex child alive after its `turn.completed` line
+// is stopped after the grace, and the run reads as a clean exit.
+#[test]
+fn a_codex_child_alive_after_its_turn_end_is_stopped_after_the_grace() {
+    let rule = Some(FinalEventRule {
+        is_final: crate::tools::agent_exec::descriptor::codex::is_final_event,
+        grace: SHORT,
+    });
+    let script = r#"printf '{"type":"turn.completed","usage":{}}\n'; exec sleep 60"#;
+    let outcome = run_sh(script, Duration::from_secs(120), rule, None, CancellationToken::new());
+    assert_eq!(outcome.end, RunEnd::EndedAfterFinalEvent);
+    assert_eq!(outcome.exit_code, None);
+    assert!(String::from_utf8_lossy(&outcome.stdout.bytes).contains("turn.completed"));
+}

@@ -153,12 +153,11 @@ pub(super) fn settle_execution_with<R: tauri::Runtime>(
                             run.checkpoint.resume_part = Some(phases::PART_REVIEW.to_string());
                             None
                         } else {
-                            execution.response.as_ref().and_then(|r| {
-                                r.session.as_ref().map(|s| GraduationResumeRef {
-                                    session_id: s.session_id.clone(),
-                                    continuation_token: s.continuation_token.clone(),
-                                })
-                            })
+                            // EAC-FR-21 / EAC-FR-IGXZ: the session the run
+                            // reported, which the executor completed, before
+                            // the one the agent wrote into its envelope. An
+                            // agent rarely knows its own session identifier.
+                            super::work_turn::session_of(&execution)
                         };
                         let _ = crate::graduation::record_escalation(
                             app,

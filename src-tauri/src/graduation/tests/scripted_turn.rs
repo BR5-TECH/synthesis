@@ -59,6 +59,12 @@ pub(super) struct Turn {
     pub(super) after_verdict: Option<Box<dyn Fn() + Send + Sync>>,
     /// The id of the resumable vendor session the answer carries, if any.
     pub(super) session: Option<String>,
+    /// EAC-FR-IGXZ: the continuation token the executor reports with that
+    /// session.
+    pub(super) continuation: Option<String>,
+    /// The session the agent's own envelope reports, where it differs from the
+    /// one the executor reports. `None` means the same as `session`.
+    pub(super) envelope_session: Option<Option<String>>,
     /// Whether the turn answers as scripted even where the run was stopped
     /// while it ran, as an agent that finished at the same moment does.
     pub(super) ignores_cancellation: bool,
@@ -81,6 +87,8 @@ impl Turn {
             side_effect: None,
             after_verdict: None,
             session: None,
+            continuation: None,
+            envelope_session: None,
             ignores_cancellation: false,
             leaves_container: false,
             duration_ms: 0,
@@ -166,6 +174,20 @@ impl Turn {
     /// The answer carries the resumable vendor session `id`.
     pub(super) fn with_session(mut self, id: &str) -> Self {
         self.session = Some(id.to_string());
+        self
+    }
+
+    /// The executor reports the session `id` with the continuation `token`,
+    /// and the agent's own envelope reports `envelope` in its place.
+    pub(super) fn with_executor_session(
+        mut self,
+        id: &str,
+        token: &str,
+        envelope: Option<&str>,
+    ) -> Self {
+        self.session = Some(id.to_string());
+        self.continuation = Some(token.to_string());
+        self.envelope_session = Some(envelope.map(str::to_string));
         self
     }
 

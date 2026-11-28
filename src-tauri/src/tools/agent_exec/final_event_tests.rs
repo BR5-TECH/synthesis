@@ -10,7 +10,7 @@ use std::time::Duration;
 use tokio::time::advance;
 
 use super::*;
-use crate::tools::agent_exec::descriptor::{claude_code, CLAUDE_CODE, CODEX};
+use crate::tools::agent_exec::descriptor::{claude_code, codex, CLAUDE_CODE, CODEX};
 
 const GRACE: Duration = Duration::from_secs(30);
 const MS: Duration = Duration::from_millis(1);
@@ -284,13 +284,35 @@ fn claude_code_reads_a_result_line_as_its_final_event() {
     }
 }
 
-// EAC-FR-HZIE, CCP-FR-RGVA, EAC-FR-QHAY: Claude Code declares its result line
-// as its final event, and Codex declares none.
+// EAC-FR-HZIE, CCP-FR-RGVA, CDX-FR-RJPF: Claude Code declares its result line
+// as its final event, and Codex declares its `turn.completed` and
+// `turn.failed` lines.
 #[test]
 fn the_descriptors_declare_their_final_events() {
     let is_final = CLAUDE_CODE.final_event.expect("Claude Code declares a final event");
     assert!(is_final(br#"{"type":"result"}"#));
-    assert!(CODEX.final_event.is_none());
+    let is_final = CODEX.final_event.expect("Codex declares a final event");
+    assert!(is_final(br#"{"type":"turn.completed","usage":{}}"#));
+    assert!(is_final(br#"{"type":"turn.failed","error":{"message":"x"}}"#));
     assert!(format!("{CLAUDE_CODE:?}").contains("final_event: true"));
-    assert!(format!("{CODEX:?}").contains("final_event: false"));
+    assert!(format!("{CODEX:?}").contains("final_event: true"));
+}
+
+// CDX-FR-RJPF: no other line of the stream is Codex's final event, and a line
+// that is not a JSON object is not one.
+#[test]
+fn codex_s_final_event_is_the_turn_end_alone() {
+    let others: &[&[u8]] = &[
+        br#"{"type":"thread.started","thread_id":"t"}"#,
+        br#"{"type":"turn.started"}"#,
+        br#"{"type":"item.completed","item":{"type":"agent_message","text":"turn.completed"}}"#,
+        br#"{"type":"error","message":"reconnecting"}"#,
+        b"turn.completed",
+        b"",
+        &[0xff, 0xfe, b'{'],
+    ];
+    for line in others {
+        assert!(!codex::is_final_event(line), "{}", String::from_utf8_lossy(line));
+    }
+    assert!(codex::is_final_event(b"  {\"type\":\"turn.completed\"}\n"));
 }

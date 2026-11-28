@@ -42,9 +42,8 @@ fn a_resumed_codex_turn_uses_its_own_grammar() {
     request.resume =
         Some(SessionRef { session_id: Some("sess-earlier".into()), continuation_token: None });
 
-    // The resumed vector drops `--sandbox` — which `exec resume` does not accept
-    // — and carries the policy as a config override instead, so the scenario
-    // demands the override and the fresh flags are replaced rather than added to.
+    // The resumed vector carries the same bypass flag as a fresh one, and no
+    // `--sandbox`, which `exec resume` does not accept (CDX-FR-04, CDX-FR-11).
     let scenario = Scenario::new(
         stack_tool("codex"),
         json!({
@@ -57,9 +56,8 @@ fn a_resumed_codex_turn_uses_its_own_grammar() {
                     { "value": "exec" },
                     { "value": "resume" },
                     { "value": "--json" },
+                    { "value": "--dangerously-bypass-approvals-and-sandbox" },
                     { "value": "--skip-git-repo-check" },
-                    { "value": "-c" },
-                    { "value": "sandbox_mode=\"danger-full-access\"" },
                     { "value": "sess-earlier" },
                     { "value": "-" },
                 ],
@@ -124,4 +122,89 @@ fn a_codex_stream_that_is_not_events_is_rejected() {
             "{name} was accepted"
         );
     }
+}
+
+/// CDX-FR-19 — a non-zero exit is a failure whatever the stream holds: an exit 2 for an unknown
+/// argument and an exit 1 after a valid envelope both read as a non-zero exit, never as an answer.
+#[test]
+fn a_codex_process_that_exits_non_zero_is_a_failure() {
+    let harness = harness_for("codex");
+    for (code, stdout) in [(2, String::new()), (1, codex_stdout(&envelope_json("success")))] {
+        let request = task("go");
+        let scenario = scenario_for(
+            "codex",
+            &stdin_for(&request),
+            &stdout,
+            "error: unexpected argument",
+            code,
+            0,
+            &[],
+        );
+        let outcome = drive(&harness, &scenario, request, CancellationToken::new()).expect("ran");
+        assert_eq!(outcome.process_outcome, ProcessOutcome::NonZeroExit, "exit {code}");
+        assert!(outcome.response.is_none(), "exit {code} gave an answer");
+    }
+}
+
+/// EAC-FR-QHIU, EAC-FR-15, CDX-FR-EUBZ — a Codex turn in the `access_token` mode, over a real
+/// process boundary: the token by name, `CODEX_HOME` at the dedicated directory, and the
+/// recorded session naming the mode.
+#[test]
+fn a_codex_access_token_turn_runs_against_the_mock() {
+    let harness = harness_verified_with(
+        "codex",
+        Some(VerifyConfig {
+            path: Some("/usr/bin/codex".into()),
+            auth_mode: Some("access_token".into()),
+            access_token: Some("codex-access-FAKE-TEST-TOKEN-0002".into()),
+            ..Default::default()
+        }),
+    );
+    let request = task("run the suite");
+    let scenario = scenario_for(
+        "codex",
+        &stdin_for(&request),
+        &codex_stdout(&envelope_json("success")),
+        "",
+        0,
+        0,
+        &["--env", "CODEX_ACCESS_TOKEN", "--env", "CODEX_HOME=/home/agent/.codex"],
+    );
+
+    let outcome = drive(&harness, &scenario, request, CancellationToken::new()).expect("ran");
+
+    assert_eq!(outcome.process_outcome, ProcessOutcome::Completed);
+    let session = outcome.session.expect("a session");
+    assert_eq!(session.session_id.as_deref(), Some(CODEX_THREAD_ID));
+    assert_eq!(session.continuation_token.as_deref(), Some("access_token"));
+}
+
+/// CDX-FR-14, EAC-FR-BOXF, CDX-FR-TPFM — a contract turn over a real process boundary carries
+/// the schema file, and an answer that leaves optional fields out with `null` is accepted.
+#[test]
+fn a_codex_contract_turn_carries_its_schema_file_against_the_mock() {
+    let harness = harness_for("codex");
+    let mut request = task("summarize the change");
+    request.result_contract = Some(ResultContract::PullRequestSummary);
+    let answer = json!({
+        "protocol_version": 1, "outcome": "success", "summary": "summarized",
+        "result": { "title": "Add a thing", "description": "It adds a thing." },
+        "failure": null, "escalation": null, "session": null, "metadata": null
+    })
+    .to_string();
+    let scenario = scenario_for(
+        "codex",
+        &stdin_for(&request),
+        &codex_stdout(&answer),
+        "",
+        0,
+        0,
+        &["--output-schema", "/opt/synthesis/vendor/output-schema-pull_request_summary.json"],
+    );
+
+    let outcome = drive(&harness, &scenario, request, CancellationToken::new()).expect("ran");
+
+    assert_eq!(outcome.process_outcome, ProcessOutcome::Completed);
+    let response = outcome.response.expect("an envelope");
+    assert_eq!(response.result.expect("a result")["title"], "Add a thing");
 }

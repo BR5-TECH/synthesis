@@ -232,13 +232,10 @@ describe("the Agentic level", () => {
     );
   });
 
-  it("commits a CLI path on a successful verification (AII-FR-20, AII-FR-21, AII-FR-49)", async () => {
-    // AII-FR-OTQY / SET-FR-GVED: this test uses a vendor that the settings UI
-    // does not implement yet, so it opens the vendor gate.
-    implementAllAgenticVendorsForTest();
-    // AII-FR-20 / FR-21 / FR-49. Codex rather than Claude Code, because the
-    // payload under test is the credential-free one: a path and nothing else,
-    // with no token value of any kind riding along.
+  it("commits a CLI path on a successful verification (AII-FR-20, AII-FR-21, AII-FR-49, AII-FR-RNSO)", async () => {
+    // AII-FR-20 / FR-21 / FR-49. Codex on its Login folder sub-tab rather than
+    // Claude Code, because the payload under test is the credential-free one:
+    // a path and the mode, with no token value of any kind riding along.
     backend(
       {},
       {
@@ -266,7 +263,7 @@ describe("the Agentic level", () => {
     );
     expect(argsOf("verify_agentic_integration")).toEqual({
       vendor: "codex",
-      config: { path: "/usr/bin/codex" },
+      config: { path: "/usr/bin/codex", authMode: "login_folder" },
     });
   });
 

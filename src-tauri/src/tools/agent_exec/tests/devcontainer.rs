@@ -481,3 +481,27 @@ fn a_turn_whose_processes_are_left_reports_its_container_not_removed() {
     assert!(run.calls.contains(&"end_turn cid".to_string()), "{:?}", run.calls);
     assert!(!execution.container_removed, "the turn's processes may still run");
 }
+
+/// EAC-FR-BJLI, EAC-FR-BOXF — a Codex turn in the dev container carries its fixed launch files as
+/// a read-only mount at `/opt/synthesis/vendor` in the generated configuration.
+#[cfg(unix)]
+#[test]
+fn a_codex_dev_container_mounts_the_launch_files_read_only() {
+    let harness = harness_for("codex");
+    let dir = tempfile::tempdir().unwrap();
+    let docker = fake_docker(dir.path(), &codex_stdout(&envelope_json("success")), 0);
+    let run = run_dev(&harness, Some(Ok(launch(docker))), scope(), None, CancellationToken::new());
+    run.result.unwrap();
+    let generated: serde_json::Value = serde_json::from_str(&run.starts[0].override_text).unwrap();
+    let mounts: Vec<String> = generated["mounts"]
+        .as_array()
+        .expect("a mount list")
+        .iter()
+        .map(|m| m.as_str().map_or_else(|| m.to_string(), str::to_string))
+        .collect();
+    let files = mounts
+        .iter()
+        .find(|m| m.contains("target=/opt/synthesis/vendor"))
+        .unwrap_or_else(|| panic!("no launch files mount: {mounts:?}"));
+    assert!(files.contains("readonly"), "{files}");
+}

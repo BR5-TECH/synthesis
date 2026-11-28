@@ -107,6 +107,11 @@ struct MockRun {
 }
 
 fn run_mock(document: serde_json::Value, argv: &[&str], stdin: &[u8]) -> MockRun {
+    run_mock_as("claude", document, argv, stdin)
+}
+
+/// The same, with the adapter of `tool` (ACM-FR-18).
+fn run_mock_as(tool: &str, document: serde_json::Value, argv: &[&str], stdin: &[u8]) -> MockRun {
     let directory = tempfile::tempdir().expect("a scenario directory");
     let scenario = directory.path().join("scenario.json");
     // Through the guarded handle rather than `std::fs`, on the terms FSA-FR-19
@@ -121,7 +126,7 @@ fn run_mock(document: serde_json::Value, argv: &[&str], stdin: &[u8]) -> MockRun
 
     let mut child = Command::new(mock_binary())
         .arg("--tool")
-        .arg("claude")
+        .arg(tool)
         .arg("--scenario")
         .arg(&scenario)
         .arg("--")
@@ -280,4 +285,81 @@ fn the_mock_refuses_an_invocation_it_cannot_configure_itself_from() {
     assert_eq!(record["mismatch_type"], "unknown_tool");
     // ACM-FR-05: no adapter was selected, so the record names no tool.
     assert!(record.get("tool").is_none());
+}
+
+// GTE-FR-DKMF / ACM-FR-18, CDX-FR-02, CDX-FR-12, CDX-FR-14, CDX-FR-15, CDX-FR-TPFM,
+// EAC-FR-12, GRL-FR-VIAT: the `codex` adapter accepts the production Codex
+// vector of a review turn, the strict schema file its contract names
+// included, and replays a Codex event stream. The production Codex
+// descriptor reads the review verdict back out of it, `null` positions and
+// the bypass notice included.
+#[test]
+fn the_codex_adapter_replays_a_verdict_stream_the_production_descriptor_reads() {
+    use crate::tools::agent_exec::descriptor::{self, codex, ArgvRequest};
+    let task = review_task();
+    let stdin = String::from_utf8(task.to_stdin_bytes().expect("within limits")).expect("utf8");
+    let argv = descriptor::CODEX.argv(&ArgvRequest {
+        model_id: Some("gpt-6.2-sol"),
+        effort_id: Some("high"),
+        assigned_session_id: "IGNORED",
+        resume_session: None,
+        result_contract: task.result_contract,
+        milestone_reminder: false,
+    });
+    let schema = format!(
+        "/opt/synthesis/vendor/{}",
+        codex::output_schema_file(ResultContract::ReviewVerdict)
+    );
+    let answer = serde_json::json!({
+        "protocol_version": PROTOCOL_VERSION, "outcome": "success",
+        "summary": "the review ran",
+        "result": {"verdict": "ready", "rationale": "The work answers the prompt.",
+            "findings": [], "summary": null},
+        "failure": null, "escalation": null, "session": null, "metadata": null
+    });
+    let stream = [
+        serde_json::json!({"type": "thread.started", "thread_id": "thread-1"}),
+        serde_json::json!({"type": "turn.started"}),
+        serde_json::json!({"type": "item.completed", "item": {"id": "item_0", "type": "error",
+            "message": "`--dangerously-bypass-approvals-and-sandbox` is enabled."}}),
+        serde_json::json!({"type": "item.completed", "item": {"id": "item_1",
+            "type": "agent_message", "text": answer.to_string()}}),
+        serde_json::json!({"type": "turn.completed", "usage": {"input_tokens": 1,
+            "output_tokens": 1}}),
+    ]
+    .iter()
+    .map(|event| event.to_string())
+    .collect::<Vec<_>>()
+    .join("\n");
+
+    let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
+    let run = run_mock_as(
+        "codex",
+        serde_json::json!({
+            "version": 1,
+            "expected": {
+                "required_args": [
+                    { "value": "exec" },
+                    { "name": "--output-schema", "value": schema },
+                ],
+                "stdin": { "encoding": "utf8", "value": stdin },
+            },
+            "response": { "stdout": format!("{stream}\n"), "stderr": "", "exit_code": 0 },
+        }),
+        &argv,
+        stdin.as_bytes(),
+    );
+
+    assert_eq!(run.status, 0, "the mock accepted the invocation: {}", run.stderr);
+    let (envelope, session) = descriptor::CODEX
+        .extract_for(&run.stdout, None, Some(ResultContract::ReviewVerdict))
+        .expect("the production Codex descriptor reads the stream");
+    assert_eq!(session.as_deref(), Some("thread-1"), "CDX-FR-20: the thread is the session");
+    assert_eq!(envelope.outcome, AgentOutcome::Success);
+    let verdict: ReviewVerdict = serde_json::from_value(serde_json::Value::Object(
+        envelope.result.expect("a result object"),
+    ))
+    .expect("the result is a review verdict");
+    assert_eq!(verdict.verdict, ReviewOutcome::Ready);
+    assert!(verdict.findings.is_empty());
 }

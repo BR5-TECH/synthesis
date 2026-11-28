@@ -14,7 +14,7 @@ export function ToBeImplementedNotice() {
     >
       <div className="to-be-implemented__title">{TO_BE_IMPLEMENTED_MESSAGE}</div>
       <div className="to-be-implemented__detail">
-        Only Claude Code is tested. This integration cannot be configured yet.
+        Only Claude Code and Codex are tested. This integration cannot be configured yet.
       </div>
     </div>
   );

@@ -26,11 +26,20 @@ import {
 import { PerTaskSection } from "./AgenticPerTaskSection";
 import { ClaudeAuthTabs, ClaudeCredentialRows } from "./ClaudeCodeAuthFields";
 import {
+  CodexAccessTokenRow,
+  CodexAuthTabs,
+  CodexLoginFolderNote,
+} from "./CodexAuthFields";
+import { AgenticEffortSelect } from "./AgenticEffortSelect";
+import { effectiveModel, offeredEfforts } from "./agenticEfforts";
+import {
   agenticStatus,
+  canVerifyAgentic,
   cliConfigFor,
   defaultAgenticBaseUrl,
   draftForIntegration,
   emptyDraft,
+  isCodexTab,
   rendersOauthTokenField,
   type AgenticDraft,
 } from "./agenticDraft";
@@ -358,6 +367,29 @@ export function AgenticAiIntegrations() {
   const vendorBusy = current ? (busy[current.vendor] ?? "idle") : "idle";
   const draft = current ? (drafts[current.vendor] ?? emptyDraft()) : emptyDraft();
   const hasTokenField = current ? rendersOauthTokenField(current) : false;
+  /** AII-FR-LOYM: the Codex tab, with its two sub-tabs. */
+  const codex = current ? isCodexTab(current) : false;
+  /** AII-FR-XXSQ: Verify sits on the access token row while it is open. */
+  const codexTokenRow = codex && draft.codexAuthMode === "access_token";
+  /** AII-FR-24 / AII-FR-BMGM: the levels the default effort selector offers. */
+  const defaultEfforts = current
+    ? offeredEfforts(current, effectiveModel(current, null))
+    : [];
+  const codexVerifyButton = current && (
+    <button
+      className="btn btn--default btn--sm"
+      // AII-FR-NXAV: unavailable until the open sub-tab can produce a complete
+      // configuration.
+      disabled={
+        vendorBusy === "verifying" ||
+        vendorBusy === "detecting" ||
+        !canVerifyAgentic(current, draft)
+      }
+      onClick={() => void onVerify(current.vendor, "cli")}
+    >
+      {vendorBusy === "verifying" ? "Verifying…" : "Verify"}
+    </button>
+  );
   const status = current
     ? agenticStatus(
         current,
@@ -467,12 +499,25 @@ export function AgenticAiIntegrations() {
                     }
                   />
                 )}
+                {/* AII-FR-LOYM: Codex chooses between its login folder and an
+                    access token above the binary field. Both sub-tabs keep the
+                    binary field. */}
+                {codex && (
+                  <CodexAuthTabs
+                    mode={draft.codexAuthMode}
+                    // AII-FR-53: a token typed under the Access token sub-tab
+                    // goes when the author leaves it.
+                    onChoose={(codexAuthMode) =>
+                      onEditDraft(current.vendor, { codexAuthMode, accessToken: "" })
+                    }
+                  />
+                )}
                 {/* AII-FR-IUUM: the Custom Gateway sub-tab runs no binary, so it
                     renders no binary field. */}
                 {!(hasTokenField && draft.authMode === "custom_gateway") && (
                   <div
                     className="picker-field"
-                    style={{ marginBottom: hasTokenField ? 10 : 4 }}
+                    style={{ marginBottom: hasTokenField || codexTokenRow ? 10 : 4 }}
                   >
                     <label
                       className="picker-field__label"
@@ -507,7 +552,10 @@ export function AgenticAiIntegrations() {
                       {/* AII-FR-49: where a token field follows, Verify sits on it
                           instead, so the path and the credential are submitted as
                           one act rather than two. */}
-                      {!hasTokenField && (
+                      {/* AII-FR-RNSO: Codex's Login folder sub-tab keeps Verify
+                          on the binary row. */}
+                      {codex && !codexTokenRow && codexVerifyButton}
+                      {!hasTokenField && !codex && (
                         <button
                           className="btn btn--default btn--sm"
                           disabled={
@@ -520,6 +568,18 @@ export function AgenticAiIntegrations() {
                       )}
                     </div>
                   </div>
+                )}
+
+                {/* AII-FR-RNSO / AII-FR-XXSQ: what the open Codex sub-tab
+                    renders below the binary field. */}
+                {codex && !codexTokenRow && <CodexLoginFolderNote />}
+                {codexTokenRow && (
+                  <CodexAccessTokenRow
+                    integration={current}
+                    draft={draft}
+                    onEdit={(patch) => onEditDraft(current.vendor, patch)}
+                    verifyButton={codexVerifyButton}
+                  />
                 )}
 
                 {/* AII-FR-49 .. AII-FR-53, AII-FR-PHFX, AII-FR-EJMG: the open
@@ -641,21 +701,15 @@ export function AgenticAiIntegrations() {
                 >
                   Reasoning effort
                 </label>
-                <select
+                {/* AII-FR-24 / AII-FR-BMGM: the levels offered for the default
+                    model, which change at once with it. */}
+                <AgenticEffortSelect
                   id={`agentic-effort-${current.vendor}`}
-                  className="select"
-                  value={current.selectedEffort ?? ""}
-                  onChange={(e) =>
-                    void onSelectEffort(current.vendor, null, e.target.value || null)
-                  }
-                >
-                  <option value="">{BACKEND_DEFAULT_LABEL}</option>
-                  {current.reasoningEfforts.map((eff) => (
-                    <option key={eff.id} value={eff.id}>
-                      {eff.label}
-                    </option>
-                  ))}
-                </select>
+                  value={current.selectedEffort}
+                  options={defaultEfforts}
+                  leadingLabel={BACKEND_DEFAULT_LABEL}
+                  onChange={(id) => void onSelectEffort(current.vendor, null, id)}
+                />
               </div>
             )}
 
@@ -687,26 +741,16 @@ export function AgenticAiIntegrations() {
                   />
                 )}
                 renderEffort={(kind) => (
-                  <select
+                  // AII-FR-BMGM: a row's list follows the row's effective
+                  // model — its own, else the default.
+                  <AgenticEffortSelect
                     id={`agentic-effort-${current.vendor}-${kind.id}`}
-                    className="select"
-                    aria-label={`${kind.label} effort`}
-                    value={(current.effortOverrides ?? {})[kind.id] ?? ""}
-                    onChange={(e) =>
-                      void onSelectEffort(
-                        current.vendor,
-                        kind.id,
-                        e.target.value || null,
-                      )
-                    }
-                  >
-                    <option value="">{SAME_AS_DEFAULT_LABEL}</option>
-                    {current.reasoningEfforts.map((eff) => (
-                      <option key={eff.id} value={eff.id}>
-                        {eff.label}
-                      </option>
-                    ))}
-                  </select>
+                    ariaLabel={`${kind.label} effort`}
+                    value={(current.effortOverrides ?? {})[kind.id]}
+                    options={offeredEfforts(current, effectiveModel(current, kind.id))}
+                    leadingLabel={SAME_AS_DEFAULT_LABEL}
+                    onChange={(id) => void onSelectEffort(current.vendor, kind.id, id)}
+                  />
                 )}
               />
             </div>
@@ -760,7 +804,9 @@ export function AgenticAiIntegrations() {
                 {current.kind === "cli"
                   ? hasTokenField
                     ? "Point Synthesis at its binary, give it an OAuth token or a gateway, and verify to use this integration."
-                    : "Point Synthesis at its binary and verify it to use this integration."
+                    : codex
+                      ? "Point Synthesis at its binary, use the login folder or give it an access token, and verify to use this integration."
+                      : "Point Synthesis at its binary and verify it to use this integration."
                   : "Give Synthesis its endpoint and verify it to use this integration."}
               </div>
             )}

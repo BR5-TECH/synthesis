@@ -88,12 +88,21 @@ pub(super) fn verify_cli(
     // AIC-FR-08: the probe is enrichment. It runs after identity is settled and
     // its failure never fails a verification that otherwise succeeded — the
     // model list degrades to the bundled catalog, the verification does not.
-    let probed = descriptor.model_probe_args.and_then(|args| {
+    //
+    // AIC-FR-TBTH: the probe runs with no credential in its arguments or its
+    // environment — the runner passes none.
+    let probed = descriptor.model_probe.and_then(|probe| {
+        let args = match probe {
+            ModelProbe::Lines(args) | ModelProbe::CodexCatalog(args) => args,
+        };
         ai.runner
             .run(&binary, args, VERIFY_TIMEOUT)
             .ok()
             .filter(|out| out.success)
-            .map(|out| parse_probed_models(&out))
+            .map(|out| match probe {
+                ModelProbe::Lines(_) => parse_probed_models(&out),
+                ModelProbe::CodexCatalog(_) => parse_codex_models(&out),
+            })
             .filter(|models| !models.is_empty())
     });
     let (models, models_origin) = match probed {
@@ -157,10 +166,20 @@ pub(super) fn verify_api(
 
     // AIC-FR-08: an endpoint that lists nothing degrades to the bundled catalog
     // rather than failing a verification that otherwise succeeded.
+    //
+    // AIC-FR-25: an API-kind model carries no effort ladder of its own, so the
+    // vendor list applies to it (AIC-FR-SFMS) whatever the endpoint reported.
     let (models, models_origin) = if probed.is_empty() {
         (catalog_models(descriptor), ModelsOrigin::Catalog)
     } else {
-        (probed, ModelsOrigin::Probed)
+        let models = probed
+            .into_iter()
+            .map(|mut model| {
+                model.reasoning = None;
+                model
+            })
+            .collect();
+        (models, ModelsOrigin::Probed)
     };
 
     Ok(VerifiedConfig {
@@ -177,67 +196,6 @@ pub(super) fn verify_api(
     })
 }
 
-/// AIC-FR-26 / AIC-FR-27: settle what a CLI verification means for the vendor's
-/// credential, before anything is run or written.
-///
-/// Returns the token to store, or `None` when there is nothing to store —
-/// either because the vendor holds no credential, or because the author is
-/// keeping the one already in the keychain.
-///
-/// The three refusals are the whole of the credential contract:
-///
-/// - a token supplied for a vendor that does not carry one is `wrong_config_kind`,
-///   the same class of mistake as a base URL sent to a CLI;
-/// - a token that is not shaped like one is `token_malformed`, decided before
-///   the binary is run and before the keychain is touched;
-/// - a `{ path }` payload for a vendor whose token is mandatory, with nothing
-///   stored, is `token_missing` — the integration stays whatever it was rather
-///   than becoming configured on a path alone.
-pub(super) fn resolve_supplied_token(
-    ai: &AgenticIntegrations,
-    descriptor: &AgenticVendor,
-    oauth_token: Option<&str>,
-) -> Result<Option<String>, String> {
-    match oauth_token {
-        Some(raw) => {
-            if !descriptor.requires_oauth_token() {
-                return Err(ERR_WRONG_CONFIG_KIND.into());
-            }
-            // Trimmed before the check so a token pasted with a stray newline is
-            // not rejected as malformed; an empty field still fails, because
-            // `""` matches nothing the pattern accepts.
-            let token = raw.trim();
-            if !is_valid_oauth_token(token) {
-                return Err(ERR_TOKEN_MALFORMED.into());
-            }
-            Ok(Some(token.to_string()))
-        }
-        None => {
-            if descriptor.requires_oauth_token()
-                && !ai
-                    .secrets
-                    .has(descriptor.vendor)
-                    .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?
-            {
-                return Err(ERR_TOKEN_MISSING.into());
-            }
-            Ok(None)
-        }
-    }
-}
-
-/// AIC-FR-UFNB: does the payload carry a field of Claude Code's gateway shape?
-fn carries_gateway_fields(config: &VerifyConfig) -> bool {
-    config.gateway_base_url.is_some()
-        || config.gateway_token_var.is_some()
-        || config.gateway_token.is_some()
-}
-
-/// AIC-FR-25: does the payload carry a field that only Claude Code has?
-fn carries_claude_only_fields(config: &VerifyConfig) -> bool {
-    config.auth_mode.is_some() || carries_gateway_fields(config) || config.env_vars.is_some()
-}
-
 /// AIC-FR-06: a successful verification of either kind is what commits a
 /// configuration. A failure persists nothing.
 pub fn verify_integration_impl(
@@ -248,89 +206,56 @@ pub fn verify_integration_impl(
 ) -> Result<AgenticIntegration, String> {
     let descriptor = vendor_descriptor(vendor).ok_or(ERR_UNKNOWN_VENDOR)?;
 
-    // AIC-FR-25 / AIC-FR-26: the configuration must be the shape this vendor
-    // accepts. Refusing the wrong shape rather than ignoring the surplus field
-    // is what keeps a UI bug from silently verifying against a stale value — and
-    // what stops a credential meant for one vendor from being handed to another.
-    let mut mode = AuthMode::Subscription;
-    let mut gateway: Option<GatewayPlan> = None;
-    let (verified, supplied_token) = match descriptor.kind {
+    // AIC-FR-25 / AIC-FR-26 / AIC-FR-ISWS: the configuration must be the shape
+    // this vendor accepts. Refusing the wrong shape rather than ignoring the
+    // surplus field is what keeps a UI bug from silently verifying against a
+    // stale value — and what stops a credential meant for one vendor from being
+    // handed to another.
+    let mut plan: Option<CliAuthPlan> = None;
+    let verified = match descriptor.kind {
         VendorKind::Cli => {
-            if config.base_url.is_some() || config.api_key.is_some() {
-                return Err(ERR_WRONG_CONFIG_KIND.into());
-            }
-            let claude = descriptor.requires_oauth_token();
-            if !claude && carries_claude_only_fields(config) {
-                return Err(ERR_WRONG_CONFIG_KIND.into());
-            }
-            if claude {
-                // AIC-FR-WNQR / AIC-FR-UFNB: the mode names the shape, and a
-                // field of the other shape is refused rather than ignored.
-                mode = match config.auth_mode.as_deref() {
-                    None => AuthMode::Subscription,
-                    Some(raw) => AuthMode::parse(raw).ok_or(ERR_WRONG_CONFIG_KIND)?,
-                };
-                match mode {
-                    AuthMode::Subscription => {
-                        if carries_gateway_fields(config) {
-                            return Err(ERR_WRONG_CONFIG_KIND.into());
-                        }
-                    }
-                    AuthMode::CustomGateway => {
-                        if config.oauth_token.is_some() {
-                            return Err(ERR_WRONG_CONFIG_KIND.into());
-                        }
-                        gateway = Some(plan_gateway(ai, config)?);
-                    }
-                }
-                if let Some(entries) = config.env_vars.as_deref() {
-                    validate_env_vars(entries)?;
-                }
-            }
-            if gateway.is_some() {
+            let auth = plan_cli_auth(ai, descriptor, config)?;
+            let verified = if auth.gateway.is_some() {
                 // AIC-FR-QHLN: every turn runs Claude Code inside Docker, so a
                 // gateway verification runs no host binary and asks nothing of
                 // the gateway. The stored path is kept as it is.
-                (
-                    VerifiedConfig {
-                        binary_path: None,
-                        path_origin: PathOrigin::Unset,
-                        base_url: None,
-                        api_key: None,
-                        masked_hint: None,
-                        version: None,
-                        models: catalog_models(descriptor),
-                        models_origin: ModelsOrigin::Catalog,
-                    },
-                    None,
-                )
+                VerifiedConfig {
+                    binary_path: None,
+                    path_origin: PathOrigin::Unset,
+                    base_url: None,
+                    api_key: None,
+                    masked_hint: None,
+                    version: None,
+                    models: catalog_models(descriptor),
+                    models_origin: ModelsOrigin::Catalog,
+                }
             } else {
-                // Everything about the token is settled before the binary runs,
-                // so a value that is not a token costs neither a process spawn
-                // nor a keychain round trip (AIC-FR-27).
-                let supplied =
-                    resolve_supplied_token(ai, descriptor, config.oauth_token.as_deref())?;
-                (verify_cli(ai, descriptor, config.path.as_deref().unwrap_or(""))?, supplied)
-            }
+                // Everything about the token is settled above, before the binary
+                // runs, so a value that is not a token costs neither a process
+                // spawn nor a vault round trip (AIC-FR-27, AIC-FR-BXFL).
+                verify_cli(ai, descriptor, config.path.as_deref().unwrap_or(""))?
+            };
+            plan = Some(auth);
+            verified
         }
         VendorKind::Api => {
             if config.path.is_some()
-                || config.oauth_token.is_some()
                 || carries_claude_only_fields(config)
+                || config.auth_mode.is_some()
+                || config.access_token.is_some()
             {
                 return Err(ERR_WRONG_CONFIG_KIND.into());
             }
-            (
-                verify_api(
-                    ai,
-                    descriptor,
-                    config.base_url.as_deref().unwrap_or(""),
-                    config.api_key.as_deref(),
-                )?,
-                None,
-            )
+            verify_api(
+                ai,
+                descriptor,
+                config.base_url.as_deref().unwrap_or(""),
+                config.api_key.as_deref(),
+            )?
         }
     };
+    let supplied_token = plan.as_ref().and_then(|p| p.supplied_token.clone());
+    let gateway = plan.as_ref().and_then(|p| p.gateway.as_ref());
 
     let _guard = ai.write_lock.lock().map_err(|e| format!("agentic registry poisoned: {e}"))?;
 
@@ -339,15 +264,15 @@ pub fn verify_integration_impl(
     // record describing a credential that was never stored.
     //
     // Matched on the vendor rather than only on whether a credential arrived,
-    // because the absences mean different things. Codex and OpenCode hold no
-    // credential at all, so they must not touch the credential store even to
-    // clear it — doing so would make a locked keychain fail a verification that
-    // never needed one. An API-kind vendor verified without a key is being
-    // reconfigured as keyless: its record will carry no hint, so any previous
-    // entry has to go with it, or the old key would stay in the store with
-    // nothing describing it (AIC-FR-14 / AIC-FR-20). Claude Code keeping its
-    // stored token writes nothing, which is what makes a `{ path }`
-    // re-verification leave the token exactly as it was.
+    // because the absences mean different things. OpenCode, and Codex in
+    // `login_folder` mode, must not touch the credential store even to clear
+    // it — doing so would make a locked vault fail a verification that never
+    // needed one (AIC-FR-OFEO). An API-kind vendor verified without a key is
+    // being reconfigured as keyless: its record will carry no hint, so any
+    // previous entry has to go with it, or the old key would stay in the store
+    // with nothing describing it (AIC-FR-14 / AIC-FR-20). A CLI vendor keeping
+    // its stored token writes nothing, which is what makes a re-verification
+    // leave the token exactly as it was.
     //
     // AIC-FR-28: this is also the atomic replacement. `set` overwrites the
     // vendor's one entry in a single step, so the token that was working is
@@ -366,7 +291,7 @@ pub fn verify_integration_impl(
             }
             // AIC-FR-YXAB: the gateway token has a vault entry of its own, and
             // a subscription verification never reaches it.
-            if let Some(token) = gateway.as_ref().and_then(|g| g.supplied_token.as_deref()) {
+            if let Some(token) = gateway.and_then(|g| g.supplied_token.as_deref()) {
                 ai.secrets
                     .set(GATEWAY_SECRET_ID, token)
                     .map_err(|_| ERR_KEYCHAIN_UNAVAILABLE.to_string())?;
@@ -394,14 +319,24 @@ pub fn verify_integration_impl(
         // token keeps the hint describing it, because the hint describes what is
         // in the keychain rather than what this call carried.
         match supplied_token.as_deref() {
+            // AIC-FR-OFEO: a Codex access token keeps a hint only when it has
+            // eight or more characters, the rule a gateway token follows.
+            Some(token) if descriptor.holds_access_token() => {
+                record.masked_hint = gateway_hint(token)
+            }
             Some(token) => record.masked_hint = Some(mask_hint(token)),
-            None if descriptor.requires_oauth_token() => {}
+            None if descriptor.requires_oauth_token() || descriptor.holds_access_token() => {}
             None => record.masked_hint = verified.masked_hint,
+        }
+        if descriptor.holds_access_token() {
+            // AIC-FR-UFYH: a successful verification commits the mode.
+            record.codex_auth_mode =
+                plan.as_ref().map_or(CodexAuthMode::LoginFolder, |p| p.codex_mode);
         }
         if descriptor.requires_oauth_token() {
             // AIC-FR-WNQR / AIC-FR-YXAB / AIC-FR-SXVA.
-            record.auth_mode = mode;
-            if let Some(plan) = gateway.as_ref() {
+            record.auth_mode = plan.as_ref().map_or(AuthMode::Subscription, |p| p.claude_mode);
+            if let Some(plan) = gateway {
                 record.gateway_base_url = Some(plan.base_url.clone());
                 record.gateway_token_var = Some(plan.token_var.clone());
                 if let Some(token) = plan.supplied_token.as_deref() {
@@ -419,8 +354,8 @@ pub fn verify_integration_impl(
         // the clearing reaches every model selection the record holds — the
         // default and each turn kind's override alike. A selection the refreshed
         // list still offers is kept exactly as it was. The effort selections are
-        // untouched — effort levels come from the descriptor and do not change
-        // with the installation.
+        // untouched: AIC-FR-TPKB decides on read which of them the refreshed
+        // models still offer.
         let offered = |id: &str| verified.models.iter().any(|m| m.id == id);
         if let Some(selected) = record.selected_model.clone() {
             if !offered(&selected) {
@@ -530,26 +465,15 @@ pub(super) fn model_for(record: &AgenticRecord, turn_kind: Option<&str>) -> Opti
         .or_else(|| record.selected_model.clone())
 }
 
-/// AIC-FR-10 / AIC-FR-19: the reasoning effort a record resolves for one turn
-/// kind.
-///
-/// The kind's own override where it holds one, and `selected_effort` otherwise.
-/// A caller that names no kind gets the default, which is what every record
-/// written before kinds were distinguished resolves for every kind.
-pub(super) fn effort_for(record: &AgenticRecord, turn_kind: Option<&str>) -> Option<String> {
-    turn_kind
-        .and_then(|kind| record.effort_overrides.get(kind).cloned())
-        .or_else(|| record.selected_effort.clone())
-}
-
 /// AIC-FR-10: persist the chosen reasoning effort, for one turn kind or for the
 /// record's default.
 ///
 /// A `None` `turn_kind` sets `selected_effort`, which every kind falls back to;
 /// a named one sets that kind's override. A `None` `effort_id` **clears** rather
 /// than stores a null: against the default it selects the backend's own, and
-/// against a kind it returns that kind to the default. An id the vendor does not
-/// declare, and a kind outside the closed set, are each refused.
+/// against a kind it returns that kind to the default. An id that AIC-FR-SFMS
+/// does not offer for the selection's effective model, and a kind outside the
+/// closed set, are each refused.
 pub fn set_effort_impl(
     store: &GlobalSettingsStore,
     ai: &AgenticIntegrations,
@@ -565,7 +489,7 @@ pub fn set_effort_impl(
     }
     update_record(store, ai, vendor, |record| {
         if let Some(id) = effort_id {
-            if !descriptor.reasoning_efforts.iter().any(|(e, _)| *e == id) {
+            if !effort_offered(descriptor, record, turn_kind, id) {
                 return Err(ERR_UNKNOWN_EFFORT.to_string());
             }
         }
@@ -605,9 +529,10 @@ pub fn set_active_impl(
     Ok(integrations_from(&records, Some(vendor), &*ai.probe, &present))
 }
 
-/// AIC-FR-14: return a vendor to `unconfigured`, deleting the keychain entry of
-/// every vendor that holds one — an API-kind vendor's key or both of Claude
-/// Code's tokens — as part of the same operation. Idempotent. A cleared vendor that was
+/// AIC-FR-14: return a vendor to `unconfigured`, deleting the vault entry of
+/// every credential the vendor holds — an API-kind vendor's key, both of Claude
+/// Code's tokens, or Codex's access token — as part of the same operation. The
+/// record goes with it, so Codex returns to `login_folder`. Idempotent. A cleared vendor that was
 /// active leaves nothing active; a project override naming it is left recorded
 /// and stops resolving.
 pub fn clear_integration_impl(
@@ -639,20 +564,22 @@ pub fn clear_integration_impl(
     Ok(integrations_from(&records, active.as_deref(), &*ai.probe, &vendor_presence(&*ai.secrets)))
 }
 
-/// AIC-FR-32: one migration candidate per vendor that holds a credential.
+/// AIC-FR-32: one migration candidate per vendor whose credential an earlier
+/// keyring layout stored.
 ///
-/// No candidate is supplied for Codex or OpenCode: neither holds a credential
-/// here — Codex authenticates through a login directory its own CLI wrote,
-/// which is outside the vault entirely (`ASV-application-secret-vault.md`
-/// ASV-FR-32), and OpenCode through a mechanism this module knows nothing
-/// about. For every vendor that does hold one a candidate is supplied whether
+/// No candidate is supplied for Codex or OpenCode: no earlier layout stored
+/// the Codex access token, and OpenCode holds no credential here
+/// (`ASV-application-secret-vault.md` ASV-FR-20). For every other vendor that
+/// holds one a candidate is supplied whether
 /// or not the vault already holds that credential, because which credentials
 /// are adopted and which legacy entries are deleted is the vault's decision
 /// (ASV-FR-21, ASV-FR-25).
 pub fn migration_candidates(records: &[AgenticRecord]) -> Vec<crate::secret_vault::Candidate> {
     records
         .iter()
-        .filter(|record| vendor_descriptor(&record.vendor).is_some_and(|d| d.holds_credential()))
+        .filter(|record| {
+            vendor_descriptor(&record.vendor).is_some_and(|d| d.had_legacy_credential())
+        })
         .map(|record| crate::secret_vault::Candidate {
             legacy_service: LEGACY_KEYCHAIN_SERVICE.to_string(),
             legacy_account: record.vendor.clone(),
@@ -764,7 +691,9 @@ pub fn resolve_agentic_invocation(
                 vendor,
                 binary_path,
                 model_id: model_for(record, turn_kind),
-                effort_id: effort_for(record, turn_kind),
+                // AIC-FR-TPKB: a stored effort the model does not offer is
+                // read as absent, so the run takes the backend default.
+                effort_id: effort_for(descriptor, record, turn_kind),
             })
         }
         VendorKind::Api => {
@@ -782,7 +711,9 @@ pub fn resolve_agentic_invocation(
                 base_url,
                 api_key,
                 model_id: model_for(record, turn_kind),
-                effort_id: effort_for(record, turn_kind),
+                // AIC-FR-TPKB: a stored effort the model does not offer is
+                // read as absent, so the run takes the backend default.
+                effort_id: effort_for(descriptor, record, turn_kind),
             })
         }
     }

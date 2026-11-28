@@ -156,7 +156,7 @@ fn an_agent_cli_gets_a_fresh_session_state_directory() {
     let dir = composed.session_dir.clone().expect("a session directory");
     assert!(dir.starts_with(&sessions));
     assert_eq!(fs.file_info(&dir).unwrap().kind, crate::fs::EntryKind::Dir);
-    let (env, target) = compose::dedicated_session_state(CliVendor::ClaudeCode).unwrap();
+    let (env, target) = compose::dedicated_session_state(CliVendor::ClaudeCode, false).unwrap();
     assert!(composed.mounts.iter().any(|m| m.target == target && !m.read_only));
     assert!(composed.env_literals.iter().any(|(n, v)| n == env && v == target));
 
@@ -165,6 +165,69 @@ fn an_agent_cli_gets_a_fresh_session_state_directory() {
         .unwrap();
     assert!(shell.session_dir.is_none());
     assert_eq!(shell.mounts.len(), 1);
+}
+
+// EAC-FR-DQZP, EAC-FR-QHIU: a Codex terminal in the `access_token` mode gets
+// the token by name and an empty session-state directory of its own at
+// `/home/agent/.codex`; in the `login_folder` mode it gets its login directory
+// alone.
+#[test]
+fn a_codex_terminal_gets_the_session_state_of_its_mode() {
+    let root = tempfile::tempdir().unwrap();
+    let root = root.path().canonicalize().unwrap();
+    let fs = temp_fs(&root);
+    let checkout = root.join("checkout");
+    fs.create_dir(&checkout).unwrap();
+    let sessions = root.join("sessions");
+    let executor = AgentCliExecutor::default().with_session_state_root(root.join("state"));
+    let program = InteractiveProgram::AgentCli(CliVendor::Codex);
+
+    let token = AgentLaunchCredential::CodexEnvironment(vec![LaunchVariable {
+        name: "CODEX_ACCESS_TOKEN".into(),
+        value: SecretString::new("codex-access-FAKE".to_string()),
+        masked: true,
+    }]);
+    let mut with_token = extras(&sessions, "t-token");
+    with_token.credential = Some(token);
+    let composed = executor.compose_interactive(&fs, &checkout, &program, with_token).unwrap();
+    let dir = composed.session_dir.clone().expect("a session directory");
+    assert!(dir.starts_with(&sessions));
+    let state = composed.mounts.iter().find(|m| m.target == "/home/agent/.codex").unwrap();
+    assert_eq!(state.source, dir.to_string_lossy());
+    assert!(!state.read_only);
+    assert!(composed
+        .env_literals
+        .iter()
+        .any(|(n, v)| n == "CODEX_HOME" && v == "/home/agent/.codex"));
+    assert_eq!(composed.env_names, ["CODEX_ACCESS_TOKEN"]);
+    // EAC-FR-DQZP: no model and no effort reach an interactive vector.
+    assert_eq!(compose::program_args(&program).1, ["codex"]);
+
+    let login = root.join("login");
+    fs.create_dir(&login).unwrap();
+    let mut with_login = extras(&sessions, "t-login");
+    with_login.credential = Some(AgentLaunchCredential::CodexConfigMount {
+        source: login.clone(),
+        target: "/home/agent/.codex".into(),
+    });
+    let composed = executor.compose_interactive(&fs, &checkout, &program, with_login).unwrap();
+    assert!(composed.session_dir.is_none());
+    let mounts: Vec<_> =
+        composed.mounts.iter().filter(|m| m.target == "/home/agent/.codex").collect();
+    assert_eq!(mounts.len(), 1);
+    assert_eq!(mounts[0].source, login.to_string_lossy());
+    assert!(composed.env_names.is_empty());
+    // The login directory is the session state, and `CODEX_HOME` names it.
+    assert!(composed
+        .env_literals
+        .iter()
+        .any(|(n, v)| n == "CODEX_HOME" && v == "/home/agent/.codex"));
+
+    assert_eq!(compose::dedicated_session_state(CliVendor::Codex, true), None);
+    assert_eq!(
+        compose::dedicated_session_state(CliVendor::Codex, false),
+        Some(("CODEX_HOME", "/home/agent/.codex"))
+    );
 }
 
 // DVC-FR-WRXL: `docker exec -i -t` as the remote user, in the checkout, with

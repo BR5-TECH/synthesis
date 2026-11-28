@@ -44,11 +44,14 @@ export function aiErrorMessage(e: unknown): string {
       return "Nothing exists at that path.";
     case AI_ERRORS.notExecutable:
       return "That file cannot be run. Check its permissions.";
+    // The same codes answer for Claude Code's OAuth and gateway tokens and for
+    // Codex's access token (AIC-FR-ISWS, AIC-FR-BXFL), so neither names one.
     case AI_ERRORS.tokenMissing:
-      return "This integration needs an OAuth token. Enter one and verify again.";
+      return "This integration needs a token. Enter one and verify again.";
     case AI_ERRORS.tokenMalformed:
-      // Deliberately says nothing about the value that provoked it (AII-FR-50).
-      return "That is not a valid OAuth token.";
+      // Deliberately says nothing about the value that provoked it (AII-FR-50,
+      // AII-FR-NXAV).
+      return "That is not a valid token.";
     case AI_ERRORS.notTheExpectedCli:
       return "That program is not this vendor's CLI.";
     case AI_ERRORS.executionFailed:

@@ -69,7 +69,15 @@ fn one_executor_driving_two_launches_keeps_them_separate() {
     );
 
     let claude_context = claude.context();
-    let codex_context = codex.context();
+    // EAC-FR-BOXF: the one executor writes every launch file under the one
+    // root it was given, as production does under `app_data_dir()`, so the
+    // Codex launch must be allowed to reach that root too.
+    let codex_fs = FsAccess::builder()
+        .allow_root(codex.workspace())
+        .allow_root(claude.sessions_root())
+        .build()
+        .expect("fs");
+    let codex_context = LaunchContext { fs: &codex_fs, ..codex.context() };
     let (a, b) = block_on(async {
         tokio::join!(
             executor.execute_agent_cli(
@@ -423,9 +431,8 @@ fn a_resumed_turn_carries_the_session_and_an_unsupported_one_says_so() {
     assert!(!argv.iter().any(|a| a == "--session-id"));
 
     // EAC-FR-12, EAC-FR-30: Codex's resumed turn is its own grammar, not the fresh one with
-    // an addition — the session id sits before the `-` prompt, and the sandbox
-    // policy arrives as a config override because `exec resume` refuses
-    // `--sandbox`.
+    // an addition — the session id sits before the `-` prompt, and `exec resume`
+    // gets no `--sandbox`, which it refuses.
     let codex = harness_for("codex");
     let runtime = RecordingRuntime::replying(&codex_stdout(&envelope_json("success")));
     let mut resumed = task("continue");
@@ -440,9 +447,8 @@ fn a_resumed_turn_carries_the_session_and_an_unsupported_one_says_so() {
             "exec",
             "resume",
             "--json",
+            "--dangerously-bypass-approvals-and-sandbox",
             "--skip-git-repo-check",
-            "-c",
-            "sandbox_mode=\"danger-full-access\"",
             "abc",
             "-",
         ]
@@ -534,7 +540,7 @@ fn every_parameter_is_a_descriptor_or_a_named_constant() {
         );
     }
 
-    // Each descriptor names the specification it transcribes (CCP-FR-01, CDX-FR-01).
+    // Each descriptor names the specification it transcribes (CCP-FR-01).
     for descriptor in [&descriptor::CLAUDE_CODE, &descriptor::CODEX] {
         assert!(descriptor.protocol_spec.starts_with("specifications/infra/"));
     }
@@ -637,20 +643,20 @@ fn claude_codes_vector_is_the_ordered_sequence_ccp_defines() {
     assert_eq!(schema["properties"]["outcome"]["enum"][0], "success");
 }
 
-/// CDX-FR-02, CDX-FR-03, CDX-FR-04, CDX-FR-05, CDX-FR-06, CDX-FR-07, CDX-FR-08 / CDX-FR-02 / CDX-FR-09, CDX-FR-10 / CDX-FR-11 — Codex's two vectors, exactly.
+/// CDX-FR-02, CDX-FR-03, CDX-FR-04, CDX-FR-05, CDX-FR-06, CDX-FR-07, CDX-FR-08, CDX-FR-09, CDX-FR-10, CDX-FR-11 — Codex's two vectors, exactly.
 #[test]
 fn codexs_two_vectors_are_the_ordered_sequences_cdx_defines() {
-    let fresh = descriptor::CODEX.vendor_args(Some("gpt-5"), Some("low"), "IGNORED", None, None);
+    let fresh =
+        descriptor::CODEX.vendor_args(Some("gpt-6.1-sol"), Some("low"), "IGNORED", None, None);
     assert_eq!(
         fresh,
         [
             "exec",
             "--json",
-            "--sandbox",
-            "danger-full-access",
+            "--dangerously-bypass-approvals-and-sandbox",
             "--skip-git-repo-check",
             "--model",
-            "gpt-5",
+            "gpt-6.1-sol",
             "-c",
             "model_reasoning_effort=\"low\"",
             "-",
@@ -663,24 +669,34 @@ fn codexs_two_vectors_are_the_ordered_sequences_cdx_defines() {
     // CDX-FR-02, CDX-FR-06, CDX-FR-07: neither model nor effort resolved.
     assert_eq!(
         descriptor::CODEX.vendor_args(None, None, "IGNORED", None, None),
-        ["exec", "--json", "--sandbox", "danger-full-access", "--skip-git-repo-check", "-",]
+        [
+            "exec",
+            "--json",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "--skip-git-repo-check",
+            "-",
+        ]
     );
 
-    // CDX-FR-09, CDX-FR-10: the resumed grammar is its own, with the session id before the
-    // `-` prompt and the sandbox policy as a config override.
-    let resumed =
-        descriptor::CODEX.vendor_args(Some("gpt-5"), Some("low"), "IGNORED", Some("thr"), None);
+    // CDX-FR-09, CDX-FR-10: the resumed grammar is its own, with the session id
+    // before the `-` prompt.
+    let resumed = descriptor::CODEX.vendor_args(
+        Some("gpt-6.1-sol"),
+        Some("low"),
+        "IGNORED",
+        Some("thr"),
+        None,
+    );
     assert_eq!(
         resumed,
         [
             "exec",
             "resume",
             "--json",
+            "--dangerously-bypass-approvals-and-sandbox",
             "--skip-git-repo-check",
-            "-c",
-            "sandbox_mode=\"danger-full-access\"",
             "--model",
-            "gpt-5",
+            "gpt-6.1-sol",
             "-c",
             "model_reasoning_effort=\"low\"",
             "thr",
@@ -689,7 +705,16 @@ fn codexs_two_vectors_are_the_ordered_sequences_cdx_defines() {
     );
 
     // CDX-FR-10, CDX-FR-11: `exec resume` accepts none of these at the pinned version, so a
-    // resumed vector that carried one would be rejected before the run started.
+    // resumed vector that carried one would be rejected before the run started. The vector
+    // with every conditional part (the schema file and the reminder) is checked as well.
+    let resumed_full = descriptor::CODEX.argv(&descriptor::ArgvRequest {
+        model_id: Some("gpt-6.1-sol"),
+        effort_id: Some("low"),
+        assigned_session_id: "IGNORED",
+        resume_session: Some("thr"),
+        result_contract: Some(ResultContract::WorkResult),
+        milestone_reminder: true,
+    });
     for forbidden in [
         "--sandbox",
         "-s",
@@ -702,20 +727,25 @@ fn codexs_two_vectors_are_the_ordered_sequences_cdx_defines() {
         "-p",
         "--profile",
         "--oss",
+        "--local-provider",
         "--color",
     ] {
-        assert!(
-            !resumed.iter().any(|a| a == forbidden),
-            "{forbidden} appears in a resumed Codex vector"
-        );
+        for argv in [&resumed, &resumed_full] {
+            assert!(
+                !argv.iter().any(|a| a == forbidden),
+                "{forbidden} appears in a resumed Codex vector"
+            );
+        }
     }
 
-    // CDX-FR-26, CDX-FR-27: flags this protocol never generates, on either vector.
+    // CDX-FR-26, CDX-FR-27, CDX-FR-LJBK: flags this protocol never generates,
+    // on either vector.
     for forbidden in [
         "--full-auto",
-        "--dangerously-bypass-approvals-and-sandbox",
-        "--dangerously-bypass-hook-trust",
-        "--output-schema",
+        "--sandbox",
+        "--trust",
+        "--worktree",
+        "--remote",
         "-o",
         "--output-last-message",
         "-i",

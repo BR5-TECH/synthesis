@@ -284,6 +284,7 @@ pub(super) fn validate_supplementary_mount(
     host: &Path,
     execution_source: &str,
     session_state_source: Option<&Path>,
+    launch_files_source: Option<&Path>,
     credential_paths: &[String],
 ) -> Result<(), AgentExecutionError> {
     let refuse = |reason: &str| AgentExecutionError::SupplementaryMountInvalid(reason.to_string());
@@ -329,6 +330,13 @@ pub(super) fn validate_supplementary_mount(
     if let Some(session_state) = session_state_source {
         if overlaps(&session_state.to_string_lossy()) {
             return Err(refuse("bundle overlaps the vendor's session-state directory"));
+        }
+    }
+    // EAC-FR-BOXF: nor the launch files, which the container reads as fixed
+    // text of this application.
+    if let Some(launch_files) = launch_files_source {
+        if overlaps(&launch_files.to_string_lossy()) {
+            return Err(refuse("bundle overlaps the launch files"));
         }
     }
     for path in credential_paths {

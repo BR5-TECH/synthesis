@@ -45,6 +45,8 @@ mod mock_tests;
 
 mod bash_timeouts;
 mod capture;
+mod codex_grammar;
+mod codex_launch;
 mod concurrency;
 mod contracts;
 mod controls;
@@ -593,7 +595,7 @@ fn harness_verified_with(vendor: &str, config: Option<VerifyConfig>) -> Harness 
     };
     let banner = match vendor {
         "claude_code" => "claude 2.1.232",
-        "codex" => "codex 0.147.0",
+        "codex" => "codex-cli 0.172.0",
         _ => "opencode 1.0.0",
     };
 

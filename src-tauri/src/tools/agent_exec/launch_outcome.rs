@@ -1,5 +1,7 @@
-//! The two helpers of a launch that read no launch state: the check of the
-//! execution directory (EAC-FR-06) and the reading of a run's outcome.
+//! The helpers of a launch that read no launch state: the check of the
+//! execution directory (EAC-FR-06), the reading of a run's outcome, the
+//! removal of its container (EAC-FR-26), and the result of a resume that
+//! cannot continue its session (EAC-FR-30).
 //!
 //! Split out of `launch.rs` for size alone.
 
@@ -39,6 +41,7 @@ impl AgentCliExecutor {
         started: Instant,
         container_removed: bool,
         expected_session_id: Option<&str>,
+        result_contract: Option<protocol::ResultContract>,
     ) -> AgentExecution {
         let base = |process_outcome: ProcessOutcome, response, session| AgentExecution {
             process_outcome,
@@ -84,7 +87,7 @@ impl AgentCliExecutor {
             return refused(EnvelopeInvalid::NotUtf8, None);
         };
 
-        match descriptor.extract(text, expected_session_id) {
+        match descriptor.extract_for(text, expected_session_id, result_contract) {
             Ok((envelope, vendor_session)) => {
                 // The vendor's own session id fills in where the agent left one
                 // out: an agent does not reliably know the id its CLI assigned,
@@ -110,5 +113,63 @@ impl AgentCliExecutor {
                 refused(reason, session)
             }
         }
+    }
+}
+
+/// EAC-FR-26: how many times a removal is asked for before it is reported as
+/// not confirmed, and the pause between two attempts.
+const REMOVE_ATTEMPTS: usize = 3;
+const REMOVE_RETRY_PAUSE: Duration = Duration::from_millis(500);
+
+/// EAC-FR-26: remove the container, and ask again where the runtime refused.
+/// A refusal can be short-lived, such as a removal that is already in progress.
+pub(super) async fn remove_confirmed<S: LogSink + Clone + Send + Sync + 'static>(
+    sink: &S,
+    runtime: &dyn DockerRuntime,
+    name: &str,
+) -> bool {
+    for attempt in 1..=REMOVE_ATTEMPTS {
+        let refusal = match runtime.remove_container(name).await {
+            Ok(()) => return true,
+            Err(error) => error,
+        };
+        // The kind of refusal and no text of it: the runtime's own words stay
+        // out of the log.
+        logging::log_warn(
+            sink,
+            &BUFFER,
+            &[Domain::Ai, Domain::Backend],
+            "agent container removal was refused",
+            log_fields! {
+                "container" => name,
+                "attempt" => attempt as i64,
+                "kind" => match refusal {
+                    RuntimeError::Unavailable => "runtime_unavailable",
+                    RuntimeError::ImageUnavailable => "image_unavailable",
+                    RuntimeError::LaunchFailed(_) => "refused",
+                },
+            },
+        );
+        if attempt < REMOVE_ATTEMPTS {
+            tokio::time::sleep(REMOVE_RETRY_PAUSE).await;
+        }
+    }
+    false
+}
+
+/// EAC-FR-30: the result of a resume that cannot continue its session. No
+/// container was created, so there is nothing to remove and nothing left.
+pub(super) fn resume_unavailable(started: Instant) -> AgentExecution {
+    AgentExecution {
+        process_outcome: ProcessOutcome::Terminated,
+        exit_code: None,
+        response: None,
+        stdout: CapturedStream::default(),
+        stderr: CapturedStream::default(),
+        duration_ms: started.elapsed().as_millis() as u64,
+        resume_unavailable: true,
+        session: None,
+        refusal: None,
+        container_removed: true,
     }
 }

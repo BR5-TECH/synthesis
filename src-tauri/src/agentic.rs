@@ -18,15 +18,14 @@
 //! - **A record carries the fields of its own kind and no others** (AIC-FR-25).
 //!   That is what lets one tab strip render both kinds side by side without the
 //!   UI having to guess which fields are meaningful.
-//! - **Every secret here lives in the keychain** (AIC-FR-20) — an API-kind
-//!   vendor's key and Claude Code's OAuth token, one entry per vendor. Each is
-//!   written by a successful verification and never crosses the IPC boundary
-//!   except as `masked_hint`. Codex and OpenCode carry no credential at all,
-//!   each authenticating itself through a mechanism this module neither performs
-//!   nor observes. Claude Code is the exception because it is expected to run in
-//!   an isolated container with no session of its own, and its token is written
-//!   *after* the path verification succeeds rather than before (AIC-FR-28) — a
-//!   token is worth storing only for an installation that has proved to exist.
+//! - **Every secret here lives in the vault** (AIC-FR-20) — an API-kind
+//!   vendor's key, Claude Code's tokens, and Codex's optional access token. Each
+//!   is written by a successful verification and never crosses the IPC boundary
+//!   except as `masked_hint`. OpenCode carries no credential, and Codex in its
+//!   `login_folder` mode authenticates through a login directory this module
+//!   neither opens nor reads. A CLI token is written *after* the path
+//!   verification succeeds rather than before (AIC-FR-28) — a token is worth
+//!   storing only for an installation that has proved to exist.
 //! - **This module never runs an agent.** The only child process it spawns is a
 //!   version probe, under a bounded timeout, with no argument derived from the
 //!   open project (AIC-FR-04). `resolve_agentic_invocation` hands out the facts
@@ -48,8 +47,8 @@ use tauri::State;
 
 use crate::ai_shared::{
     mask_hint, normalize_base_url, redacted, AuthStyle, BaseUrlError, EffortOption, EndpointProber,
-    HttpEndpointProber, KeyPresence, ModelOption, ModelsOrigin, ProbeError, ProbeRequest,
-    SecretStore,
+    HttpEndpointProber, KeyPresence, ModelOption, ModelReasoning, ModelsOrigin, ProbeError,
+    ProbeRequest, SecretStore,
 };
 use crate::global_settings::{now_iso8601, GlobalSettingsStore};
 use crate::log_fields;
@@ -99,16 +98,17 @@ pub const ERR_NOT_AN_AGENT_ENDPOINT: &str = "not_an_agent_endpoint";
 pub const ERR_WRONG_CONFIG_KIND: &str = "wrong_config_kind";
 /// Detection was asked for a vendor that has no binary to find (AIC-FR-03).
 pub const ERR_NOT_A_CLI_INTEGRATION: &str = "not_a_cli_integration";
-/// A `{ path }` payload for a vendor that holds an OAuth token, with no token
-/// already stored (AIC-FR-26).
+/// A payload that keeps a stored token where none is stored: Claude Code's
+/// (AIC-FR-26), or Codex's access token (AIC-FR-ISWS).
 pub const ERR_TOKEN_MISSING: &str = "token_missing";
-/// A supplied OAuth token that is not shaped like one (AIC-FR-27).
+/// A supplied OAuth token, gateway token, or Codex access token that is not
+/// shaped like one (AIC-FR-27, AIC-FR-IOWS, AIC-FR-BXFL).
 pub const ERR_TOKEN_MALFORMED: &str = "token_malformed";
 /// The OS credential store would not answer (AIC-FR-24).
 pub const ERR_KEYCHAIN_UNAVAILABLE: &str = "keychain_unavailable";
 /// A model id absent from the record's current list (AIC-FR-10).
 pub const ERR_UNKNOWN_MODEL: &str = "unknown_model";
-/// An effort id absent from the vendor's declared levels (AIC-FR-10).
+/// An effort id that AIC-FR-SFMS does not offer for the selection (AIC-FR-10).
 pub const ERR_UNKNOWN_EFFORT: &str = "unknown_effort";
 /// AIC-FR-10: a turn kind outside the closed set. Never stored.
 pub const ERR_UNKNOWN_TURN_KIND: &str = "unknown_turn_kind";
@@ -154,6 +154,36 @@ pub const LEGACY_KEYCHAIN_SERVICE: &str = "com.synthesis.agentic-integration";
 /// directory is outside the vault entirely (ASV-FR-32).
 pub const VAULT_NAMESPACE: &[&str] = &["agentic", "vendors"];
 
+/// AIC-FR-KAVY: the variable that carries the Codex access token into one
+/// container (`../infra/CDX-codex-cli-protocol.md` CDX-FR-EUBZ).
+pub const CODEX_ACCESS_TOKEN_ENV: &str = "CODEX_ACCESS_TOKEN";
+
+/// AIC-FR-BXFL: the longest Codex access token accepted, in bytes.
+pub const CODEX_ACCESS_TOKEN_MAX_BYTES: usize = 16384;
+
+/// AIC-FR-BXFL: is this already-trimmed value shaped like a Codex access token?
+///
+/// Structural only: non-empty, at most 16384 bytes, and no whitespace or
+/// control character. No service is asked whether the token is genuine.
+pub fn is_valid_codex_access_token(token: &str) -> bool {
+    !token.is_empty()
+        && token.len() <= CODEX_ACCESS_TOKEN_MAX_BYTES
+        && !token.chars().any(|c| is_token_space(c) || c.is_control())
+}
+
+/// AIC-FR-BXFL: the whitespace a Codex access token is trimmed of and may not
+/// hold. It is the set the settings UI uses (ECMAScript whitespace), so that
+/// both sides judge one token the same way: Unicode whitespace and U+FEFF, but
+/// not U+0085, which is a control character and so is refused, never trimmed.
+pub fn is_token_space(c: char) -> bool {
+    (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}'
+}
+
+/// AIC-FR-BXFL: a supplied Codex access token, trimmed.
+pub fn trim_codex_access_token(raw: &str) -> &str {
+    raw.trim_matches(is_token_space)
+}
+
 /// The one prefix an OAuth token may carry (AIC-FR-27).
 const OAUTH_TOKEN_PREFIX: &str = "sk-ant-oat01-";
 
@@ -181,7 +211,9 @@ pub fn is_valid_oauth_token(token: &str) -> bool {
 }
 
 mod catalog;
+mod codex_models;
 mod commands;
+mod efforts;
 mod gateway;
 mod launch;
 mod logs;
@@ -189,9 +221,12 @@ mod operations;
 mod records;
 mod resolution;
 mod runner;
+mod verify_cli_auth;
 
 pub use catalog::*;
+pub use codex_models::*;
 pub use commands::*;
+pub use efforts::*;
 pub use gateway::*;
 pub use launch::*;
 use logs::*;
@@ -199,6 +234,7 @@ pub use operations::*;
 pub use records::*;
 pub use resolution::*;
 pub use runner::*;
+use verify_cli_auth::*;
 
 // ---------------------------------------------------------------------------
 // Managed state

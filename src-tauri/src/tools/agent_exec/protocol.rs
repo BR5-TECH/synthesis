@@ -23,7 +23,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 mod envelope;
+mod envelope_schema;
 pub use envelope::*;
+pub use envelope_schema::ENVELOPE_SCHEMA;
 
 /// The one protocol version this build speaks.
 pub const PROTOCOL_VERSION: u32 = 1;

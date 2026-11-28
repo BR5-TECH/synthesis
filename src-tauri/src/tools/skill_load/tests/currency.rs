@@ -104,20 +104,20 @@ fn one_instance_serves_two_callers_without_either_observing_the_other() {
     let one = std::thread::spawn(move || {
         block_on(a.call(LoadSkillArgs {
             name: "review".to_string(),
-            ecosystem: Some("codex".to_string()),
+            ecosystem: Some("claude".to_string()),
             file: None,
         }))
     });
     let two = std::thread::spawn(move || {
         block_on(b.call(LoadSkillArgs {
             name: "review".to_string(),
-            ecosystem: Some("opencode".to_string()),
+            ecosystem: Some("synthesis".to_string()),
             file: None,
         }))
     });
 
-    assert!(one.join().unwrap().unwrap().contains("codex copy"));
-    assert!(two.join().unwrap().unwrap().contains("opencode copy"));
+    assert!(one.join().unwrap().unwrap().contains("claude copy"));
+    assert!(two.join().unwrap().unwrap().contains("synthesis copy"));
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +135,7 @@ fn loading_leaves_the_project_exactly_as_it_was() {
 
     for (name, ecosystem) in [
         ("analyst", None),
-        ("review", Some("codex")),
+        ("review", Some("synthesis")),
         ("review", None),
         ("nothing at all", None),
         ("", None),

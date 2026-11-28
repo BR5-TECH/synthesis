@@ -282,6 +282,18 @@ impl DispatchAssert {
     }
 
     /// GXD-FR-XPUR / GRL-FR-OTRH: this dispatch resumes no earlier session.
+    /// EAC-FR-IGXZ: the dispatch carries `token` as its continuation token.
+    pub(crate) fn resumes_with_token(self, token: &str) -> Self {
+        assert_eq!(
+            self.seen.resume_token.as_deref(),
+            Some(token),
+            "[{}] dispatch {} resumes with the continuation token",
+            self.scenario,
+            self.index
+        );
+        self
+    }
+
     pub(crate) fn resumes_no_session(self) -> Self {
         assert_eq!(
             self.seen.resume_session, None,

@@ -18,8 +18,9 @@ pub enum PathOrigin {
 }
 
 /// Whether a credential-holding record's credential is readable (AIC-FR-15) —
-/// an API-kind vendor's key or Claude Code's OAuth token. Always `Unset` for a
-/// vendor that holds nothing, which is Codex and OpenCode (AIC-FR-25).
+/// an API-kind vendor's key, Claude Code's OAuth token, or Codex's access token
+/// in `access_token` mode. Always `Unset` for OpenCode, which holds nothing,
+/// and for Codex in `login_folder` mode (AIC-FR-25).
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum KeyState {
@@ -69,6 +70,41 @@ impl AuthMode {
     }
 }
 
+/// Codex's authentication mode (AIC-FR-UFYH). A record that stores no mode
+/// reads as `LoginFolder`.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CodexAuthMode {
+    /// The login directory the Codex CLI wrote on this machine (AIC-FR-30).
+    #[default]
+    LoginFolder,
+    /// A Codex access token held in the vault (AIC-FR-OFEO).
+    AccessToken,
+}
+
+impl CodexAuthMode {
+    fn is_login_folder(&self) -> bool {
+        *self == CodexAuthMode::LoginFolder
+    }
+
+    /// The wire spelling, which `VerifyConfig::auth_mode` carries for Codex.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "login_folder" => Some(CodexAuthMode::LoginFolder),
+            "access_token" => Some(CodexAuthMode::AccessToken),
+            _ => None,
+        }
+    }
+
+    /// The wire spelling, for a log field or the executor's session record.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CodexAuthMode::LoginFolder => "login_folder",
+            CodexAuthMode::AccessToken => "access_token",
+        }
+    }
+}
+
 /// The persisted half of an integration — what `synthesis.toml` carries
 /// (`GSS-global-settings-storage.md` GSS-FR-14).
 ///
@@ -99,6 +135,9 @@ pub struct AgenticRecord {
     /// Claude Code only (AIC-FR-WNQR).
     #[serde(skip_serializing_if = "AuthMode::is_subscription")]
     pub auth_mode: AuthMode,
+    /// Codex only (AIC-FR-UFYH). Absent from the file in `login_folder` mode.
+    #[serde(skip_serializing_if = "CodexAuthMode::is_login_folder")]
+    pub codex_auth_mode: CodexAuthMode,
     /// Claude Code only: the normalized gateway base URL (AIC-FR-YXAB).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gateway_base_url: Option<String>,
@@ -169,6 +208,8 @@ pub struct AgenticIntegration {
     pub masked_hint: Option<String>,
     /// AIC-FR-WNQR: `None` for every vendor but Claude Code.
     pub auth_mode: Option<AuthMode>,
+    /// AIC-FR-UFYH / AIC-FR-25: `None` for every vendor but Codex.
+    pub codex_auth_mode: Option<CodexAuthMode>,
     pub gateway_base_url: Option<String>,
     pub gateway_token_var: Option<String>,
     pub gateway_key_state: KeyState,
@@ -284,9 +325,11 @@ pub struct DetectedBinary {
 /// which a cleartext credential crosses into the backend, so it must never be
 /// serialisable back out or printable (AIC-FR-20).
 ///
-/// The shapes the vendors accept (AIC-FR-26): `{ path }` for Codex and OpenCode,
-/// `{ path, oauth_token }` or `{ path }` for Claude Code, and
-/// `{ base_url, api_key }` for an API-kind vendor. Anything else is
+/// The shapes the vendors accept (AIC-FR-26, AIC-FR-ISWS): `{ path }` for
+/// OpenCode; `{ path }`, `{ path, auth_mode: "login_folder" }`, or
+/// `{ path, auth_mode: "access_token", access_token? }` for Codex;
+/// `{ path, oauth_token }` or `{ path }` for Claude Code, with its gateway
+/// shape; and `{ base_url, api_key }` for an API-kind vendor. Anything else is
 /// `wrong_config_kind`.
 #[derive(Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
@@ -297,9 +340,14 @@ pub struct VerifyConfig {
     /// Claude Code only. `Some` means the author supplied a new token; `None`
     /// means they are keeping the one already stored (AIC-FR-26).
     pub oauth_token: Option<String>,
-    /// Claude Code only: `subscription` or `custom_gateway`. Absent means
-    /// `subscription` (AIC-FR-WNQR, AIC-FR-UFNB).
+    /// The vendor's authentication mode. For Claude Code, `subscription` or
+    /// `custom_gateway`, absent meaning `subscription` (AIC-FR-WNQR,
+    /// AIC-FR-UFNB). For Codex, `login_folder` or `access_token`, absent
+    /// meaning `login_folder` (AIC-FR-UFYH).
     pub auth_mode: Option<String>,
+    /// Codex, `access_token` mode only: `Some` is a new token, `None` keeps the
+    /// stored one (AIC-FR-ISWS).
+    pub access_token: Option<String>,
     /// Claude Code, gateway mode only (AIC-FR-UFNB).
     pub gateway_base_url: Option<String>,
     /// Claude Code, gateway mode only (AIC-FR-CVPW).
@@ -320,6 +368,7 @@ impl std::fmt::Debug for VerifyConfig {
             .field("api_key", &redacted(&self.api_key))
             .field("oauth_token", &redacted(&self.oauth_token))
             .field("auth_mode", &self.auth_mode)
+            .field("access_token", &redacted(&self.access_token))
             .field("gateway_base_url", &self.gateway_base_url)
             .field("gateway_token_var", &self.gateway_token_var)
             .field("gateway_token", &redacted(&self.gateway_token))

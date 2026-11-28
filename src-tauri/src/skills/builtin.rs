@@ -53,6 +53,7 @@ pub fn enumerate_builtin() -> (Vec<SkillDescriptor>, Vec<String>) {
                 // DSL-FR-10: the folder name stands in for a missing name.
                 name: front.name.clone().unwrap_or_else(|| folder_name.to_string()),
                 description: front.description.clone().unwrap_or_default(),
+                shadowed_paths: Vec::new(),
             }),
             _ => excluded.push(folder_name.to_string()),
         }

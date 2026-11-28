@@ -42,10 +42,17 @@ pub(super) fn log_verify_attempt<S: LogSink + Clone + Send + 'static>(
             "newOauthToken" => config.oauth_token.is_some(),
             // AIC-FR-WNQR / AIC-FR-SXVA: the mode, whether a new gateway token
             // came with it, and how many author entries — never a value.
-            "authMode" => match config.auth_mode.as_deref() {
-                None => "subscription",
-                Some(raw) => AuthMode::parse(raw).map_or("unrecognised", |_| raw),
+            //
+            // AIC-FR-UFYH: Codex names its own modes, so the absent default
+            // and the recognised spellings depend on the vendor.
+            "authMode" => match (vendor_descriptor(vendor).is_some_and(AgenticVendor::holds_access_token), config.auth_mode.as_deref()) {
+                (false, None) => "subscription",
+                (true, None) => "login_folder",
+                (false, Some(raw)) => AuthMode::parse(raw).map_or("unrecognised", |_| raw),
+                (true, Some(raw)) => CodexAuthMode::parse(raw).map_or("unrecognised", |m| m.as_str()),
             },
+            // AIC-FR-20: whether a new access token came, never the token.
+            "newAccessToken" => config.access_token.is_some(),
             "newGatewayToken" => config.gateway_token.is_some(),
             "envVars" => config.env_vars.as_ref().map_or(0, Vec::len),
         },
@@ -71,7 +78,11 @@ pub(super) fn log_verify_outcome<S: LogSink + Clone + Send + 'static>(
                 "keyState" => format!("{:?}", integration.key_state),
                 "version" => integration.version.clone().unwrap_or_else(|| "none".into()),
                 "models" => integration.models.len(),
+                // AIC-FR-08: says whether the list came from the probe or from
+                // the bundled catalog, so a stale list can be explained.
+                "modelsOrigin" => format!("{:?}", integration.models_origin),
                 "authMode" => format!("{:?}", integration.auth_mode),
+                "codexAuthMode" => integration.codex_auth_mode.map_or("none", |m| m.as_str()),
                 "durationMs" => duration_ms,
             },
         ),

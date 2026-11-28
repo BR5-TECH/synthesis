@@ -188,8 +188,10 @@ The same `Script` answers, effects and hooks serve a merge run. Two chain stages
 39  discard cascade           discard, revert and discard of a failed run remove the queued runs behind, runs ahead stay, drafts unlocked
 40  failed run                the failed run holds the queue and no slot, runs behind stay queued, no restart, discard removes them
 41  total time limit          awaiting_author with total_time_limit, work committed, stream and slot held, Continue resets the used time alone
+42  diverged pull             a pull run lands a merge commit or a replayed chain, an unsettled rebase blocks at the apply, a moved target fails the run
 43  answer corrections        a refused answer is corrected once in its session, a second refusal rests the run, an uncorrectable refusal stops at once, a restart keeps the correction
 44  check gate                a red, unfinished or missing check record gets one check correction and one escalate correction, then checks_not_passed; a waiver passes
+45  decision ledger           every answer enters the ledger and every later turn carries it, a repeated question adds an entry
 46  openspec propose          a change written by the work turn passes the validate gate, one commit holds the change files alone
 47  openspec rework           a ready review records one change edit proposal, no branch and no working copy written
 48  openspec apply            ticks read from instructions apply over the working copy, one commit lands, a plan update rests and Continue carries the answers
@@ -197,6 +199,10 @@ The same `Script` answers, effects and hooks serve a merge run. Two chain stages
 50  openspec archive conflict a repair cause refuses the merge, one notice and one repair run, no second notice for the same files
 51  openspec retry            one retry after a recorded 2000 ms wait, two timeouts block the run with diagnostics
 52  openspec image probe      a passing probe is kept in the checkpoint, a missing CLI blocks before the first turn
+53  resume while stopping     a Continue during a stopping turn starts no second loop, the run waits in the queue
+54  container left running    a stopped turn whose container removal is unconfirmed rests blocked, also after a Resume, and commits nothing
+55  codex run                 the production executor drives a Codex run: the 0.172 vector, milestones, an escalation that resumes
+                              its thread under the same auth mode, graduation; an auth mode switch between turns starts a fresh thread
 ```
 
 ## Non-functional requirements

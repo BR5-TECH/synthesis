@@ -668,7 +668,9 @@ fn the_codex_configuration_mount_is_writable_and_nothing_else_is_mounted() {
         .map(|(_, value)| value)
         .collect();
 
-    assert_eq!(mounts.len(), 2, "the worktree and the login directory, only");
+    // EAC-FR-BOXF: every Codex launch also mounts its fixed launch files, read-only.
+    assert_eq!(mounts.len(), 3, "the worktree, the login directory and the launch files, only");
+    assert!(mounts[2].contains("target=/opt/synthesis/vendor") && mounts[2].contains("readonly"));
     assert!(mounts[0].ends_with(&format!(",target={}", harness.workspace_target())));
     assert!(!mounts[0].contains("readonly"));
     assert!(mounts[1].contains("target=/home/agent/.codex"));

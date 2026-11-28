@@ -1,9 +1,9 @@
 /**
  * Which agentic vendors Synthesis implements (AII-FR-OTQY, SET-FR-GVED).
  *
- * Only Claude Code is tested. The settings surfaces keep a tab for every other
- * vendor, but show it as "To Be Implemented..." and let the author change
- * nothing in it. The backend is not gated: this set decides only what the
+ * Only Claude Code and Codex are tested. The settings surfaces keep a tab for
+ * every other vendor, but show it as "To Be Implemented..." and let the author
+ * change nothing in it. The backend is not gated: this set decides only what the
  * settings UI offers.
  */
 import type { AgenticVendorId } from "../types";
@@ -11,7 +11,7 @@ import type { AgenticVendorId } from "../types";
 /** The vendors whose settings the author can change. */
 export const IMPLEMENTED_AGENTIC_VENDORS: ReadonlySet<AgenticVendorId> = new Set<
   AgenticVendorId
->(["claude_code"]);
+>(["claude_code", "codex"]);
 
 /** The statement at the top of a tab whose vendor is not implemented yet. */
 export const TO_BE_IMPLEMENTED_MESSAGE = "To Be Implemented...";

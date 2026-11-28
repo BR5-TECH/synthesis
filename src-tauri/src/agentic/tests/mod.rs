@@ -57,8 +57,11 @@ impl FileProbe for Arc<FakeFs> {
 
 #[derive(Default)]
 struct FakeRunner {
-    /// path -> (args joined) -> outcome
+    /// path -> outcome, for any arguments
     responses: StdMutex<HashMap<String, CliOutput>>,
+    /// (path, args joined by spaces) -> outcome. Wins over `responses`, so a
+    /// test can give a model probe an answer of its own (AIC-FR-TBTH).
+    by_args: StdMutex<HashMap<(String, String), CliOutput>>,
     error: StdMutex<Option<&'static str>>,
     calls: StdMutex<Vec<(String, Vec<String>)>>,
 }
@@ -84,6 +87,13 @@ impl FakeRunner {
         }
         r
     }
+    /// The same binary, answering `args` with `stdout` and `success`.
+    fn answer(&self, path: &str, args: &[&str], stdout: &str, success: bool) {
+        self.by_args.lock().unwrap().insert(
+            (path.to_string(), args.join(" ")),
+            CliOutput { stdout: stdout.to_string(), stderr: String::new(), success },
+        );
+    }
     fn failing(kind: &'static str) -> Arc<Self> {
         let r = Arc::new(Self::default());
         *r.error.lock().unwrap() = Some(kind);
@@ -104,6 +114,10 @@ impl CliRunner for Arc<FakeRunner> {
                 "notexec" => RunError::NotExecutable,
                 _ => RunError::Failed("boom".into()),
             });
+        }
+        let key = (path.to_string_lossy().to_string(), args.join(" "));
+        if let Some(output) = self.by_args.lock().unwrap().get(&key).cloned() {
+            return Ok(output);
         }
         self.responses
             .lock()
@@ -329,6 +343,9 @@ fn claude_config(oauth_token: Option<&str>) -> VerifyConfig {
 mod active_choice;
 mod api_vendors;
 mod cli_verification;
+mod codex_auth;
+mod codex_models;
+mod effort_ladders;
 mod gateway;
 mod gateway_bedrock;
 mod invocation;

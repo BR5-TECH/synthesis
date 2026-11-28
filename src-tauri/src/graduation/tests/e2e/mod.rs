@@ -26,6 +26,7 @@ mod change_set;
 mod check_gate;
 mod check_gate_episodes;
 mod check_gate_stops;
+mod codex_journeys;
 mod corrections;
 mod dispatch_assert;
 mod escalations;

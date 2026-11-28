@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { AgenticIntegration, ClaudeAuthMode } from "../types";
-import { SETTINGS_TABLIST_STYLE, settingsTabStyle } from "./settingsTabs";
 import { toneColor, type Busy } from "./aiIntegrationsShared";
+import { AgenticAuthTabs, AgenticField as Field, type AuthTab } from "./AgenticAuthTabs";
 import { canVerifyAgentic, oauthTokenValidation, type AgenticDraft } from "./agenticDraft";
 import {
   gatewayTokenValidation,
@@ -20,7 +20,7 @@ import {
  * and no other's (AII-FR-IUUM).
  */
 
-const SUB_TABS: ReadonlyArray<{ mode: ClaudeAuthMode; label: string }> = [
+const SUB_TABS: ReadonlyArray<AuthTab<ClaudeAuthMode>> = [
   { mode: "subscription", label: "Subscription" },
   { mode: "custom_gateway", label: "Custom Gateway" },
 ];
@@ -34,65 +34,12 @@ export function ClaudeAuthTabs({
   onChoose: (mode: ClaudeAuthMode) => void;
 }) {
   return (
-    <div
-      role="tablist"
-      aria-label="Claude Code authentication"
-      style={{ ...SETTINGS_TABLIST_STYLE, marginBottom: 14 }}
-    >
-      {SUB_TABS.map((tab) => (
-        <button
-          key={tab.mode}
-          role="tab"
-          aria-selected={tab.mode === mode}
-          className="btn btn--ghost btn--sm"
-          data-testid={`agentic-auth-tab-${tab.mode}`}
-          style={settingsTabStyle(tab.mode === mode)}
-          onClick={() => onChoose(tab.mode)}
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** One labelled text field in the shape the other agentic fields use. */
-function Field({
-  id,
-  label,
-  note,
-  noteId,
-  noteTestId,
-  warn,
-  marginBottom = 10,
-  children,
-}: {
-  id: string;
-  label: string;
-  note?: string;
-  noteId?: string;
-  noteTestId?: string;
-  warn?: boolean;
-  marginBottom?: number;
-  children: ReactNode;
-}) {
-  return (
-    <div className="picker-field" style={{ marginBottom }}>
-      <label className="picker-field__label" htmlFor={id}>
-        {label}
-      </label>
-      {children}
-      {note && (
-        <div
-          id={noteId}
-          className="t-ui-xs"
-          data-testid={noteTestId}
-          style={{ marginTop: 4, color: toneColor(warn ? "warn" : "muted") }}
-        >
-          {note}
-        </div>
-      )}
-    </div>
+    <AgenticAuthTabs
+      ariaLabel="Claude Code authentication"
+      tabs={SUB_TABS}
+      mode={mode}
+      onChoose={onChoose}
+    />
   );
 }
 

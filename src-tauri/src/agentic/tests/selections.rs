@@ -253,8 +253,8 @@ fn aic_ts_gvwt_a_project_override_carries_no_selections_of_its_own() {
 
     set_model_impl(&h.store, &h.ai, "claude_code", None, Some("opus")).unwrap();
     set_effort_impl(&h.store, &h.ai, "claude_code", None, Some("high")).unwrap();
-    set_model_impl(&h.store, &h.ai, "codex", None, Some("gpt-5")).unwrap();
-    set_model_impl(&h.store, &h.ai, "codex", Some("work"), Some("gpt-5.1")).unwrap();
+    set_model_impl(&h.store, &h.ai, "codex", None, Some("gpt-6-sol")).unwrap();
+    set_model_impl(&h.store, &h.ai, "codex", Some("work"), Some("gpt-6.1-sol")).unwrap();
     set_effort_impl(&h.store, &h.ai, "codex", None, Some("low")).unwrap();
 
     let resolve = || match resolve_agentic_invocation(&h.store, &h.ai, "/dev/acme", Some("work"))
@@ -267,7 +267,7 @@ fn aic_ts_gvwt_a_project_override_carries_no_selections_of_its_own() {
     set_project_impl(&h.store, &h.ai, "/dev/acme", Some("codex")).unwrap();
     assert_eq!(
         resolve(),
-        ("codex".to_string(), Some("gpt-5.1".into()), Some("low".into())),
+        ("codex".to_string(), Some("gpt-6.1-sol".into()), Some("low".into())),
         "the overridden integration's own override and default, and nothing of the other's",
     );
 
@@ -275,7 +275,7 @@ fn aic_ts_gvwt_a_project_override_carries_no_selections_of_its_own() {
     assert_eq!(resolve(), ("claude_code".to_string(), Some("opus".into()), Some("high".into())),);
 
     set_project_impl(&h.store, &h.ai, "/dev/acme", Some("codex")).unwrap();
-    assert_eq!(resolve(), ("codex".to_string(), Some("gpt-5.1".into()), Some("low".into())),);
+    assert_eq!(resolve(), ("codex".to_string(), Some("gpt-6.1-sol".into()), Some("low".into())),);
     // Neither record was written by the moving of the project between them.
     let list = list_integrations_impl(&h.store, &h.ai).unwrap();
     let claude = find(&list, "claude_code");
@@ -283,8 +283,8 @@ fn aic_ts_gvwt_a_project_override_carries_no_selections_of_its_own() {
     assert!(claude.model_overrides.is_empty(), "{:?}", claude.model_overrides);
     assert_eq!(claude.selected_effort.as_deref(), Some("high"));
     let codex = find(&list, "codex");
-    assert_eq!(codex.selected_model.as_deref(), Some("gpt-5"));
-    assert_eq!(codex.model_overrides.get("work").map(String::as_str), Some("gpt-5.1"),);
+    assert_eq!(codex.selected_model.as_deref(), Some("gpt-6-sol"));
+    assert_eq!(codex.model_overrides.get("work").map(String::as_str), Some("gpt-6.1-sol"),);
     assert_eq!(codex.selected_effort.as_deref(), Some("low"));
 }
 

@@ -1,6 +1,7 @@
 // The Skills selector of the persona editor —
 // `specifications/ui/AGT-agents.md` AGT-FR-KVDA, AGT-FR-PQSM, AGT-FR-JRWE,
-// AGT-FR-XGWD, AGT-FR-LCMT, AGT-FR-WTSR, and the seventh control of AGT-FR-12.
+// AGT-FR-XGWD, AGT-FR-LCMT, AGT-FR-WTSR, AGT-FR-HZPN, and the seventh control of
+// AGT-FR-12.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -10,9 +11,11 @@ import { resetLogBufferForTest } from "../logging";
 import { PersonalAgents, ProjectAgents } from "./Agents";
 import {
   BUILTIN_SKILLS_NOTE,
+  entrySelected,
   selectorEntries,
   synthesisEntries,
   toggledOptOuts,
+  toggledProjectSelection,
 } from "./SkillsSelector";
 import type { Agent, AgentDraft, AiApiCatalog, ProjectAgent, ProjectSkill } from "../types";
 
@@ -284,7 +287,13 @@ describe("the Skills selector", () => {
     const synthesisEmpty = await within(editor).findByTestId("agent-synthesis-skills-empty");
     expect(synthesisEmpty).toHaveTextContent(".synthesis/skills");
     const projectEmpty = within(editor).getByTestId("agent-skills-empty");
-    for (const folder of [".claude/skills", ".codex/skills", ".github/skills", ".opencode/skills"]) {
+    for (const folder of [
+      ".agents/skills",
+      ".claude/skills",
+      ".codex/skills",
+      ".github/skills",
+      ".opencode/skills",
+    ]) {
       expect(projectEmpty).toHaveTextContent(folder);
     }
     expect(within(editor).queryAllByTestId("agent-skill-option")).toHaveLength(0);
@@ -372,16 +381,16 @@ describe("the Skills selector", () => {
 
   it("AGT-FR-XGWD: the project entries are the registry's project skills, then the stored paths it lacks", () => {
     expect(selectorEntries(SKILLS, ["x/SKILL.md", PROJECT[0].path])).toEqual([
-      { path: PROJECT[0].path, name: "analyst" },
-      { path: PROJECT[1].path, name: "review" },
-      { path: "x/SKILL.md", name: null },
+      { path: PROJECT[0].path, name: "analyst", shadowedPaths: [] },
+      { path: PROJECT[1].path, name: "review", shadowedPaths: [] },
+      { path: "x/SKILL.md", name: null, shadowedPaths: [] },
     ]);
   });
 
   it("AGT-FR-KVDA, AGT-FR-JRWE: the synthesis entries are the registry's synthesis skills alone", () => {
     expect(synthesisEntries(SKILLS)).toEqual([
-      { path: GLOSSARY, name: "glossary" },
-      { path: STYLE, name: "style" },
+      { path: GLOSSARY, name: "glossary", shadowedPaths: [] },
+      { path: STYLE, name: "style", shadowedPaths: [] },
     ]);
   });
 
@@ -390,5 +399,95 @@ describe("the Skills selector", () => {
     expect(toggledOptOuts(["a", "c"], "c", false)).toEqual(["a", "c"]);
     expect(toggledOptOuts(["a", "c", "b"], "c", true)).toEqual(["a", "b"]);
     expect(toggledOptOuts(["a"], "z", true)).toEqual(["a"]);
+  });
+});
+
+/** `review` in two IDE folders: the registry keeps the `.agents` copy and
+ * reports the `.codex` copy as shadowed (DSL-FR-17, DSL-FR-KWQE). */
+const KEPT_REVIEW = ".agents/skills/review/SKILL.md";
+const SHADOWED_REVIEW = ".codex/skills/review/SKILL.md";
+const DEDUPED: ProjectSkill[] = [
+  {
+    path: KEPT_REVIEW,
+    ecosystem: "agents",
+    name: "review",
+    description: "Review a change.",
+    shadowedPaths: [SHADOWED_REVIEW],
+  },
+  { ...PROJECT[0], shadowedPaths: [] },
+  ...SYNTHESIS,
+];
+
+describe("the Skills selector with deduplicated project skills", () => {
+  it("AGT-FR-HZPN: one entry for each name, and a stored path of a dropped copy is found, not missing", () => {
+    const entries = selectorEntries(DEDUPED, [SHADOWED_REVIEW]);
+    expect(entries).toEqual([
+      { path: KEPT_REVIEW, name: "review", shadowedPaths: [SHADOWED_REVIEW] },
+      { path: PROJECT[0].path, name: "analyst", shadowedPaths: [] },
+    ]);
+    expect(entrySelected(entries[0], [SHADOWED_REVIEW])).toBe(true);
+    expect(entrySelected(entries[1], [SHADOWED_REVIEW])).toBe(false);
+  });
+
+  it("AGT-FR-HZPN: clearing an entry removes its path and every stored shadowed path; selecting adds its own path once", () => {
+    const [review] = selectorEntries(DEDUPED, []);
+    expect(
+      toggledProjectSelection(["a", SHADOWED_REVIEW, KEPT_REVIEW, "b"], review, false),
+    ).toEqual(["a", "b"]);
+    expect(toggledProjectSelection(["a"], review, true)).toEqual(["a", KEPT_REVIEW]);
+    // Already selected through a dropped copy: the stored list stays as it is.
+    const stored = ["a", SHADOWED_REVIEW];
+    expect(toggledProjectSelection(stored, review, true)).toBe(stored);
+  });
+
+  it("AGT-FR-HZPN: a stored dropped copy shows its entry selected, and confirm sends the stored path unchanged", async () => {
+    const b = backend({
+      skills: DEDUPED,
+      projectAgents: [
+        {
+          agent: agent({ id: "a1", nickname: "arch", skills: [SHADOWED_REVIEW] }),
+          scope: "project",
+          availability: "ready",
+        },
+      ],
+    });
+    render(<ProjectAgents />);
+    await userEvent.click(await screen.findByTestId("agent-edit"));
+    const editor = await screen.findByTestId("agent-editor");
+    await within(editor).findByTestId("agent-project-skills");
+    const project = options(editor, "agent-project-skills");
+    expect(pathsOf(project)).toEqual([KEPT_REVIEW, PROJECT[0].path]);
+    expect(checkedOf(project)).toEqual([true, false]);
+    expect(within(editor).queryByTestId("agent-skill-missing")).toBeNull();
+
+    await userEvent.click(within(editor).getByTestId("agent-editor-confirm"));
+    await waitFor(() => expect(calls(b, "update_agent")).toHaveLength(1));
+    const { draft } = calls(b, "update_agent")[0].args as { draft: AgentDraft };
+    expect(draft.skills).toEqual([SHADOWED_REVIEW]);
+  });
+
+  it("AGT-FR-HZPN: clearing the entry of a stored dropped copy removes that path", async () => {
+    const b = backend({
+      skills: DEDUPED,
+      projectAgents: [
+        {
+          agent: agent({ id: "a1", nickname: "arch", skills: [SHADOWED_REVIEW, PROJECT[0].path] }),
+          scope: "project",
+          availability: "ready",
+        },
+      ],
+    });
+    render(<ProjectAgents />);
+    await userEvent.click(await screen.findByTestId("agent-edit"));
+    const editor = await screen.findByTestId("agent-editor");
+    await within(editor).findByTestId("agent-project-skills");
+    const project = options(editor, "agent-project-skills");
+    await userEvent.click(within(project[0]).getByRole("checkbox"));
+    expect(checkedOf(options(editor, "agent-project-skills"))).toEqual([false, true]);
+
+    await userEvent.click(within(editor).getByTestId("agent-editor-confirm"));
+    await waitFor(() => expect(calls(b, "update_agent")).toHaveLength(1));
+    const { draft } = calls(b, "update_agent")[0].args as { draft: AgentDraft };
+    expect(draft.skills).toEqual([PROJECT[0].path]);
   });
 });

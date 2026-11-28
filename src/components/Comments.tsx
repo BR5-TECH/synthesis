@@ -79,11 +79,11 @@ function wholeNoun(discussion: Discussion): string {
     case "artifact":
       return "file";
     case "draft":
-      return "draft";
+      return "change";
     case "note":
       return "note";
     case "change":
-      return "change";
+      return "OpenSpec change";
     case "map":
       return "map";
   }

@@ -81,7 +81,7 @@ pub async fn apply_progress<R: tauri::Runtime>(
                     "The task progress of the OpenSpec change {change} could not be read: {}.",
                     error.code()
                 ),
-                "Continue the run to read the task progress and review the change again.",
+                "Continue the run to read the task progress and review the OpenSpec change again.",
             );
             Err(())
         }
@@ -144,12 +144,12 @@ fn apply_causes(
     if let Some(progress) = progress {
         let open = progress.tasks.iter().filter(|task| !task.done).count();
         if open > 0 {
-            causes.push(format!("{open} task(s) of the change are not done."));
+            causes.push(format!("{open} task(s) of the OpenSpec change are not done."));
         }
     }
     if let Some(validation) = validation.filter(|v| !v.valid) {
         causes.push(format!(
-            "The change does not pass `openspec validate --strict`: {} issue(s) stand.",
+            "The OpenSpec change does not pass `openspec validate --strict`: {} issue(s) stand.",
             validation.issues.len()
         ));
     }
@@ -163,7 +163,7 @@ fn apply_causes(
         .collect();
     if !written.is_empty() {
         causes.push(format!(
-            "The work changes files of the change folder other than tasks.md: {}.",
+            "The work changes files of the OpenSpec change folder other than tasks.md: {}.",
             written.join(", ")
         ));
     }
@@ -184,19 +184,21 @@ fn rework_causes(run: &GraduationRun, worktree: &Path, folder: &str) -> Vec<Stri
         .collect();
     if !outside.is_empty() {
         causes.push(format!(
-            "The work changes paths outside the change folder: {}.",
+            "The work changes paths outside the OpenSpec change folder: {}.",
             outside.join(", ")
         ));
     }
     let deleted = deleted_in_folder(run, worktree, folder);
     if !deleted.is_empty() {
-        causes
-            .push(format!("The work deletes files of the change folder: {}.", deleted.join(", ")));
+        causes.push(format!(
+            "The work deletes files of the OpenSpec change folder: {}.",
+            deleted.join(", ")
+        ));
     }
     causes
 }
 
-/// The files of the change folder that the base commit holds and the run's
+/// The files of the OpenSpec change folder that the base commit holds and the run's
 /// tree does not.
 fn deleted_in_folder(run: &GraduationRun, worktree: &Path, folder: &str) -> Vec<String> {
     let Some(base) = run.base_commit.as_deref() else {

@@ -84,7 +84,7 @@ export function useGraduationCapacity(draftId: string): CapacityRead {
 
 /** The limit as words, for example "2 graduation runs". */
 function limitWords(limit: number): string {
-  return `${limit} graduation ${limit === 1 ? "run" : "runs"}`;
+  return `${limit} implementation ${limit === 1 ? "run" : "runs"}`;
 }
 
 /** GSD-FR-NOID: the capacity could not be read. */
@@ -94,7 +94,7 @@ export function CapacityUnread({ reason }: { reason: string | null }) {
       className="graduation-start__notice"
       data-testid="graduation-start-capacity-unread"
     >
-      The project's limit of graduation runs could not be read, so this window
+      The project's limit of implementation runs could not be read, so this window
       does not know if a project slot is free.
       {reason ? ` ${reason}` : ""}
     </p>

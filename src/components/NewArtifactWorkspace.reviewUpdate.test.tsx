@@ -158,7 +158,7 @@ describe("a withdrawn change in the draft's document (DCR-FR-OZVU)", () => {
     };
     backend();
     renderWorkspace();
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
     await waitFor(() => {
       expect(decorated("h1")).not.toBeNull();
       expect(decorated("h3")).not.toBeNull();
@@ -176,7 +176,7 @@ describe("a withdrawn change in the draft's document (DCR-FR-OZVU)", () => {
     await waitFor(() =>
       expect(document.querySelector('[data-focused="true"]')?.getAttribute("data-hunk")).toBe("h1"),
     );
-    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing change 1 of 2");
+    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing edit 1 of 2");
     for (const chip of screen.queryAllByTestId("hunk-chip")) {
       expect(chip).not.toHaveAccessibleName(/second|middle/i);
     }
@@ -194,7 +194,7 @@ describe("an update of the open proposal (DCR-FR-WRJP)", () => {
     };
     backend();
     renderWorkspace();
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
     await waitFor(() => {
       expect(decorated("h1")).not.toBeNull();
       expect(decorated("h2")).not.toBeNull();
@@ -234,7 +234,7 @@ describe("an update of the open proposal (DCR-FR-WRJP)", () => {
     expect(screen.getByTestId("review-counter")).toHaveTextContent("of 3");
     expect(gutterMarks()).toHaveLength(3);
     act(() => setFocusedHunk("d1", "h4"));
-    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing change 3 of 3");
+    expect(screen.getByTestId("review-counter")).toHaveTextContent("reviewing edit 3 of 3");
     // The changed hunk shows the agent's new text, not the dropped edit.
     await waitFor(() => expect(document.body).toHaveTextContent("The revised line."));
     expect(document.body).not.toHaveTextContent("The author's own line.");

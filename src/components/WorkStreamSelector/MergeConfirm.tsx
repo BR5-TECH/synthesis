@@ -93,7 +93,7 @@ export function MergeConfirm({
             Close
           </button>
           <button className="btn btn--default btn--sm" onClick={onOpenChanges}>
-            Open Changes
+            Open Commits
           </button>
         </div>
       </div>

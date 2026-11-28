@@ -173,15 +173,19 @@ describe("the title, the provenance and the publication (GRU-FR-HDPQ, GRU-FR-NWE
     expect(line.querySelector("b")).toBeNull();
   });
 
-  it("GRU-FR-ZKYU: no text, label or accessible name of a merge run calls it a graduation of a draft", async () => {
+  it("GRU-FR-ZKYU, PVC-FR-HMJD, PVC-FR-ZQRE: no text, label or accessible name of a merge run calls it a graduation of a draft, in the old words or the new", async () => {
     await serve(makeMergeRun("m1", "working"));
 
+    // The old words (draft, graduation) and the new words (change,
+    // implementation) of PVC-FR-HMJD and PVC-FR-ZQRE.
+    const ofADraft = /draft|graduation of|implementation of|\bchange\b/i;
     const row = screen.getByTestId("graduation-row");
-    expect(row.textContent).not.toMatch(/draft/i);
-    expect(row.getAttribute("aria-label")).not.toMatch(/draft|graduation of/i);
-    expect(region().textContent).not.toMatch(/draft/i);
+    expect(row.textContent).not.toMatch(ofADraft);
+    expect(row.getAttribute("aria-label")).not.toMatch(ofADraft);
+    expect(region().textContent).not.toMatch(ofADraft);
+    expect(region().textContent).not.toMatch(/Open change|Implemented from the change/i);
     for (const labelled of region().querySelectorAll("[aria-label]")) {
-      expect(labelled.getAttribute("aria-label")).not.toMatch(/draft/i);
+      expect(labelled.getAttribute("aria-label")).not.toMatch(ofADraft);
     }
     // The stage row names itself for the run by its title.
     expect(screen.getByTestId("run-progress").textContent).toContain(
@@ -495,14 +499,14 @@ describe("the result (GRU-FR-JRMA)", () => {
 });
 
 describe("what a merge run does not offer (GRU-FR-ELFZ)", () => {
-  const draftOnly = ["Open draft", "Restart", "Revert"];
+  const draftOnly = ["Open change", "Restart", "Revert"];
   const offered = () =>
     [...region().querySelectorAll("button")].map(
       (b) => b.textContent?.trim() ?? "",
     );
 
   it.each(["queued", "working", "reviewing", "blocked", "interrupted", "awaiting_author", "failed"] as const)(
-    "GRU-FR-ELFZ: a %s merge run offers no Open draft, Restart or Revert",
+    "GRU-FR-ELFZ: a %s merge run offers no Open change, Restart or Revert",
     async (state) => {
       await serve(makeMergeRun("m1", state, { commits: ["abc1234"] }), true);
       for (const label of draftOnly) {
@@ -534,15 +538,15 @@ describe("what a merge run does not offer (GRU-FR-ELFZ)", () => {
   it("GRU-FR-ELFZ: the region has no source-draft route, no graduated badge and no link to a draft", async () => {
     await serve(makeMergeRun("m1", "completed"), true);
     expect(region().querySelector("a")).toBeNull();
-    expect(region().textContent).not.toMatch(/graduated/i);
-    expect(screen.queryByRole("button", { name: /draft/i })).toBeNull();
+    expect(region().textContent).not.toMatch(/graduated|implemented/i);
+    expect(screen.queryByRole("button", { name: /draft|^Open change$/i })).toBeNull();
   });
 
-  it("GRU-FR-ELFZ: a draft run in the same list still offers Open draft", async () => {
+  it("GRU-FR-ELFZ: a draft run in the same list still offers Open change", async () => {
     queue = makeQueue([makeRun("r1", "working")]);
     await open();
     await screen.findByTestId("graduation-provenance");
-    expect(screen.getByRole("button", { name: "Open draft" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open change" })).toBeInTheDocument();
   });
 });
 

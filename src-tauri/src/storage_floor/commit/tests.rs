@@ -105,7 +105,7 @@ fn one_event_commits_its_draft_and_leaves_the_author_staged() {
     index.write().expect("write");
 
     assert_eq!(commit_once(&f.root, ID, DraftEvent::Created), None, "the commit is taken");
-    assert_eq!(f.head_message(), "draft: create \"A draft\"", "the message names the event");
+    assert_eq!(f.head_message(), "change: create \"A draft\"", "the message names the event");
     for owned in [
         format!(".synthesis/drafts/{ID}/draft.toml"),
         format!(".synthesis/drafts/{ID}/files/Prompt.md"),
@@ -141,7 +141,7 @@ fn a_deletion_event_records_every_tracked_path_of_its_draft_as_deleted() {
     std::fs::remove_dir_all(f.root.path().join(format!(".synthesis/drafts/UI/{ID}")))
         .expect("the draft goes");
     assert_eq!(commit_once(&f.root, ID, DraftEvent::Deleted), None, "the deletion is committed");
-    assert_eq!(f.head_message(), "draft: delete \"A draft\"");
+    assert_eq!(f.head_message(), "change: delete \"A draft\"");
     assert!(!f.head_holds(&format!(".synthesis/drafts/UI/{ID}/draft.toml")));
     assert!(!f.head_holds(&format!(".synthesis/drafts/UI/{ID}/proposals/p.toml")));
     assert!(
@@ -423,9 +423,9 @@ fn events_are_committed_one_at_a_time_in_order() {
 
     let repo = f.repo();
     let head = repo.head().and_then(|h| h.peel_to_commit()).expect("a head");
-    assert_eq!(head.message().unwrap_or_default(), "draft: graduate \"Second\"");
+    assert_eq!(head.message().unwrap_or_default(), "change: implement \"Second\"");
     let parent = head.parent(0).expect("a parent");
-    assert_eq!(parent.message().unwrap_or_default(), "draft: create \"First\"");
+    assert_eq!(parent.message().unwrap_or_default(), "change: create \"First\"");
     assert_eq!(parent.parent_id(0).expect("a grandparent"), before, "two events, two commits");
     assert!(f.dirty().is_empty(), "and the worktree is clean");
     assert!(pending_events(&f.root).is_empty(), "and the queue is drained");
@@ -433,15 +433,17 @@ fn events_are_committed_one_at_a_time_in_order() {
 
 // PST-FR-YWXF: the message is the event and the draft's current name, and
 // nothing else — a line break in a name does not open a commit body.
+// PVC-FR-MBQE, PST-FR-YWXF: the subject calls the draft a change, and its
+// graduation an implementation.
 #[test]
 fn the_message_names_the_event_and_the_draft() {
-    assert_eq!(message(DraftEvent::Created, "Push button"), "draft: create \"Push button\"");
-    assert_eq!(message(DraftEvent::Deleted, "Push button"), "draft: delete \"Push button\"");
+    assert_eq!(message(DraftEvent::Created, "Push button"), "change: create \"Push button\"");
+    assert_eq!(message(DraftEvent::Deleted, "Push button"), "change: delete \"Push button\"");
     assert_eq!(
         message(DraftEvent::GraduationStarted, "Push button"),
-        "draft: graduate \"Push button\""
+        "change: implement \"Push button\""
     );
-    assert_eq!(message(DraftEvent::Created, "two\nlines"), "draft: create \"two lines\"");
+    assert_eq!(message(DraftEvent::Created, "two\nlines"), "change: create \"two lines\"");
 }
 
 // DRS-FR-VECL / DRS-FR-32: a draft moved between folders since its last commit

@@ -500,3 +500,132 @@ fn the_answer_comment_is_the_newest_of_the_agent() {
     assert_eq!(super::super::capture::answer_comment_of(&thread, "eve"), Some(eve));
     assert_eq!(super::super::capture::answer_comment_of(&thread, "bob"), None);
 }
+
+/// A round of one call of `name` and its result.
+fn call_round(call_id: &str, name: &str) -> Vec<Message> {
+    let call = rig::completion::message::ToolCall::from_wire(
+        call_id,
+        rig::completion::message::ToolFunction::new(
+            rig::completion::message::ToolName::new(name).expect("name"),
+            serde_json::json!({ "rationale": "why" }),
+        ),
+    );
+    vec![
+        Message::Assistant(rig::completion::message::AssistantMessage::new(vec![
+            rig::completion::message::AssistantContent::ToolCall(call.clone()),
+        ])),
+        Message::tool_result(call.id.clone(), call.function.name.clone(), "RECORDED"),
+    ]
+}
+
+/// The names of the calls of the replayed rounds of `plan`.
+fn replayed_calls(plan: &ReplayPlan) -> Vec<String> {
+    plan.blocks
+        .iter()
+        .flat_map(|b| b.rounds.iter())
+        .flat_map(|m| match m {
+            Message::Assistant(a) => a
+                .content
+                .iter()
+                .filter_map(|c| match c {
+                    rig::completion::message::AssistantContent::ToolCall(call) => {
+                        Some(call.function.name.to_string())
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
+        })
+        .collect()
+}
+
+/// The plan of a turn on a discussion of `target` in `root`, where arch
+/// answered T1 with one stored call of `propose_change_edits`, and both
+/// `propose_change_edits` and `propose_openspec_change_edits` are offered.
+fn plan_on(root: &crate::fs::RootFs, target: &DiscussionTarget) -> ReplayPlan {
+    let thread = crate::comments::open_discussion_unchecked(
+        root,
+        target,
+        None,
+        "T1 @arch first?".into(),
+        Vec::new(),
+        &human(),
+        "2026-01-01T00:00:00Z",
+    )
+    .expect("discussion");
+    let add = |by: &Participant, body: &str, at: &str| -> comments::Discussion {
+        crate::comments::add_comment_to(
+            root,
+            thread.log_ref(),
+            &thread.id,
+            body.into(),
+            Vec::new(),
+            Vec::new(),
+            Stamp { by, at },
+        )
+        .expect("comment")
+    };
+    add(&agent("arch"), "A1-ANSWER", "2026-01-01T00:01:00Z");
+    let thread = add(&human(), "T2 @arch and now?", "2026-01-01T00:02:00Z");
+    let (t1, a1, t2) = (
+        thread.comments[0].id.clone(),
+        thread.comments[1].id.clone(),
+        thread.comments[2].id.clone(),
+    );
+    let memory = ReplayMemory::default();
+    memory.capture(
+        memory_key(&thread),
+        entry(&t1, Some(&a1), call_round("c1", crate::tools::propose_draft_changes::NAME)),
+    );
+    let offered =
+        [crate::tools::propose_draft_changes::NAME, crate::tools::propose_change_edits::NAME]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+    let inputs = ReplayInputs {
+        roots: Roots::same(root),
+        thread: &thread,
+        trigger_comment_id: &t2,
+        key: memory_key(&thread),
+        offered,
+        provider: "anthropic",
+        model_id: "m",
+        window: 1_000_000,
+        history_bound: 40_000,
+        instruction_tokens: 100,
+        update_memory: true,
+    };
+    let mut input = build_input(Roots::same(root), &ConversationOrigin::of(&thread), &t2);
+    plan_replay(&memory, &inputs, &mut input)
+}
+
+// PVC-FR-LGYT, PVC-FR-PXOE: on an OpenSpec change discussion, a stored call of
+// `propose_change_edits` is an old call of the OpenSpec tool, so the replay
+// gives it the current name. On a change of the Changes panel, the same entry
+// is a call of the change tool and keeps its name.
+#[test]
+fn the_target_kind_tells_the_current_name_of_a_replayed_call() {
+    assert_eq!(crate::tools::propose_draft_changes::NAME, "propose_change_edits");
+    assert_eq!(crate::tools::propose_change_edits::NAME, "propose_openspec_change_edits");
+
+    let dir = tempfile::TempDir::new().expect("tempdir");
+    let path = crate::changes::canonicalize_lenient(dir.path());
+    let base = path.join("openspec/changes/add-auth");
+    std::fs::create_dir_all(&base).expect("dirs");
+    std::fs::write(base.join("proposal.md"), "## Why\n\nUsers need to log in.\n")
+        .expect("proposal");
+    let root = crate::fs::RootFs::for_root(&path);
+    crate::change_proposals::set_test_stream("layout-stream", "Auth stream", root.clone());
+    let on_change = plan_on(
+        &root,
+        &DiscussionTarget::Change { stream_id: "layout-stream".into(), change: "add-auth".into() },
+    );
+    assert_eq!(on_change.blocks.len(), 1, "the entry is replayed");
+    assert_eq!(replayed_calls(&on_change), vec!["propose_openspec_change_edits"]);
+
+    let created =
+        crate::drafts::create_draft_at_root(&root, Some("layout-draft")).expect("a draft");
+    let on_draft = plan_on(&root, &DiscussionTarget::Draft { draft_id: created.draft.id });
+    assert_eq!(on_draft.blocks.len(), 1, "the entry is replayed");
+    assert_eq!(replayed_calls(&on_draft), vec!["propose_change_edits"]);
+}

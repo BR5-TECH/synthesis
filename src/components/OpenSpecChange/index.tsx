@@ -426,7 +426,7 @@ function ChangeWorkspace({
           {/* OCW-FR-ZZHS: a worktree that is not a stream's working copy
               carries no discussion column. */}
           <p className="openspec-change__no-discussion t-ui-xs" role="note" data-testid="openspec-change-no-discussion">
-            A change is discussed on its work stream. Open it from its run or its draft to discuss it.
+            An OpenSpec change is discussed on its work stream. Open it from its run or its change to discuss it.
           </p>
           {readingPane(null)}
         </>

@@ -83,7 +83,7 @@ describe("DDS-FR-WKTQ: what the strip names", () => {
     render(<HunkSubject reference={hunkReference("h2")} />);
 
     const strip = screen.getByTestId("discussion-subject");
-    expect(strip).toHaveTextContent("Change 2 of 3");
+    expect(strip).toHaveTextContent("Edit 2 of 3");
     expect(strip).toHaveTextContent("Spec.md");
     const state = screen.getByTestId("discussion-subject-state");
     expect(state).toHaveTextContent("rejected");
@@ -105,14 +105,14 @@ describe("DDS-FR-WKTQ: what the strip names", () => {
 
   it("DDS-FR-WKTQ, DDS-FR-RHKW: before the proposal is read, the strip names the place the composer names", async () => {
     render(<HunkSubject reference={hunkReference("h2")} place={{ position: 2, total: 3 }} />);
-    expect(screen.getByTestId("discussion-subject")).toHaveTextContent("Change 2 of 3");
+    expect(screen.getByTestId("discussion-subject")).toHaveTextContent("Edit 2 of 3");
     await screen.findByTestId("discussion-subject-after");
   });
 
   it("DDS-FR-WKTQ: once the proposal is read, the strip names the change by the proposal's own count", async () => {
     seed(["pending", "pending", "pending"]);
     render(<HunkSubject reference={hunkReference("h2")} place={{ position: 1, total: 1 }} />);
-    expect(screen.getByTestId("discussion-subject")).toHaveTextContent("Change 2 of 3");
+    expect(screen.getByTestId("discussion-subject")).toHaveTextContent("Edit 2 of 3");
     await screen.findByTestId("discussion-subject-after");
   });
 
@@ -125,7 +125,7 @@ describe("DDS-FR-WKTQ: what the strip names", () => {
     expect(state).toHaveAttribute("data-state", "missing");
     expect(screen.queryByRole("button", { name: "Show in document" })).toBeNull();
     // The place the composer named still stands.
-    expect(screen.getByTestId("discussion-subject")).toHaveTextContent("Change 2 of 3");
+    expect(screen.getByTestId("discussion-subject")).toHaveTextContent("Edit 2 of 3");
   });
 
   it("DDS-FR-WKTQ: a change its proposal's reading does not hold is still named, and the reason is logged", async () => {
@@ -141,7 +141,7 @@ describe("DDS-FR-WKTQ: what the strip names", () => {
         { draftId: DRAFT, proposalId: "p1", hunkId: "h2" },
       ),
     );
-    expect(screen.getByTestId("discussion-subject")).toHaveTextContent("Change 2 of 2");
+    expect(screen.getByTestId("discussion-subject")).toHaveTextContent("Edit 2 of 2");
     expect(screen.queryByTestId("discussion-subject-after")).toBeNull();
   });
 });
@@ -226,14 +226,14 @@ describe("DDS-FR-PBXN: what the strip shows of the change", () => {
     expect(screen.getByTestId("discussion-subject")).toHaveAttribute("data-expanded", "false");
   });
 
-  it("DDS-FR-PBXN: a reading that failed says so, and still names the change", async () => {
+  it("DDS-FR-PBXN, PVC-FR-VBPY: a reading that failed says so in terms of an edit, and still names the change", async () => {
     backend("fail");
     seed(["pending", "pending"]);
     render(<HunkSubject reference={hunkReference("h2")} />);
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "The text of this change could not be read.",
+      "The text of this edit could not be read.",
     );
-    expect(screen.getByTestId("discussion-subject")).toHaveTextContent("Change 2 of 2");
+    expect(screen.getByTestId("discussion-subject")).toHaveTextContent("Edit 2 of 2");
     expect(screen.queryByTestId("discussion-subject-after")).toBeNull();
   });
 });

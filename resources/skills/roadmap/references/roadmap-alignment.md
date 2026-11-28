@@ -16,7 +16,7 @@ The plan references are the HLD and the other documents that the plan answers to
 
 - A milestone holds the work that must be done together for one deliverable. Check that each milestone holds the features that its deliverable needs.
 - Work that another item depends on goes in the same milestone or an earlier one.
-- When a change moves an issue, move its children with it, or say why they stay.
+- When an edit moves an issue, move its children with it, or say why they stay.
 - When a milestone holds more work than its deliverable needs, propose to move the extra work to a later milestone.
 
 ## When the plan and the design do not agree

@@ -77,14 +77,14 @@ describe("the notice table", () => {
       ],
       [f({ code: "cli_timed_out" }), "transient", "The OpenSpec CLI did not finish in time, also after one more try."],
       [f({ code: "cli_failed", detail: "2" }), "transient", "The OpenSpec CLI stopped before it answered, also after one more try."],
-      [f({ code: "cli_rejected" }), "content", "OpenSpec reported a problem in the OpenSpec files of this change."],
+      [f({ code: "cli_rejected" }), "content", "OpenSpec reported a problem in the files of this OpenSpec change."],
       [
         f({ code: "change_not_ready", detail: "design,tasks" }),
         "content",
-        "The change misses these artifacts: design, tasks. Complete them before Apply.",
+        "The OpenSpec change misses these artifacts: design, tasks. Complete them before Apply.",
       ],
-      [f({ code: "tasks_incomplete", change: "c" }), "content", 'The change "c" has tasks that are not done.'],
-      [f({ code: "archive_tasks_incomplete", change: "c" }), "content", 'The change "c" has tasks that are not done.'],
+      [f({ code: "tasks_incomplete", change: "c" }), "content", 'The OpenSpec change "c" has tasks that are not done.'],
+      [f({ code: "archive_tasks_incomplete", change: "c" }), "content", 'The OpenSpec change "c" has tasks that are not done.'],
       [
         f({ code: "archive_spec_update_failed", change: "c" }),
         "content",
@@ -95,7 +95,7 @@ describe("the notice table", () => {
         "content",
         'The live specifications are not valid after the deltas of "c".',
       ],
-      [f({ code: "archive_validation_failed", change: "c" }), "content", 'The change "c" is not valid.'],
+      [f({ code: "archive_validation_failed", change: "c" }), "content", 'The OpenSpec change "c" is not valid.'],
       [
         f({ code: "archive_target_exists", change: "c" }),
         "content",
@@ -146,14 +146,21 @@ describe("the notice table", () => {
     expect(classifyingCode(f({ code: "cli_rejected" }))).toBe("cli_rejected");
   });
 
-  it("OFN notice table: the change name falls back to the change of the surface", () => {
+  it("OFN notice table, PVC-FR-NEXL: the change name falls back to the change of the surface, and the sentence names an OpenSpec change", () => {
     expect(noticeSentence(f({ code: "tasks_incomplete" }), "add-logout")).toBe(
-      'The change "add-logout" has tasks that are not done.',
+      'The OpenSpec change "add-logout" has tasks that are not done.',
     );
     expect(noticeSentence(f({ code: "tasks_incomplete", change: "own" }), "other")).toContain('"own"');
-    // With no change at all, the sentence reads "this change", with no quotes.
+    // With no change at all, the sentence reads "this OpenSpec change", with no quotes.
     expect(noticeSentence(f({ code: "archive_spec_update_failed" }))).toBe(
-      "The deltas of this change do not apply to the live specifications.",
+      "The deltas of this OpenSpec change do not apply to the live specifications.",
+    );
+    // A sentence that starts with the change does not repeat "OpenSpec change".
+    expect(noticeSentence(f({ code: "tasks_incomplete" }))).toBe(
+      "This OpenSpec change has tasks that are not done.",
+    );
+    expect(noticeSentence(f({ code: "archive_validation_failed" }))).toBe(
+      "This OpenSpec change is not valid.",
     );
   });
 
@@ -173,16 +180,16 @@ describe("the notice table", () => {
 });
 
 describe("the repair sentences", () => {
-  it("OFN-FR-RCWY: a repair run adds that a rework run started to repair the change", () => {
+  it("OFN-FR-RCWY, PVC-FR-NEXL: a repair run adds that a rework run started to repair the OpenSpec change", () => {
     expect(repairSentence(f({ code: "archive_failed", repairRunId: "g-1" }))).toBe(
-      "A rework run started to repair the change.",
+      "A rework run started to repair the OpenSpec change.",
     );
   });
 
   it("OFN-FR-LRCZ: a repair refusal is said in words, and every other code by its code", () => {
     const said = (repairRefusal: string) => repairSentence(f({ code: "archive_failed", repairRefusal }));
-    expect(said("proposal_pending")).toBe("No repair run started: the change holds a pending edit proposal.");
-    expect(said("openspec_run_active")).toBe("No repair run started: a run of the change is active.");
+    expect(said("proposal_pending")).toBe("No repair run started: the OpenSpec change holds a pending edit proposal.");
+    expect(said("openspec_run_active")).toBe("No repair run started: a run of the OpenSpec change is active.");
     for (const image of ["vendor_image_unconfigured", "vendor_image_invalid", "vendor_execution_unsupported", "docker_backend_unverified", "docker_socket_unavailable"]) {
       expect(said(image)).toBe("No repair run started: the agent image is not ready.");
     }

@@ -226,7 +226,7 @@ fn every_prompt_tells_the_agent_it_may_gather_without_naming_a_tool() {
     let draft = DISCUSS_DRAFT_PROMPT_TEMPLATE.to_lowercase();
     for section in [
         "## how to work",
-        "## what is worth a change",
+        "## what is worth an edit",
         "## text that is settled",
         "## when the current comment is a decision",
     ] {
@@ -242,12 +242,12 @@ fn every_prompt_tells_the_agent_it_may_gather_without_naming_a_tool() {
         ("do not start a new pass", "to stop once a pass is decided"),
         // The materiality bar (CVL-FR-MZTK), which is what a turn with nothing
         // substantial to add answers with instead of a wording change.
-        ("alters what the other agent will build", "what makes a change worth offering"),
+        ("alters what the other agent will build", "what makes an edit worth offering"),
         // The settled-text rule, which is what the history rendering of
         // AGC-FR-RVQP exists to make obeyable.
-        ("do not offer a change to settled text a second time", "to leave settled text alone"),
+        ("do not offer an edit to settled text a second time", "to leave settled text alone"),
         // The first of the three decision cases, which is the one that ends a pass.
-        ("offer no changes", "that a decision is not a request for more changes"),
+        ("offer no edits", "that a decision is not a request for more edits"),
     ] {
         assert!(draft.contains(rule), "discuss-draft.md does not tell the agent {missing}",);
     }

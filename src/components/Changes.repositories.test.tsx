@@ -106,7 +106,7 @@ const finishedListener = () => {
 };
 
 const rollbackButton = () =>
-  screen.getByRole("button", { name: "Discard selected changes" }) as HTMLButtonElement;
+  screen.getByRole("button", { name: "Discard selected files" }) as HTMLButtonElement;
 
 beforeEach(() => {
   resetLogBufferForTest();
@@ -158,7 +158,7 @@ describe("repository groups (CHG-FR-BYWJ, CHG-FR-IGSD, CHG-FR-UMCU, CHG-FR-EQYC)
     renderPanel();
     await showAllFiles();
     await waitFor(() => expect(repositoryRows()).toHaveLength(2));
-    await userEvent.type(screen.getByLabelText("Filter changes"), "guide");
+    await userEvent.type(screen.getByLabelText("Filter files"), "guide");
     await waitFor(() => expect(repositoryRows()).toHaveLength(1));
     expect(repositoryRows()[0].querySelector(".tree-row__name")).toHaveTextContent(
       "vendor/kit",
@@ -377,7 +377,7 @@ describe("the pointer row (CHG-FR-GBTE, CHG-FR-AYTR, CHG-FR-DGHI)", () => {
     await waitFor(() => expect(rowNames()).toContain("guide.md"));
     await userEvent.click(checkbox("guide.md"));
     // `kit` matches the pointer and not the file.
-    await userEvent.type(screen.getByLabelText("Filter changes"), "kit");
+    await userEvent.type(screen.getByLabelText("Filter files"), "kit");
     await waitFor(() => expect(rowNames()).not.toContain("guide.md"));
     expect(checkbox("kit")).not.toBeChecked();
     expect(checkbox("kit")).toBeEnabled();
@@ -417,7 +417,7 @@ describe("the pointer row (CHG-FR-GBTE, CHG-FR-AYTR, CHG-FR-DGHI)", () => {
     await waitFor(() => expect(rowNames()).toContain("guide.md"));
     await userEvent.click(checkbox("guide.md"));
     // Narrow the text so the pointer row is hidden and the file stays.
-    await userEvent.type(screen.getByLabelText("Filter changes"), "guide");
+    await userEvent.type(screen.getByLabelText("Filter files"), "guide");
     await waitFor(() => expect(rowNames()).not.toContain("kit"));
     await userEvent.click(primary());
     await waitFor(() => expect(onRequestCommitMessage).toHaveBeenCalledOnce());

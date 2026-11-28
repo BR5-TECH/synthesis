@@ -460,7 +460,7 @@ describe("NAW-FR-51: the refusals divide in what they tell the author", () => {
     expect(imageRefusal("image_too_large")).toMatch(/larger/i);
     expect(imageRefusal("malformed_image")).toMatch(/could not be read/i);
     expect(imageRefusal("draft_locked_by_graduation")).toMatch(
-      /graduation holds it/i,
+      /implementation holds it/i,
     );
     expect(imageRefusal("asset_store_failed")).toMatch(/try again/i);
     // Each is distinct, so an author can tell which of the three happened.

@@ -33,7 +33,7 @@ fn a_spent_total_time_rests_the_run_and_continue_resets_only_the_used_time() {
         .expect_blocker_absent()
         .expect_pass(1)
         .expect_commits(1)
-        .expect_commit_message_contains(0, "Abandoned graduation turn")
+        .expect_commit_message_contains(0, "Abandoned implementation turn")
         .expect_stream_held()
         // GRL-FR-EFTM: the stage limit of three hours is larger than the total
         // of half an hour, so the turn ran under the total.

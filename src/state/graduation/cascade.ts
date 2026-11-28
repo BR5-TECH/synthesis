@@ -48,7 +48,7 @@ export function removalStatement(removed: GraduationRun[]): string {
   const noun = removed.length === 1 ? "run" : "runs";
   return (
     `This also removes the ${noun} queued behind it: ${names}. ` +
-    "Their drafts return to the active drafts, not graduated."
+    "Their changes return to the active changes, not implemented."
   );
 }
 

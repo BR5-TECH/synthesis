@@ -50,7 +50,7 @@ fn the_rule_of_the_spoken_part_names_no_tool() {
     for prompt in prompts() {
         let rule = prompt.split("## Spoken part").nth(1).expect("the section");
         let rule = rule.split("## Rules").next().expect("its end");
-        for tool in ["ask_user_comment", "propose_draft_changes", "propose_prompt_changes"] {
+        for tool in ["ask_user_comment", "propose_change_edits", "propose_prompt_changes"] {
             assert!(!rule.contains(tool), "{tool} in {rule}");
         }
     }

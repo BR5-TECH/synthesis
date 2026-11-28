@@ -503,7 +503,7 @@ describe("File menu wiring (SNV-FR-23..26)", () => {
       false,
     );
     expect(
-      screen.queryByRole("button", { name: "Draft actions" }),
+      screen.queryByRole("button", { name: "Change actions" }),
     ).not.toBeInTheDocument();
   });
 

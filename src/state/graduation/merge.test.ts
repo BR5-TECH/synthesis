@@ -142,7 +142,7 @@ describe("stages and state words (GRU-FR-YSTV)", () => {
 });
 
 describe("what a merge run offers (GRU-FR-ELFZ, GRU-FR-WDWB, GRU-FR-DVWY, GRU-FR-TOKG)", () => {
-  it("GRU-FR-ELFZ: it offers no Open draft in any state", () => {
+  it("GRU-FR-ELFZ: it offers no Open change in any state", () => {
     for (const state of [
       "queued",
       "working",
@@ -241,7 +241,7 @@ describe("the notification a merge run raises (GRU-FR-BLSS)", () => {
   it("GRU-FR-BLSS, GRU-FR-ZKYU: it names the run by its title and never calls it a graduation", () => {
     const run = makeMergeRun("m1", "awaiting_author");
     expect(raiseTitle(run, "Waiting on you")).toBe("Merge · Waiting on you");
-    expect(raiseTitle(makeRun("r1"), "Working")).toBe("Graduation · Working");
+    expect(raiseTitle(makeRun("r1"), "Working")).toBe("Implementation · Working");
     expect(raiseStatement(run)).toBe("“Merge editor-work” is waiting for your decision.");
   });
 

@@ -84,11 +84,11 @@ describe("every edit affordance is inert while the host keeps the canvas inert (
     await within(panel()).findByRole("option", { name: "Other" });
 
     const p = within(panel());
-    for (const name of ["Rename", "Remove", "Unlink draft", "Remove path src/main.ts"]) {
+    for (const name of ["Rename", "Remove", "Unlink change", "Remove path src/main.ts"]) {
       expect(p.getByRole("button", { name })).toBeDisabled();
     }
     expect(p.getByRole("button", { name: /^Remove reference/ })).toBeDisabled();
-    for (const name of ["Kind", "Link draft", "Add path", "Add reference"]) {
+    for (const name of ["Kind", "Link change", "Add path", "Add reference"]) {
       expect(p.getByRole("combobox", { name })).toBeDisabled();
     }
     expect(p.getByRole("button", { name: "Edit the description" })).toBeDisabled();
@@ -116,7 +116,7 @@ describe("every edit affordance is inert while the host keeps the canvas inert (
     expect(within(missing).getByRole("button", { name: "Unlink" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Add to plan" })).toBeDisabled();
     selectItem("t2");
-    expect(within(panel()).getByRole("button", { name: "Create draft" })).toBeDisabled();
+    expect(within(panel()).getByRole("button", { name: "Create change" })).toBeDisabled();
     fireEvent.doubleClick(screen.getByTestId("flow-item-name-t2"));
     fireEvent.doubleClick(screen.getByTestId("flow-item-name-f1"));
     expect(screen.queryByRole("textbox", { name: "Item name" })).toBeNull();
@@ -149,7 +149,7 @@ describe("an edit the plan cannot take when its backend call returns (FLO-FR-NRB
 
     selectItem("t2");
     await act(async () => {
-      fireEvent.click(within(panel()).getByRole("button", { name: "Create draft" }));
+      fireEvent.click(within(panel()).getByRole("button", { name: "Create change" }));
     });
 
     expect(await within(itemEl("t2")).findByRole("alert")).toHaveTextContent(unlinkedDraftText("T2"));

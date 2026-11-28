@@ -202,7 +202,7 @@ describe("folder and group counts (CHG-FR-50..FR-53)", () => {
 
     // A fragment matching one of the two leaves the folder standing, counting
     // the one it still reveals — the two filters narrow a count alike.
-    await userEvent.type(screen.getByLabelText("Filter changes"), "alph");
+    await userEvent.type(screen.getByLabelText("Filter files"), "alph");
     await waitFor(() => expect(countOn("src")).toBe("1 file"));
     expect(rowNames()).toEqual(["Revisioned", "src", "alpha.ts"]);
   });
@@ -220,7 +220,7 @@ describe("folder and group counts (CHG-FR-50..FR-53)", () => {
 
     // A text filter matching nothing empties the tree rather than leaving a
     // folder — or a group — behind stating 0 (CHG-FR-08 / CHG-FR-16).
-    await userEvent.type(screen.getByLabelText("Filter changes"), "zzz");
+    await userEvent.type(screen.getByLabelText("Filter files"), "zzz");
     await waitFor(() => expect(rowNames()).toEqual([]));
     expect(document.querySelectorAll(".tree-row__count")).toHaveLength(0);
   });

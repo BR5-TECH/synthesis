@@ -5,7 +5,7 @@ Several agents will answer one message of an author. You choose the one agent th
 ## What you are given
 
 - `<candidates>` — the agents that the message addresses. Each one has a nickname, a title, and the instructions of its persona.
-- `<artifact>`, `<draft>`, or `<note_context>` — the material under discussion.
+- `<artifact>`, `<openspec_change>`, `<note_context>`, or `<map_context>` — the material under discussion. `<artifact>` holds a file or the prompt of a change.
 - `<discussion_history>` — what was said so far.
 - `<current_comment>` — the message of the author.
 

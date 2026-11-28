@@ -145,15 +145,15 @@ describe("BottomPanel Runs surface (RUN-FR-04, RUN-FR-06 / SNV-FR-47)", () => {
     renderRuns();
     const control = screen.getByRole("tablist", { name: "Runs sections" });
     expect(
-      within(control).getByRole("tab", { name: "Graduation" }),
+      within(control).getByRole("tab", { name: "Implementation" }),
     ).toHaveAttribute("aria-selected", "true");
     expect(
       within(control).getByRole("tab", { name: "Agent output" }),
     ).toHaveAttribute("aria-selected", "false");
     // GRU-FR-HKBD / RUN-FR-09: an empty queue says so and offers no control to
     // begin one.
-    expect(screen.getByText("Nothing graduating")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Graduate$/ })).toBeNull();
+    expect(screen.getByText("Nothing implementing")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Graduate$|Implement$/ })).toBeNull();
   });
 
   it("RUN-FR-02, RUN-FR-10: a route to a run selects the graduation section once, not for good", async () => {
@@ -168,7 +168,7 @@ describe("BottomPanel Runs surface (RUN-FR-04, RUN-FR-06 / SNV-FR-47)", () => {
       />,
     );
     expect(
-      await screen.findByRole("tab", { name: "Graduation" }),
+      await screen.findByRole("tab", { name: "Implementation" }),
     ).toHaveAttribute("aria-selected", "true");
 
     await userEvent.click(screen.getByRole("tab", { name: "Agent output" }));
@@ -197,7 +197,7 @@ describe("BottomPanel Runs surface (RUN-FR-04, RUN-FR-06 / SNV-FR-47)", () => {
       />,
     );
     await waitFor(() =>
-      expect(screen.getByRole("tab", { name: "Graduation" })).toHaveAttribute(
+      expect(screen.getByRole("tab", { name: "Implementation" })).toHaveAttribute(
         "aria-selected",
         "true",
       ),
@@ -219,13 +219,13 @@ describe("BottomPanel Runs surface (RUN-FR-04, RUN-FR-06 / SNV-FR-47)", () => {
         onGraduationSectionActive={(active) => reported.push(active)}
       />,
     );
-    await screen.findByRole("tab", { name: "Graduation" });
+    await screen.findByRole("tab", { name: "Implementation" });
     expect(latest()).toBe(true);
 
     // Moving the section control off graduation says so at once.
     await userEvent.click(screen.getByRole("tab", { name: "Agent output" }));
     expect(latest()).toBe(false);
-    await userEvent.click(screen.getByRole("tab", { name: "Graduation" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Implementation" }));
     expect(latest()).toBe(true);
 
     // So does the panel showing another surface altogether.
@@ -357,7 +357,7 @@ describe("the Logs surface at the bottom panel's seam", () => {
     // Runs is the surface it always was — at its empty state, since nothing in
     // the window started a run (RUN-FR-09) — and Logs is gone. It opens on its
     // graduation section (RUN-FR-10), which is likewise empty.
-    expect(await screen.findByText("Nothing graduating")).toBeInTheDocument();
+    expect(await screen.findByText("Nothing implementing")).toBeInTheDocument();
     expect(document.querySelector(".logs")).toBeNull();
   });
 });
@@ -405,7 +405,7 @@ describe("the graduation section's count (RUN-FR-10)", () => {
     };
   }
 
-  it("RUN-FR-10: the label counts the runs the project's streams hold between them", async () => {
+  it("PVC-FR-QWAN, RUN-FR-10: the Implementation label counts the runs the project's streams hold between them", async () => {
     vi.mocked(invoke).mockImplementation(async (cmd: string) => {
       if (cmd === "list_graduation_queue")
         return {
@@ -429,8 +429,8 @@ describe("the graduation section's count (RUN-FR-10)", () => {
     });
     await waitFor(() =>
       expect(
-        within(control).getByRole("tab", { name: /Graduation/ }).textContent,
-      ).toBe("Graduation · 2"),
+        within(control).getByRole("tab", { name: /Implementation/ }).textContent,
+      ).toBe("Implementation · 2"),
     );
   });
 });
@@ -469,8 +469,8 @@ describe("a PR summary run in the Runs panel (RUN-FR-UPNU)", () => {
     const control = await screen.findByRole("tablist", { name: "Runs sections" });
     await waitFor(() =>
       expect(
-        within(control).getByRole("tab", { name: /Graduation/ }).textContent,
-      ).toBe("Graduation · 2"),
+        within(control).getByRole("tab", { name: /Implementation/ }).textContent,
+      ).toBe("Implementation · 2"),
     );
     await userEvent.click(within(control).getByRole("tab", { name: /Agent output/ }));
     await waitFor(() => {

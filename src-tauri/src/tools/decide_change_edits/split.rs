@@ -1,4 +1,4 @@
-//! The entries of `decide_change_edits` that name the pending new-change
+//! The entries of `decide_openspec_change_edits` that name the pending new-change
 //! proposal or the split of the change (`DCE-decide-change-edits-tool.md`
 //! DCE-FR-UZDN, DCE-FR-RAWJ, DCE-FR-WMOG, DCE-FR-WRSI, DCE-FR-PHSU).
 
@@ -8,10 +8,10 @@ use crate::tools::decide_changes::{DecisionRow, Outcome, RefusalCode};
 
 /// DCE-FR-WMOG: the opening comment of a new-change discussion opened by tool.
 pub const NEW_CHANGE_DISCUSSION_BODY: &str =
-    "The author asked to discuss this proposed new change.";
+    "The author asked to discuss this proposed new OpenSpec change.";
 
 /// The `invalid_action` text of a change entry.
-pub const INVALID_CHANGE_ACTION: &str = "the action must be `accept`, `reject`, or `discuss` for a hunk or a proposed new change, and `confirm` for the split.";
+pub const INVALID_CHANGE_ACTION: &str = "the action must be `accept`, `reject`, or `discuss` for a hunk or a proposed new OpenSpec change, and `confirm` for the split.";
 
 /// NCP-FR-LQJK: a new-change discussion is one whose opening comment carries a
 /// `new_change_subject` that names the proposal.
@@ -81,7 +81,8 @@ where
         }
     };
     if record.state != NewChangeProposalState::Pending {
-        let text = "this proposed new change is already decided, so this decision was not made.";
+        let text =
+            "this proposed new OpenSpec change is already decided, so this decision was not made.";
         row.refuse(RefusalCode::NoOpenProposal, total, text, None);
         return Some(row);
     }
@@ -124,7 +125,8 @@ where
     use crate::tools::decide_changes::ProposalBackend;
     let id = row.id.clone();
     if backend.discussions().iter().any(|d| is_new_change_discussion(d, &id)) {
-        let text = "this proposed new change already has a discussion, so nothing changed.";
+        let text =
+            "this proposed new OpenSpec change already has a discussion, so nothing changed.";
         row.refuse(RefusalCode::AlreadyInState, total, text, None);
         return;
     }
@@ -173,7 +175,7 @@ where
     }
     if !names_split {
         let text =
-            "the id you gave is not a change of the open proposal. Use an id from your input.";
+            "the id you gave is not an edit of the open proposal. Use an id from your input.";
         row.refuse(RefusalCode::UnknownHunk, total, text, None);
         return row;
     }

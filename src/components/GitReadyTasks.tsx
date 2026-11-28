@@ -38,8 +38,8 @@ interface ReadyTasksProps extends ReadyTasksBinding {
 
 /** GIT-FR-OZYT: a shadow draft's status, in words. */
 function shadowStatusText(row: GithubShadowDraftRow): string {
-  if (row.status === "graduated") return "Graduated";
-  return row.locked ? "Graduating" : "GitHub task, ready to graduate";
+  if (row.status === "graduated") return "Implemented";
+  return row.locked ? "Implementing" : "GitHub task, ready to implement";
 }
 
 const repoOf = (owner: string, name: string) => `${owner}/${name}`;
@@ -163,10 +163,10 @@ export function ReadyTasks({ polling, onOpenProjectSettings, onOpenDraft }: Read
             className="btn btn--primary btn--sm"
             disabled={busy !== undefined}
             aria-busy={busy === "claim" || undefined}
-            aria-label={`${busy === "claim" ? "Claiming" : "Claim and graduate"} #${task.issueNumber} ${task.title}`}
+            aria-label={`${busy === "claim" ? "Claiming" : "Claim and implement"} #${task.issueNumber} ${task.title}`}
             onClick={() => void polling.claim(task.issueNumber)}
           >
-            {busy === "claim" ? "Claiming…" : "Claim and graduate"}
+            {busy === "claim" ? "Claiming…" : "Claim and implement"}
           </button>
         </div>
         {rowError(task.issueNumber)}
@@ -228,7 +228,7 @@ export function ReadyTasks({ polling, onOpenProjectSettings, onOpenDraft }: Read
           <button
             type="button"
             className="ready-tasks__link t-ui-xs"
-            aria-label={`Open issue #${row.issueNumber} of draft ${row.name} on GitHub`}
+            aria-label={`Open issue #${row.issueNumber} of change ${row.name} on GitHub`}
             title={row.issueUrl}
             onClick={() =>
               polling.openShadowIssue(row.draftId, row.issueUrl, row.issueNumber)
@@ -239,20 +239,20 @@ export function ReadyTasks({ polling, onOpenProjectSettings, onOpenDraft }: Read
           <button
             type="button"
             className="ready-tasks__link t-ui-xs"
-            aria-label={`Open draft ${row.name}`}
+            aria-label={`Open change ${row.name}`}
             onClick={() => onOpenDraft?.(row.draftId)}
           >
-            Open draft
+            Open change
           </button>
           {graduatable && (
             <button
               type="button"
               className="btn btn--primary btn--sm"
               disabled={busy !== undefined}
-              aria-label={`Graduate ${row.name} (#${row.issueNumber})`}
+              aria-label={`Implement ${row.name} (#${row.issueNumber})`}
               onClick={() => polling.graduateShadow(row.draftId, row.name)}
             >
-              <Icon.Graduate size={12} /> Graduate
+              <Icon.Graduate size={12} /> Implement
             </button>
           )}
         </div>
@@ -395,8 +395,8 @@ export function ReadyTasks({ polling, onOpenProjectSettings, onOpenDraft }: Read
 
             {view.shadows.length > 0 && (
               <>
-                <div className="git__section-head">GitHub drafts</div>
-                <ul className="ready-tasks__list" aria-label="GitHub drafts">
+                <div className="git__section-head">GitHub changes</div>
+                <ul className="ready-tasks__list" aria-label="GitHub changes">
                   {view.shadows.map(shadowRow)}
                 </ul>
               </>

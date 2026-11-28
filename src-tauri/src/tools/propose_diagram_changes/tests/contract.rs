@@ -112,12 +112,12 @@ fn no_argument_names_a_conversation_an_agent_or_a_participant() {
     }
 }
 
-// PDM-FR-MBHW, CVL-FR-04: the model reads that a diagram change never goes in a
-// text change, that the source is given without fence markers, and that the
+// PDM-FR-MBHW, CVL-FR-04: the model reads that a diagram edit never goes in a
+// text edit, that the source is given without fence markers, and that the
 // rationale carries a spoken part.
 #[test]
 fn the_description_states_the_rules_the_model_must_keep() {
-    assert!(DESCRIPTION.contains("A change to a diagram never goes in a text change"));
+    assert!(DESCRIPTION.contains("An edit to a diagram never goes in a text edit"));
     assert!(DESCRIPTION.contains("leave out the fence markers"));
     assert!(DESCRIPTION.contains("The new source must be valid Mermaid."));
     assert!(DESCRIPTION.contains("one `<spoken>…</spoken>` tag in `rationale`"));
@@ -125,7 +125,7 @@ fn the_description_states_the_rules_the_model_must_keep() {
     assert!(DESCRIPTION.contains("`updates`"));
     assert!(RATIONALE_DESCRIPTION.contains("`<spoken>…</spoken>`"));
     // The first sentence tells this tool from the two text tools.
-    assert!(DESCRIPTION.starts_with("Propose changes to Mermaid diagrams"));
+    assert!(DESCRIPTION.starts_with("Propose edits to Mermaid diagrams"));
 }
 
 // PDM-FR-JLYU: the output is the fact of the proposal, with no id and no part of

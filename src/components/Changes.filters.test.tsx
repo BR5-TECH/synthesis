@@ -94,7 +94,7 @@ describe("filters (CHG-FR-14..FR-16)", () => {
     expect(screen.queryByText("CHG-changes.md")).not.toBeInTheDocument();
     expect(screen.getByText("onboarding.md")).toBeInTheDocument();
 
-    await userEvent.type(screen.getByLabelText("Filter changes"), "zzz");
+    await userEvent.type(screen.getByLabelText("Filter files"), "zzz");
     await waitFor(() =>
       expect(screen.queryByText("onboarding.md")).not.toBeInTheDocument(),
     );
@@ -125,7 +125,7 @@ describe("filters (CHG-FR-14..FR-16)", () => {
     await showAllFiles();
     await screen.findByText("Revisioned");
 
-    await userEvent.type(screen.getByLabelText("Filter changes"), "draft");
+    await userEvent.type(screen.getByLabelText("Filter files"), "draft");
     await waitFor(() =>
       expect(screen.queryByText("Revisioned")).not.toBeInTheDocument(),
     );
@@ -217,7 +217,7 @@ describe("handing over what the filters hide (CHG-FR-48)", () => {
     await screen.findByText("Changes.tsx");
     await userEvent.click(checkbox("CHG-changes.md"));
 
-    await userEvent.type(screen.getByLabelText("Filter changes"), "CHG");
+    await userEvent.type(screen.getByLabelText("Filter files"), "CHG");
     await waitFor(() => expect(rowNames()).not.toContain("Changes.tsx"));
 
     await userEvent.click(primary());
@@ -243,7 +243,7 @@ describe("filter-row arrangement (SNV-FR-58)", () => {
     await screen.findByText("Library.tsx");
 
     const controls = document.querySelector(".panel-controls")!;
-    const text = screen.getByLabelText("Filter changes");
+    const text = screen.getByLabelText("Filter files");
     const mode = screen.getByRole("radiogroup", { name: "Comparison mode" });
     const lens = screen.getByRole("radiogroup", { name: "Filter by type" });
     const body = document.querySelector(".vpanel__body")!;
@@ -296,7 +296,7 @@ describe("the artifact-type lens (CHG-FR-14 / LIB-FR-19, SNV-FR-58, SNV-FR-62)",
     ]);
 
     // …and it sits beneath the text filter with the mode toggle between them.
-    const text = screen.getByLabelText("Filter changes");
+    const text = screen.getByLabelText("Filter files");
     const mode = screen.getByRole("radiogroup", { name: "Comparison mode" });
     const lens = screen.getByRole("radiogroup", { name: "Filter by type" });
     expect(precedes(text, mode)).toBe(true);

@@ -108,7 +108,7 @@ export function ClaimActions({
     action = { label: busy === "retry" ? "Retrying…" : "Retry claim", run: () => void claims.retry(number) };
   } else if (shadowDraft) {
     action = {
-      label: "Graduate",
+      label: "Implement",
       run: () => {
         logInfo(["frontend"], "delivery lens opens a graduation of a shadow draft", { issueNumber: number });
         claims.graduateShadow(shadowDraft.id, shadowDraft.name);
@@ -116,7 +116,7 @@ export function ClaimActions({
     };
   } else if (item.kind === "task" && tracker.claimEligible && !anyShadow) {
     action = {
-      label: busy === "claim" ? "Claiming…" : "Claim and graduate",
+      label: busy === "claim" ? "Claiming…" : "Claim and implement",
       run: () => void claims.claim(number),
     };
   }

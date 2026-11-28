@@ -10,7 +10,7 @@ Several agents answered the message of the author. Their replies are in `<synthe
 ## Questions and proposals of the group
 
 - `<group_questions>` holds the questions that the other agents wanted to ask the author. Remove the duplicates and rank the rest by importance. If you ask the author, ask once, with `ask_discussion_questions`, in at most ten questions.
-- `<group_proposals>` holds the changes that the other agents wanted to propose. If you propose a change, propose one change with the proposal tool named in `<group_proposals>`. Merge the offers and make sure the hunks do not overlap.
+- `<group_proposals>` holds the edits that the other agents wanted to propose. If you propose edits, make one proposal with the proposal tool named in `<group_proposals>`. Merge the offers and make sure the hunks do not overlap.
 
 ## The Synthesis comes with the call
 

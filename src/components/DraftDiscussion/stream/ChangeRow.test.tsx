@@ -66,8 +66,8 @@ describe("the summary on a change row (DCR-FR-HVXK, DCR-FR-OYRR)", () => {
     render(<ChangeRow reference={reference()} createdAt="2026-01-01T00:00:00Z" />);
     act(() => noteProposalChanged({ draftId: "d1", proposal: PROPOSAL, cause: "recorded" }));
     const row = screen.getByTestId("dds-change-row");
-    await waitFor(() => expect(row).toHaveTextContent("2 changes"));
-    expect(row).toHaveAccessibleName("prompt.md, 2 changes, pending");
+    await waitFor(() => expect(row).toHaveTextContent("2 edits"));
+    expect(row).toHaveAccessibleName("prompt.md, 2 edits, pending");
   });
 
   it("DCR-FR-OYRR, CMT-FR-48: an update comment says what the update did in place of the count", async () => {
@@ -81,7 +81,7 @@ describe("the summary on a change row (DCR-FR-HVXK, DCR-FR-OYRR)", () => {
     const row = screen.getByTestId("dds-change-row");
     await waitFor(() => expect(row).toHaveAttribute("data-state", "pending"));
     expect(row).toHaveTextContent("2 changed, 0 added, 1 withdrawn");
-    expect(row).not.toHaveTextContent("2 changes");
+    expect(row).not.toHaveTextContent("2 edits");
     expect(row).toHaveAccessibleName("prompt.md, 2 changed, 0 added, 1 withdrawn, pending");
   });
 });

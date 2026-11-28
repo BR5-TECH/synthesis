@@ -46,6 +46,12 @@ export const MCP_TOOL_PREFIX = "mcp__";
 /** CTA-FR-HPXE: a turn bound to a speech that is still open. */
 export const WAITING_FOR_SPEECH = "Waiting for you to finish speaking…";
 
+/** CTA-FR-HEYB: the statuses that a current name and its legacy name share. */
+const SEARCHING_CHANGES = "Searching changes…";
+const READING_A_CHANGE = "Reading a change…";
+const PREPARING_CHANGE_EDITS = "Preparing change edits…";
+const DECIDING_CHANGE_EDITS = "Deciding change edits…";
+
 /**
  * CTA-FR-HEYB: the whole of the vocabulary a conversation needs — the tools a
  * conversation turn is lent (CVL-FR-08, CVL-FR-30) and no others.
@@ -57,8 +63,8 @@ export const WAITING_FOR_SPEECH = "Waiting for you to finish speaking…";
 export const TOOL_ACTIVITY_STATUS: Readonly<Record<string, string>> = {
   search_specifications: "Searching related specifications…",
   read_file: "Reading a project file…",
-  search_drafts: "Searching drafts…",
-  read_draft: "Reading a draft…",
+  search_changes: SEARCHING_CHANGES,
+  read_change: READING_A_CHANGE,
   search_notes: "Searching notes…",
   search_skills: "Searching available skills…",
   list_skills: "Listing available skills…",
@@ -66,13 +72,18 @@ export const TOOL_ACTIVITY_STATUS: Readonly<Record<string, string>> = {
   ask_user_comment: "Asking a clarifying question…",
   ask_advisors: "Asking the advisors…",
   ask_discussion_questions: "Preparing questions for you…",
-  propose_draft_changes: "Preparing draft changes…",
+  propose_change_edits: PREPARING_CHANGE_EDITS,
   propose_prompt_changes: "Preparing prompt changes…",
   propose_diagram_changes: "Preparing diagram changes…",
-  decide_draft_changes: "Deciding draft changes…",
+  decide_change_edits: DECIDING_CHANGE_EDITS,
   decide_prompt_changes: "Deciding prompt changes…",
   "openrouter:web_search": "Searching the web…",
   "openrouter:web_fetch": "Fetching from the web…",
+  // PVC-FR-JBPC: a call with a legacy name reads the status of its current name.
+  search_drafts: SEARCHING_CHANGES,
+  read_draft: READING_A_CHANGE,
+  propose_draft_changes: PREPARING_CHANGE_EDITS,
+  decide_draft_changes: DECIDING_CHANGE_EDITS,
 };
 
 /**

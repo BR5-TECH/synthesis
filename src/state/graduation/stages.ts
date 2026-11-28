@@ -398,8 +398,8 @@ export function outcomeStatement(run: GraduationRun): string | null {
   switch (run.state) {
     case "completed":
       return run.commits.length === 1
-        ? "Committed one change on the work stream."
-        : `Committed ${run.commits.length} changes on the work stream.`;
+        ? "Made one commit on the work stream."
+        : `Made ${run.commits.length} commits on the work stream.`;
     case "discarded":
       return "Discarded. Nothing it committed was undone.";
     case "failed":

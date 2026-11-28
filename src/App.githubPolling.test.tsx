@@ -139,7 +139,7 @@ beforeEach(() => {
       case "acknowledge_github_claim":
         // The dialog must already be on screen when this is called.
         order.push(
-          screen.queryByRole("dialog", { name: /Graduate/ }) ? `${cmd}:dialog-open` : cmd,
+          screen.queryByRole("dialog", { name: /Implement/ }) ? `${cmd}:dialog-open` : cmd,
         );
         return null;
       case "list_work_streams":
@@ -324,17 +324,17 @@ describe("GitHub polling in the main window", () => {
     expect(posts()).toHaveLength(0);
   });
 
-  it("GIT-FR-NQTZ / GSD-FR-QMTF: Claim and graduate opens the shell's start dialog, then acknowledges", async () => {
+  it("GIT-FR-NQTZ / GSD-FR-QMTF: Claim and implement opens the shell's start dialog, then acknowledges", async () => {
     render(<App />);
     await enterIde();
     await userEvent.click(screen.getByRole("button", { name: "Git" }));
     await userEvent.click(await screen.findByRole("tab", { name: /Ready tasks/ }));
     await userEvent.click(
       await screen.findByRole("button", {
-        name: "Claim and graduate #42 Add retry to the sync job",
+        name: "Claim and implement #42 Add retry to the sync job",
       }),
     );
-    const dialog = await screen.findByRole("dialog", { name: /Graduate/ });
+    const dialog = await screen.findByRole("dialog", { name: /Implement/ });
     expect(dialog).toHaveTextContent("Add retry to the sync job");
     await waitFor(() =>
       expect(order).toEqual([
@@ -347,7 +347,7 @@ describe("GitHub polling in the main window", () => {
     const before = invokeMock.mock.calls.length;
     await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() =>
-      expect(screen.queryByRole("dialog", { name: /Graduate/ })).toBeNull(),
+      expect(screen.queryByRole("dialog", { name: /Implement/ })).toBeNull(),
     );
     const after = invokeMock.mock.calls.slice(before).map((c) => c[0]);
     expect(after).not.toContain("start_graduation");
@@ -394,12 +394,12 @@ describe("GitHub polling in the main window", () => {
     await userEvent.click(screen.getByRole("button", { name: "Git" }));
     await userEvent.click(await screen.findByRole("tab", { name: /Ready tasks/ }));
     const graduateButton = () =>
-      screen.getByRole("button", { name: "Graduate Cache invalidation (#9)" });
+      screen.getByRole("button", { name: "Implement Cache invalidation (#9)" });
 
     // GSD-FR-LXAF: the same stream and standing-work questions an ordinary
     // draft's dialog asks of a stream a run holds (GSD-FR-VKLD).
-    await userEvent.click(await screen.findByRole("button", { name: "Graduate Cache invalidation (#9)" }));
-    let dialog = await screen.findByRole("dialog", { name: /Graduate/ });
+    await userEvent.click(await screen.findByRole("button", { name: "Implement Cache invalidation (#9)" }));
+    let dialog = await screen.findByRole("dialog", { name: /Implement/ });
     await within(dialog).findByRole("combobox", { name: "Work stream" });
     const answered = Array.from(
       dialog.querySelectorAll<HTMLElement>('input, select, textarea, [role="radio"]'),
@@ -422,13 +422,13 @@ describe("GitHub polling in the main window", () => {
 
     // GIT-FR-FTHT: cancelling keeps the row and its Graduate.
     await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: /Graduate/ })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /Implement/ })).toBeNull());
     expect(screen.getByTestId("shadow-draft-gh-1")).toBeInTheDocument();
     expect(graduateButton()).toBeEnabled();
 
     // GIT-FR-FTHT / GSD-FR-LXAF: a refused start changes nothing either.
     await userEvent.click(graduateButton());
-    dialog = await screen.findByRole("dialog", { name: /Graduate/ });
+    dialog = await screen.findByRole("dialog", { name: /Implement/ });
     await within(dialog).findByRole("combobox", { name: "Work stream" });
     const before = invokeMock.mock.calls.length;
     await userEvent.click(screen.getByTestId("graduation-start-confirm"));
@@ -443,7 +443,7 @@ describe("GitHub polling in the main window", () => {
     ])
       expect(after).not.toContain(cmd);
     await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: /Graduate/ })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /Implement/ })).toBeNull());
     expect(screen.getByTestId("shadow-draft-gh-1")).toBeInTheDocument();
     expect(graduateButton()).toBeEnabled();
   });

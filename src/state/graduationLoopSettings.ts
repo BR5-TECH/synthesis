@@ -94,7 +94,7 @@ export const GRADUATION_LOOP_SETTINGS: readonly GraduationLoopSetting[] = [
     step: HALF_HOUR_MS,
     defaultValue: 6 * HALF_HOUR_MS,
     helper:
-      "How long one graduation turn can run. It bounds each work, review, merge and rebase turn.",
+      "How long one implementation turn can run. It bounds each work, review, merge and rebase turn.",
     format: formatDurationMs,
     refusalCode: "graduation_stage_time_limit_invalid",
     refusal:

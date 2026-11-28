@@ -52,11 +52,11 @@ const STATE: Record<NewDraftState, { word: string; mark: string }> = {
 export function blockedReason(draftId: string): string | null {
   const draft = draftSummaryOf(draftId);
   if (!draft) return null;
-  if (draft.githubIssue) return "This draft mirrors a GitHub task, so its proposals can not be decided.";
-  if (draft.superseded) return "The decomposition of this draft is confirmed.";
-  if (draft.status === "graduated") return "This draft is graduated, so its proposals can not be decided.";
-  if (draft.status === "archived") return "This draft is archived. Restore it to decide its proposals.";
-  if (draft.graduation?.locked) return "A graduation run holds this draft. Decide when the run ends.";
+  if (draft.githubIssue) return "This change mirrors a GitHub task, so its proposals can not be decided.";
+  if (draft.superseded) return "The decomposition of this change is confirmed.";
+  if (draft.status === "graduated") return "This change is implemented, so its proposals can not be decided.";
+  if (draft.status === "archived") return "This change is archived. Restore it to decide its proposals.";
+  if (draft.graduation?.locked) return "An implementation run holds this change. Decide when the run ends.";
   return null;
 }
 
@@ -115,7 +115,7 @@ export function NewDraftCard({
   if (!proposal) {
     return (
       <div className="dds-newdraft-ref" data-testid="new-draft-card-unread">
-        <TypeChip kind="newDraft" /> Proposed draft
+        <TypeChip kind="newDraft" /> Proposed change
       </div>
     );
   }
@@ -127,10 +127,10 @@ export function NewDraftCard({
   if (!holds) {
     const verb =
       reference.update === "change"
-        ? "Changed the proposed draft"
+        ? "Changed the proposed change"
         : reference.update === "withdraw"
-          ? "Withdrew the proposed draft"
-          : "Proposed a draft";
+          ? "Withdrew the proposed change"
+          : "Proposed a change";
     return (
       <div className="dds-newdraft-ref" data-testid="new-draft-reference">
         <TypeChip kind="newDraft" /> {verb} · {place} · {proposal.name}
@@ -202,7 +202,7 @@ export function NewDraftCard({
         className="dds-question dds-newdraft"
         data-testid="new-draft-card"
         data-state={proposal.state}
-        aria-label={`Proposed draft, part ${proposal.position} of ${proposal.total}, ${proposal.name}, ${state.word}`}
+        aria-label={`Proposed change, part ${proposal.position} of ${proposal.total}, ${proposal.name}, ${state.word}`}
       >
         <div className="dds-question__head">
           <TypeChip kind="newDraft" />
@@ -220,7 +220,7 @@ export function NewDraftCard({
           </span>
         </div>
         {proposal.state === "accepted" && (
-          <p className="dds-newdraft__created">Created draft {proposal.name}</p>
+          <p className="dds-newdraft__created">Created change {proposal.name}</p>
         )}
         {proposal.state === "pending" && (
           <div className="dds-newdraft__decide">
@@ -276,7 +276,7 @@ export function NewDraftCard({
       {isNewestDecided && confirmed && (
         <p className="dds-next-step__done" role="status" data-testid="decomposition-confirmed">
           Decomposition confirmed.
-          {accepted.length > 0 ? ` The new drafts: ${accepted.map((p) => p.name).join(", ")}.` : ""}
+          {accepted.length > 0 ? ` The new changes: ${accepted.map((p) => p.name).join(", ")}.` : ""}
         </p>
       )}
       {isNewestDecided && !confirmed && !anyPending && pendingTurns.length === 0 && (

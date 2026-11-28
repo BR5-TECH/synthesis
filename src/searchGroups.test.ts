@@ -211,7 +211,7 @@ describe("Semantic groups (SCH-FR-03 / SCH-FR-09 / SCH-FR-LTSO)", () => {
       hit({ path: "specifications/x.md", group: "artifact", subtype: "spec", ordinal: 0 }),
       hit({ path: ".synthesis/playbooks/p.md", group: "playbook" }),
     ]);
-    expect(groups.map((g) => g.title)).toEqual(["Artifacts", "Documents", "Drafts", "Playbooks"]);
+    expect(groups.map((g) => g.title)).toEqual(["Artifacts", "Documents", "Changes", "Playbooks"]);
     expect(groups[1].hits.map((h) => h.path)).toEqual(["/refs/a.md", "/refs/b.md"]);
   });
 

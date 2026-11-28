@@ -79,12 +79,12 @@ fn several_refused_rows_make_one_refusal_that_lists_each() {
 fn shape_and_fact_refusals_are_reported_together() {
     let f = Fixture::new();
     let refusal = refused(f.rows(json!([
-        { "key": "a", "op": "new_draft", "name": "n" },
+        { "key": "a", "op": "new_change", "name": "n" },
         create("b", "B"),
         modify("c", 77, json!({ "title": "T" })),
     ])));
     assert_eq!(refusal.code, rows::ROWS_REFUSED);
-    assert!(refusal.message.contains("Row 1: Give the full prompt of the new draft in `body`."));
+    assert!(refusal.message.contains("Row 1: Give the full prompt of the new change in `body`."));
     assert!(refusal.message.contains("Row 3: Issue number 77 is not part of the delivery plan."));
     assert!(!refusal.message.contains("Row 2"));
 }
@@ -128,7 +128,7 @@ fn several_refused_updates_make_one_refusal() {
         "rationale": RATIONALE,
         "updates": [
             { "action": "withdraw", "key": "z" },
-            { "action": "change", "key": "a", "row": { "op": "new_draft", "name": "", "body": "b" } },
+            { "action": "change", "key": "a", "row": { "op": "new_change", "name": "", "body": "b" } },
             { "action": "explode", "key": "b" },
         ]
     })));
@@ -136,7 +136,7 @@ fn several_refused_updates_make_one_refusal() {
     let lines: Vec<&str> = refusal.message.lines().skip(1).collect();
     assert_eq!(lines.len(), 3, "{}", refusal.message);
     assert!(lines[0].starts_with("Update 1 of 3: the key z names no row"));
-    assert_eq!(lines[1], "Update 2 of 3: Give the new draft a name.");
+    assert_eq!(lines[1], "Update 2 of 3: Give the new change a name.");
     assert!(lines[2].starts_with("Update 3 of 3: give `action` and `key`"));
     assert_eq!(f.proposals(), before);
 }

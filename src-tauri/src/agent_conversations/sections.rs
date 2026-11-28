@@ -243,7 +243,7 @@ fn attachment_line(attachment: &comments::Attachment, reads: &AttachmentReads) -
         comments::Attachment::ProposalHunk { proposal_id, hunk_id, path, .. } => {
             match reads.hunks.get(&(proposal_id.clone(), hunk_id.clone())) {
                 Some(change) => proposal_hunk_line(path, change),
-                None => format!("[about proposed change {hunk_id} to {path}]"),
+                None => format!("[about proposed edit {hunk_id} to {path}]"),
             }
         }
         // AGC-FR-ZZWP: a new-draft reference reads from the proposal store.
@@ -298,7 +298,7 @@ fn attachment_line(attachment: &comments::Attachment, reads: &AttachmentReads) -
 /// AGC-FR-RENU: what one update of a proposal did, in counts.
 fn update_line(path: &str, update: &comments::ProposalUpdateCounts) -> String {
     format!(
-        "[updated the proposed changes to {path}: {} changed, {} added, {} withdrawn]",
+        "[updated the proposed edits to {path}: {} changed, {} added, {} withdrawn]",
         update.changed, update.added, update.withdrawn
     )
 }
@@ -311,7 +311,7 @@ pub(super) fn proposal_hunk_line(
     change: &crate::draft_proposals::ProposalChange,
 ) -> String {
     let mut line = format!(
-        "[about proposed change {} to {path}: {} — {}",
+        "[about proposed edit {} to {path}: {} — {}",
         change.id,
         kind_label(change.kind, change.diagram),
         state_label(change.state)
@@ -584,7 +584,7 @@ pub(super) fn proposal_digest_line(path: &str, digest: &ProposalDigest) -> Strin
     let total = counts.accepted + counts.rejected + counts.undecided() + counts.withdrawn;
     let mut line = format!(
         "[proposed {total} {} to {path}: {} accepted, {} rejected, {} undecided]",
-        if total == 1 { "change" } else { "changes" },
+        if total == 1 { "edit" } else { "edits" },
         counts.accepted,
         counts.rejected,
         counts.undecided(),

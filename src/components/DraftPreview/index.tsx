@@ -48,20 +48,20 @@ export function DraftPreviewView({ proposalId, label }: { proposalId: string; la
     <div className="draft-preview" data-testid="draft-preview">
       <div className="draft-reading draft-preview__strip">
         <span className="draft-reading__state">
-          Proposed draft{place ? ` · ${place}` : ""} · Read-only. Nothing is created until you accept it.
+          Proposed change{place ? ` · ${place}` : ""} · Read-only. Nothing is created until you accept it.
         </span>
       </div>
       {failed ? (
         <p className="draft-preview__error" role="alert">
-          The proposed draft could not be read.
+          The proposed change could not be read.
         </p>
       ) : body === null ? (
-        <p className="draft-preview__loading">Reading the proposed draft…</p>
+        <p className="draft-preview__loading">Reading the proposed change…</p>
       ) : (
         <DraftVersionReading
           text={body}
           mode="wysiwyg"
-          label={`Read-only preview of the proposed draft ${label}`}
+          label={`Read-only preview of the proposed change ${label}`}
         />
       )}
     </div>

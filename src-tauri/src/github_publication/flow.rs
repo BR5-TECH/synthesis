@@ -105,19 +105,19 @@ pub fn local_eligibility(
     if crate::drafts::is_github_shadow(root, draft_id) {
         return PublicationEligibility::refused(
             ERR_DRAFT_GITHUB_SHADOW,
-            "This draft was made from a GitHub task, so it cannot be published as a new issue.",
+            "This change was made from a GitHub task, so it cannot be published as a new issue.",
         );
     }
     if status == DraftStatus::Archived {
         return PublicationEligibility::refused(
             ERR_DRAFT_ARCHIVED,
-            "Restore this draft before you publish it.",
+            "Restore this change before you publish it.",
         );
     }
     if attempt.is_some() {
         return PublicationEligibility::refused(
             ERR_ATTEMPT_IN_PROGRESS,
-            "A publication attempt for this draft is already in progress.",
+            "A publication attempt for this change is already in progress.",
         );
     }
     let local_assets = local_asset_references(root, draft_id);

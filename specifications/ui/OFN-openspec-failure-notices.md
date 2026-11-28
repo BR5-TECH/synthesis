@@ -10,9 +10,9 @@ A **failure notice** is the one way the frontend states an OpenSpec failure. Eac
 2. **OFN-FR-PVYE** The notice table names each code of the class table of `../core/OFP-openspec-failure-policy.md` with the same class. A code that the table does not name gets no notice, and its surface states it on its own terms.
 3. **OFN-FR-EPIG** A notice of the class `environment` offers **Open OpenSpec settings**, which opens the OpenSpec section of Project settings (per `SET-project-settings.md` SET-FR-FZKL). A notice of `openspec_image_cli_unavailable` offers **Open Docker settings**, which opens the Docker section (SET-FR-21), in its place.
 4. **OFN-FR-CBLG** A notice of the class `transient` offers **Retry**. Retry invokes `"get openspec status"` with `recheck` set, and then invokes the operation that failed again with the same arguments. While the two calls are in flight, Retry is disabled.
-5. **OFN-FR-RLSO** A notice of the class `content` offers **Open change**, which opens the change workspace tab of the change in the location of the failure (per `OCW-openspec-change-workspace.md` OCW-FR-DMGL) and selects `threadId` where the failure carries one (OCW-FR-QSZP). A notice on the tab of that change offers no Open change.
-6. **OFN-FR-RCWY** A notice whose failure carries `repairRunId` also offers **Open run**, which opens the Runs bottom panel on its graduation section and selects that run (per `GRU-graduation-runs.md` GRU-FR-PAHN). Its sentence adds that a rework run started to repair the change.
-7. **OFN-FR-LRCZ** A notice whose failure carries `repairRefusal` adds a sentence that no repair run started, with the refusal in words: `proposal_pending` that the change holds a pending edit proposal, `openspec_run_active` that a run of the change is active, an image refusal that the agent image is not ready, and every other code by its code.
+5. **OFN-FR-RLSO** A notice of the class `content` offers **Open OpenSpec change**, which opens the change workspace tab of the change in the location of the failure (per `OCW-openspec-change-workspace.md` OCW-FR-DMGL) and selects `threadId` where the failure carries one (OCW-FR-QSZP). A notice on the tab of that change offers no **Open OpenSpec change**.
+6. **OFN-FR-RCWY** A notice whose failure carries `repairRunId` also offers **Open run**, which opens the Runs bottom panel on its graduation section and selects that run (per `GRU-graduation-runs.md` GRU-FR-PAHN). Its sentence adds that a rework run started to repair the OpenSpec change.
+7. **OFN-FR-LRCZ** A notice whose failure carries `repairRefusal` adds a sentence that no repair run started, with the refusal in words: `proposal_pending` that the OpenSpec change holds a pending edit proposal, `openspec_run_active` that a run of the OpenSpec change is active, an image refusal that the agent image is not ready, and every other code by its code.
 8. **OFN-FR-DPIJ** A notice on a surface that has its own retry of the failed operation offers no Retry: the Continue of a run region (per `GRU-graduation-runs.md` GRU-FR-LBPR) and the Retry of the Spec Map (per `SMP-specification-map.md` SMP-FR-KBXW).
 9. **OFN-FR-IHSQ** Where the failure carries at least one diagnostic, the notice offers **Details**, a disclosure that is closed when the notice appears. Open, it lists each diagnostic in order on its own line, as plain text: the severity, the code, and the path, each where present, then the message, and the fix on the next line after `Fix:`.
 10. **OFN-FR-UNEF** Details renders no Markdown, no HTML, and no link, and it scrolls on its own above a height of 12 lines. A diagnostic text that holds a control character renders that character as a space.
@@ -29,8 +29,8 @@ A **failure notice** is the one way the frontend states an OpenSpec failure. Eac
 ```
 ┌ OpenSpec ───────────────────────────────────────────────────────────────────┐
 │ The deltas of "add-logout" do not apply to the live specifications.          │
-│ A rework run started to repair the change.                                   │
-│ [Open change] [Open run]                                    [Details ▾]      │
+│ A rework run started to repair the OpenSpec change.                          │
+│ [Open OpenSpec change] [Open run]                           [Details ▾]      │
 │ ┌──────────────────────────────────────────────────────────────── [Copy] ┐  │
 │ │ error archive_spec_update_failed: MODIFIED "Session Expiration" not     │  │
 │ │ found in auth                                                           │  │
@@ -61,13 +61,13 @@ openspec_image_cli_unavailable   unsupported   environment  The OpenSpec CLI in 
 openspec_image_cli_unavailable   failed        environment  The OpenSpec CLI in the agent image of this project does not start. The image needs Node 22.12.0 or later.
 cli_timed_out                                  transient    The OpenSpec CLI did not finish in time, also after one more try.
 cli_failed                                     transient    The OpenSpec CLI stopped before it answered, also after one more try.
-cli_rejected                                   content      OpenSpec reported a problem in the OpenSpec files of this change.
-change_not_ready                               content      The change misses these artifacts: <artifacts>. Complete them before Apply.
-tasks_incomplete                               content      The change "<change>" has tasks that are not done.
-archive_tasks_incomplete                       content      The change "<change>" has tasks that are not done.
+cli_rejected                                   content      OpenSpec reported a problem in the files of this OpenSpec change.
+change_not_ready                               content      The OpenSpec change misses these artifacts: <artifacts>. Complete them before Apply.
+tasks_incomplete                               content      The OpenSpec change "<change>" has tasks that are not done.
+archive_tasks_incomplete                       content      The OpenSpec change "<change>" has tasks that are not done.
 archive_spec_update_failed                     content      The deltas of "<change>" do not apply to the live specifications.
 archive_spec_validation_failed                 content      The live specifications are not valid after the deltas of "<change>".
-archive_validation_failed                      content      The change "<change>" is not valid.
+archive_validation_failed                      content      The OpenSpec change "<change>" is not valid.
 archive_target_exists                          content      An archive folder for "<change>" with the date of today exists already.
 archive_error                                  content      OpenSpec could not archive "<change>".
 any other archive code                         content      OpenSpec could not archive "<change>".

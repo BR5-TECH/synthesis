@@ -19,7 +19,7 @@ import type { EditorReview, ReviewHunk } from "./props";
 
 /** The statement the surface makes while the file text is read-only. */
 export const SOURCE_REVIEW_NOTE =
-  "This file is read-only while a proposed change is under review. Decide the changes to edit it again.";
+  "This file is read-only while a proposal is under review. Decide its edits to change it again.";
 
 /**
  * PCR-FR-SKRV: where each change lands in the file text. A change names the

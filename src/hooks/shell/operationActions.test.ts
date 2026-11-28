@@ -102,7 +102,7 @@ describe("an operation with no destination (STB-FR-DNLC)", () => {
   it("STB-FR-DNLC: opens nothing, whatever its kind and label say", () => {
     const { activateOperation } = createOperationActions(deps);
     for (const [kind, label] of [
-      ["graduation", "Graduating run g-1"],
+      ["graduation", "Implementing run g-1"],
       ["agent", "@Helga is thinking about Push button…"],
       ["git", "Pushing feature/x"],
     ]) {

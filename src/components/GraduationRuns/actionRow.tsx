@@ -156,7 +156,7 @@ export function RunActionRow({
                   data-action={action}
                   onClick={() => onOpenDraft?.(run.input.draftId)}
                 >
-                  Open draft
+                  Open change
                 </button>
               );
             case "pause":
@@ -290,7 +290,7 @@ export function RunActionRow({
               )
             }
           >
-            Open change
+            Open OpenSpec change
           </button>
         )}
       </div>

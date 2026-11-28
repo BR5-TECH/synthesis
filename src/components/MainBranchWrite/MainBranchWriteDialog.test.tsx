@@ -49,7 +49,7 @@ describe("the main branch write confirmation (MBW-main-branch-write.md)", () => 
 
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("main is the default branch of this repository.");
-    expect(dialog).toHaveTextContent("You asked to create a draft. The draft is committed to main.");
+    expect(dialog).toHaveTextContent("You asked to create a change. The change is committed to main.");
     expect(write).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Confirm write to main" }));
     await act(async () => {

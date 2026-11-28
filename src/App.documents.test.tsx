@@ -561,7 +561,7 @@ describe("DPN-FR-AREM: the panel's session state in the shell", () => {
     await openDocumentsPanel();
     await userEvent.click(row(/^refs/));
     expect(screen.getByRole("treeitem", { name: /^refs/ })).toHaveAttribute("aria-expanded", "false");
-    await userEvent.click(screen.getByRole("button", { name: "Drafts" }));
+    await userEvent.click(screen.getByRole("button", { name: "Changes" }));
     await userEvent.click(toggle());
     expect(await screen.findByRole("treeitem", { name: /^refs/ })).toHaveAttribute("aria-expanded", "false");
   });

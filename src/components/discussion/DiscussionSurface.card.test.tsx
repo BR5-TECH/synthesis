@@ -661,9 +661,9 @@ describe("CTA-FR-NMNE: a composer that OPENS a conversation names no recipient",
     );
 
     const opening = within(screen.getByTestId("draft-open-discussion")).getByRole("textbox", {
-      name: "Discuss this draft",
+      name: "Discuss this change",
     });
-    expect(opening).toHaveAttribute("placeholder", "Ask an agent about this draft…");
+    expect(opening).toHaveAttribute("placeholder", "Ask an agent about this change…");
     expect(screen.getByTestId("draft-open-discussion").textContent ?? "").not.toContain("@arch");
     // CMT-FR-45: its Attach surface also opens from the leading edge.
     const attach = screen.getByTestId("draft-open-discussion").querySelector(".comment-attach");

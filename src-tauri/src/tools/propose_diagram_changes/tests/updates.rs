@@ -4,8 +4,8 @@
 
 use super::*;
 use crate::tools::proposal_updates::{
-    UPDATE_CHANGE_IS_DIAGRAM, UPDATE_CHANGE_SETTLED, UPDATE_MALFORMED, UPDATE_NAMED_TWICE,
-    UPDATE_NO_SUCH_CHANGE,
+    UPDATE_CHANGE_IS_DIAGRAM, UPDATE_CHANGE_SETTLED, UPDATE_EDIT_IS_DIAGRAM, UPDATE_MALFORMED,
+    UPDATE_NAMED_TWICE, UPDATE_NO_SUCH_CHANGE,
 };
 
 /// A fixture whose open proposal holds a text hunk and a diagram hunk, and the
@@ -138,17 +138,22 @@ fn an_update_of_a_text_hunk_is_refused() {
             );
             assert_eq!(refusal.kind(), ToolErrorKind::InvalidArgs);
             assert!(refusal.retryable());
-            assert!(refusal.to_string().contains("is a text change"), "{refusal}");
+            assert!(refusal.to_string().contains("is a text edit"), "{refusal}");
             f.assert_untouched(&before);
         }
     }
 }
 
 // PDM-FR-NQEK: the update of a text tool refuses a diagram hunk in the same way,
-// and names this tool.
+// and names this tool. PVC-FR-VBPY: the text tool of a change says "edit", and
+// the text tool of a file says "change".
 #[test]
 fn the_text_tool_refuses_to_update_a_diagram_hunk() {
     for subject in SUBJECTS {
+        let (message, word) = match subject {
+            Subject::Draft => (UPDATE_EDIT_IS_DIAGRAM, "diagram edit"),
+            Subject::Artifact => (UPDATE_CHANGE_IS_DIAGRAM, "diagram change"),
+        };
         let (f, _, diagram_id) = with_text_and_diagram(subject);
         let before = f.world();
         for update in [
@@ -158,10 +163,10 @@ fn the_text_tool_refuses_to_update_a_diagram_hunk() {
             let refusal = f.text_updates(serde_json::json!([update])).expect_err("refused");
             assert_eq!(
                 refusal,
-                ToolRefusal::InvalidUpdateAt { message: UPDATE_CHANGE_IS_DIAGRAM, at: 1, of: 1 },
+                ToolRefusal::InvalidUpdateAt { message, at: 1, of: 1 },
                 "{subject:?}",
             );
-            assert!(refusal.to_string().contains("diagram change"), "{refusal}");
+            assert!(refusal.to_string().contains(word), "{refusal}");
             assert!(refusal.to_string().contains(NAME), "{refusal}");
             assert_eq!(f.world(), before, "the text tool wrote nothing");
         }
@@ -173,6 +178,11 @@ fn the_text_tool_refuses_to_update_a_diagram_hunk() {
 #[test]
 fn a_text_hunk_over_the_fence_of_a_diagram_hunk_overlaps() {
     for subject in SUBJECTS {
+        // PVC-FR-VBPY: the text tool of a change says "edit".
+        let overlap = match subject {
+            Subject::Draft => PROPOSAL_HUNKS_OVERLAP,
+            Subject::Artifact => crate::tools::propose_prompt_changes::PROPOSAL_HUNKS_OVERLAP,
+        };
         let f = Fixture::new(subject);
         f.propose(vec![change(SRC_A, SRC_A2)]).expect("recorded");
         let before = f.world();
@@ -184,7 +194,7 @@ fn a_text_hunk_over_the_fence_of_a_diagram_hunk_overlaps() {
             .expect_err("refused");
         assert_eq!(
             refusal,
-            ToolRefusal::InvalidUpdateAt { message: PROPOSAL_HUNKS_OVERLAP, at: 1, of: 1 },
+            ToolRefusal::InvalidUpdateAt { message: overlap, at: 1, of: 1 },
             "{subject:?}",
         );
         assert_eq!(f.world(), before);

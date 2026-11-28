@@ -104,7 +104,7 @@ describe("the Map tab through the shell", () => {
 
     await userEvent.click(await within(projectPanel()).findByText("CHG-changes.md"));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "CHG changes panel" })).toHaveAttribute("data-selected", "true"),
+      expect(screen.getByRole("button", { name: "CHG commits panel" })).toHaveAttribute("data-selected", "true"),
     );
     expect(tabLabels()).not.toContain("CHG-changes.md");
     expect(tabLabels()).toContain("Map");
@@ -126,7 +126,7 @@ describe("the Map tab through the shell", () => {
     await screen.findByTestId("spec-map-canvas");
     await userEvent.click(await within(projectPanel()).findByText("CHG-changes.md"));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "CHG changes panel" })).toHaveAttribute("data-selected", "true"),
+      expect(screen.getByRole("button", { name: "CHG commits panel" })).toHaveAttribute("data-selected", "true"),
     );
     // SMP-FR-SWCL: jsdom measures a tab of 0px, so the shown Discussion column
     // replaces the inspector. Hiding the column brings the inspector back.

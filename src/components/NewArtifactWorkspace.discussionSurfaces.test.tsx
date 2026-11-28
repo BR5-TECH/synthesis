@@ -501,7 +501,7 @@ describe("New Artifact discussions: the surfaces, the event path, and what is st
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(
-      screen.getByRole("textbox", { name: "Discuss this draft" }),
+      screen.getByRole("textbox", { name: "Discuss this change" }),
     ).toHaveValue("with a picture");
     expect(screen.getByText("chooser.png")).toBeInTheDocument();
 

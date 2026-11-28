@@ -186,7 +186,7 @@ describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-F
     // which puts the opening composer back in place of the conversation.
     await userEvent.click(screen.getByTestId("discussion-new"));
     const second = await screen.findByRole("textbox", {
-      name: "Discuss this draft",
+      name: "Discuss this change",
     });
     fireEvent.change(second, { target: { value: "a separate thought" } });
     await postComposer();
@@ -261,7 +261,7 @@ describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-F
     // The floating composer was not involved at any point.
     expect(callsTo("open_discussion")).toHaveLength(0);
     expect(
-      screen.queryByRole("textbox", { name: "Discuss this draft" }),
+      screen.queryByRole("textbox", { name: "Discuss this change" }),
     ).not.toBeInTheDocument();
     expect(callsTo("reanchor_discussion_fragment")).toHaveLength(0);
   });
@@ -316,7 +316,7 @@ describe("New Artifact discussions (NAW-FR-31 … NAW-FR-34, CMT-FR-52 … CMT-F
     );
     expect(callsTo("dispatch_agent_turn")).toHaveLength(0);
     expect(
-      screen.getByRole("textbox", { name: "Discuss this draft" }),
+      screen.getByRole("textbox", { name: "Discuss this change" }),
     ).toHaveValue("look at this");
     expect(screen.getByText("shot.png")).toBeInTheDocument();
     // Nothing was opened, so the column is still offering the opening composer.

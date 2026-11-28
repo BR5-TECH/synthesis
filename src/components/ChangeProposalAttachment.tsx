@@ -50,7 +50,7 @@ export function ChangeProposalAttachmentView({
       <ProposalCount update={attachment.update} changes={changes} />
       {label !== null && <span className="comment-attach__chip-type">{label}</span>}
       {left > 0 && (
-        <span className="comment-attach__proposal-route">Review in the change</span>
+        <span className="comment-attach__proposal-route">Review in the OpenSpec change</span>
       )}
     </button>
   );

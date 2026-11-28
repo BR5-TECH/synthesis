@@ -53,10 +53,10 @@ A yes or no decision. Each button sends its own action name, with no values.
     {
       "id": "root",
       "component": "ConfirmCard",
-      "title": "Delete the three stale drafts?",
+      "title": "Delete the three stale changes?",
       "body": "Their discussions are deleted with them.",
-      "confirm": { "label": "Delete", "name": "delete_drafts" },
-      "decline": { "label": "Keep them", "name": "keep_drafts" },
+      "confirm": { "label": "Delete", "name": "delete_changes" },
+      "decline": { "label": "Keep them", "name": "keep_changes" },
       "tone": "danger"
     }
   ]

@@ -90,7 +90,7 @@ function useClearedWhenMissing(
 
 /** Where focus goes back to: the action control's trigger (NAW-FR-VUCK). */
 function actionTrigger(): HTMLElement | null {
-  return document.querySelector<HTMLElement>('button[aria-label="Draft actions"]');
+  return document.querySelector<HTMLElement>('button[aria-label="Change actions"]');
 }
 
 export function Notice({ children }: { children: React.ReactNode }) {

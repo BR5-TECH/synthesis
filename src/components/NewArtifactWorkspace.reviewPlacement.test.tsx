@@ -158,7 +158,7 @@ afterEach(cleanup);
 
 /** Wait until every change named in `ids` is drawn in the document. */
 async function drawn(ids: string[]) {
-  await screen.findByRole("region", { name: "Proposed changes" });
+  await screen.findByRole("region", { name: "Proposed edits" });
   await waitFor(() => {
     for (const id of ids) {
       expect(document.querySelector(`[data-hunk="${id}"]`)).not.toBeNull();
@@ -173,7 +173,7 @@ describe("a proposal whose changes quote Markdown (DCR-FR-LGHZ, DCR-FR-TSNW)", (
     await drawn(["h1", "h2", "h3", "h4"]);
     for (const id of ["h1", "h2", "h3", "h4"]) {
       act(() => setFocusedHunk("d1", id));
-      await screen.findByText(new RegExp(`reviewing change ${id.slice(1)} of 4`, "i"));
+      await screen.findByText(new RegExp(`reviewing edit ${id.slice(1)} of 4`, "i"));
       expect(screen.queryByText(/not shown in the document/i)).toBeNull();
     }
   });
@@ -230,7 +230,7 @@ describe("a change that fills an empty bullet (DCR-FR-MAHJ)", () => {
     await drawn(["h1", "h2"]);
     for (const id of ["h1", "h2"]) {
       act(() => setFocusedHunk("d1", id));
-      await screen.findByText(new RegExp(`reviewing change ${id.slice(1)} of 2`, "i"));
+      await screen.findByText(new RegExp(`reviewing edit ${id.slice(1)} of 2`, "i"));
       expect(screen.queryByText(/not shown in the document/i)).toBeNull();
     }
   });

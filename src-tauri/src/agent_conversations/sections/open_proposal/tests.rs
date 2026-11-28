@@ -286,17 +286,17 @@ fn a_bounded_listing_keeps_hunks_in_order_and_counts_the_rest() {
     );
 
     let short = open_proposal_text_within(d.roots(), &target, whole.chars().count() - 1).unwrap();
-    assert!(short.ends_with("  …and 1 more changes.\n"), "{short}");
+    assert!(short.ends_with("  …and 1 more edits.\n"), "{short}");
     assert!(short.chars().count() < whole.chars().count());
     // The lines it keeps are the first lines of the whole listing.
-    let kept = short.trim_end_matches("  …and 1 more changes.\n");
+    let kept = short.trim_end_matches("  …and 1 more edits.\n");
     assert!(whole.starts_with(kept));
     assert!(kept.contains(&d.hunks[0]) && kept.contains(&d.hunks[1]));
     assert!(!kept.contains(&d.hunks[2]));
 
     // Room for the opening line alone counts every hunk.
     let none = open_proposal_text_within(d.roots(), &target, 10).unwrap();
-    assert!(none.ends_with("  …and 3 more changes.\n"));
+    assert!(none.ends_with("  …and 3 more edits.\n"));
     assert!(!d.hunks.iter().any(|id| none.contains(id)));
 }
 
@@ -350,12 +350,12 @@ fn the_tail_cuts_the_body_before_the_proposal() {
     let (tail, cut) = history_tail(d.roots(), &target, Some(questions.clone()), small);
     assert!(cut);
     assert!(tail.contains(DRAFT_BODY_PARTIAL_LINE));
-    assert!(tail.contains("more changes.\n"));
+    assert!(tail.contains("more edits.\n"));
     assert!(!tail.contains(&listing));
     assert!(tail.ends_with(&questions), "the question set is never cut");
 }
 
-// AGC-FR-DKHT, AGC-FR-RVQP: a diagram hunk is named as a diagram change,
+// AGC-FR-DKHT, AGC-FR-RVQP: a diagram hunk is named as a diagram edit,
 // addition, or removal, and its excerpts are its sources. A text hunk keeps its
 // kind word.
 #[test]
@@ -371,7 +371,7 @@ fn a_diagram_hunk_is_named_as_a_diagram_change_with_its_source() {
         diagram,
     };
     let line = super::super::proposal_hunk_line(FILE, &change(HunkKind::Replace, true));
-    assert!(line.contains("diagram change"), "{line}");
+    assert!(line.contains("diagram edit"), "{line}");
     assert!(line.contains("changes: \"A --> B\"") && line.contains("offers: \"A --> C\""));
     let add = super::super::proposal_hunk_line(FILE, &change(HunkKind::Add, true));
     assert!(add.contains("diagram addition"), "{add}");
@@ -380,6 +380,6 @@ fn a_diagram_hunk_is_named_as_a_diagram_change_with_its_source() {
     let text = super::super::proposal_hunk_line(FILE, &change(HunkKind::Replace, false));
     assert!(text.contains(": replace — undecided"), "{text}");
 
-    assert_eq!(open_hunk(change(HunkKind::Replace, true)).diagram, Some("diagram change"));
+    assert_eq!(open_hunk(change(HunkKind::Replace, true)).diagram, Some("diagram edit"));
     assert_eq!(open_hunk(change(HunkKind::Replace, false)).diagram, None);
 }

@@ -16,7 +16,7 @@ import type { KindAvailability, TerminalError, TerminalSummary, TerminalTarget }
 import { Icon } from "../icons";
 
 const KIND_ORDER = ["host_shell", "container_shell", "microsandbox_shell", "agent_cli"] as const;
-const BUSY_LINE = "A graduation run is working in this target.";
+const BUSY_LINE = "An implementation run is working in this target.";
 const EDGE = 8;
 const GAP = 4;
 
@@ -438,7 +438,7 @@ export function NewTerminalMenu({
                 </span>
               </span>
               {target.busyRunId && (
-                <span className="terminal-busy" title="A graduation run is working in this target">
+                <span className="terminal-busy" title="An implementation run is working in this target">
                   <Icon.AlertTriangle size={11} aria-hidden="true" />
                 </span>
               )}

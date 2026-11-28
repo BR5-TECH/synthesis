@@ -139,7 +139,7 @@ impl Fixture {
                 resolves: true,
                 proposal,
                 candidate: &candidate.content,
-                comment_body: format!("Accepted the proposed change to `{FILE}`."),
+                comment_body: format!("Accepted the proposed edits to `{FILE}`."),
                 comment_by: &human(),
             },
         )

@@ -233,7 +233,7 @@ fn a_note_turn_carries_the_note_prompt_and_offers_no_rewrite() {
     // instruction telling the agent it may offer a rewrite.
     assert!(!ConversationOrigin::stub_note("t", "n").is_draft());
     let lowered = DISCUSS_NOTE_PROMPT_TEMPLATE.to_lowercase();
-    for rewrite in ["propose_draft_changes", "propose_prompt_changes", "propose_diagram_changes"] {
+    for rewrite in ["propose_change_edits", "propose_prompt_changes", "propose_diagram_changes"] {
         assert!(!lowered.contains(rewrite), "the note prompt offers no rewrite: {rewrite}");
     }
     // CVL-FR-JMEP: the one proposal a note turn can make is a plan proposal.

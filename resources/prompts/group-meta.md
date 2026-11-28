@@ -6,5 +6,5 @@ You can ask the other agents for advice with the tool `ask_advisors`. Give your 
 - A later call in the same discussion is optional. Call it again only when new advice helps.
 - When you need no advice, answer with no call.
 - A call can take some time.
-- You decide what to use of the advice. Answer the author in your own voice. You can still ask the author, advise the author, and propose changes.
+- You decide what to use of the advice. Answer the author in your own voice. You can still ask the author, advise the author, and propose edits.
 - Do not tell the author that you used advisors.

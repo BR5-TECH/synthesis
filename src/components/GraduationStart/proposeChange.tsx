@@ -19,7 +19,7 @@ export type GraduateAs = "propose" | "implement";
 
 /** GSD-FR-AGPL: why Work directly is not offered for a proposed change. */
 export const DIRECT_PROPOSE_REASON =
-  "A proposed change lives on a work stream, so a propose run cannot work directly in the worktree.";
+  "A proposed OpenSpec change lives on a work stream, so a propose run cannot work directly in the worktree.";
 
 /** GSD-FR-DCBH: the refusals of a propose start that render against the field. */
 export const CHANGE_NAME_REFUSALS = ["invalid_change_name", "openspec_change_exists"];
@@ -27,7 +27,7 @@ export const CHANGE_NAME_REFUSALS = ["invalid_change_name", "openspec_change_exi
 /** GSD-FR-DCBH: what a refusal of the change name says. */
 export function changeNameRefusalText(code: string): string {
   return code === "openspec_change_exists"
-    ? "A change of this name is already on that stream, or a run is proposing it. Choose another name."
+    ? "An OpenSpec change of this name is already on that stream, or a run is proposing it. Choose another name."
     : CHANGE_NAME_RULE;
 }
 
@@ -67,8 +67,8 @@ export function useOpenspecMode(draftId: string): OpenspecModeRead {
 }
 
 const CHOICES: Array<{ value: GraduateAs; label: string }> = [
-  { value: "propose", label: "Propose change" },
-  { value: "implement", label: "Implement" },
+  { value: "propose", label: "Propose OpenSpec change" },
+  { value: "implement", label: "Implement directly" },
 ];
 
 /** GSD-FR-DCLQ: the **Graduate as** toggle, a radio group with a roving tab stop. */
@@ -96,8 +96,12 @@ export function GraduateAsChoice({
   };
   return (
     <fieldset className="graduation-start__destination" data-testid="graduation-graduate-as">
-      <legend className="picker-field__label">Graduate as</legend>
-      <div className="graduation-start__destination-row" role="radiogroup" aria-label="Graduate as">
+      <legend className="picker-field__label">Implement as</legend>
+      <div
+        className="graduation-start__destination-row graduation-start__destination-row--two"
+        role="radiogroup"
+        aria-label="Implement as"
+      >
         {CHOICES.map((choice, index) => {
           const active = value === choice.value;
           return (
@@ -151,7 +155,7 @@ export function ChangeNameField({
   return (
     <div className="picker-field">
       <label className="picker-field__label" htmlFor="graduation-change-name">
-        Change name
+        OpenSpec change name
       </label>
       <input
         id="graduation-change-name"

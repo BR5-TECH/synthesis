@@ -177,10 +177,10 @@ describe("Selection follows tab (SNV-FR-64 / SNV-FR-69)", () => {
     // File → New Artifact creates a draft and opens its New Artifact tab, which
     // is an activation of a different tab (SNV-FR-65).
     await createDraftFromPanel();
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
 
-    await waitFor(() => expect(panelTitle()).toBe("Drafts"));
-    const row = await screen.findByRole("treeitem", { name: /^Draft Untitled/ });
+    await waitFor(() => expect(panelTitle()).toBe("Changes"));
+    const row = await screen.findByRole("treeitem", { name: /^Change Untitled/ });
     expect(row).toHaveAttribute("aria-selected", "true");
   });
 
@@ -190,11 +190,11 @@ describe("Selection follows tab (SNV-FR-64 / SNV-FR-69)", () => {
     await enterIde();
 
     await createDraftFromPanel();
-    await screen.findByRole("button", { name: "Draft actions" });
-    await waitFor(() => expect(panelTitle()).toBe("Drafts"));
+    await screen.findByRole("button", { name: "Change actions" });
+    await waitFor(() => expect(panelTitle()).toBe("Changes"));
 
     // SNV-FR-45: re-activating the active surface's toggle hides the panel.
-    await userEvent.click(screen.getByRole("button", { name: "Drafts" }));
+    await userEvent.click(screen.getByRole("button", { name: "Changes" }));
     await waitFor(() => expect(screen.queryByTestId("vpanel-resizer")).toBeNull());
 
     // Leave for a tab that names nothing, then come back to the draft's tab.
@@ -206,10 +206,10 @@ describe("Selection follows tab (SNV-FR-64 / SNV-FR-69)", () => {
     await waitFor(() =>
       expect(screen.getByTestId("vpanel-resizer")).toBeInTheDocument(),
     );
-    expect(panelTitle()).toBe("Drafts");
+    expect(panelTitle()).toBe("Changes");
     await waitFor(() =>
       expect(
-        screen.getByRole("treeitem", { name: /^Draft Untitled/ }),
+        screen.getByRole("treeitem", { name: /^Change Untitled/ }),
       ).toHaveAttribute("aria-selected", "true"),
     );
   });
@@ -220,12 +220,12 @@ describe("Selection follows tab (SNV-FR-64 / SNV-FR-69)", () => {
     await enterIde();
 
     await createDraftFromPanel();
-    await screen.findByRole("button", { name: "Draft actions" });
-    await waitFor(() => expect(panelTitle()).toBe("Drafts"));
+    await screen.findByRole("button", { name: "Change actions" });
+    await waitFor(() => expect(panelTitle()).toBe("Changes"));
 
     const strip = screen.getByTestId("tabstrip");
     await userEvent.click(within(strip).getByText("Dashboard"));
-    expect(panelTitle()).toBe("Drafts");
+    expect(panelTitle()).toBe("Changes");
 
     // SWN-FR-01 / SNV-FR-64: a settings window is no tab, so opening one is no
     // tab activation and the panel follows nothing.
@@ -235,7 +235,7 @@ describe("Selection follows tab (SNV-FR-64 / SNV-FR-69)", () => {
         invokeMock.mock.calls.some((c) => c[0] === "open_settings_window"),
       ).toBe(true),
     );
-    expect(panelTitle()).toBe("Drafts");
+    expect(panelTitle()).toBe("Changes");
   });
 
   it("NTF-FR-18, NTF-FR-17, SNV-FR-64, SNV-FR-69: an activated notification's tab is an activation like any other", async () => {
@@ -265,7 +265,7 @@ describe("Selection follows tab (SNV-FR-64 / SNV-FR-69)", () => {
     await waitFor(() =>
       expect(within(strip).queryByText("Untitled")).toBeInTheDocument(),
     );
-    await waitFor(() => expect(panelTitle()).toBe("Drafts"));
+    await waitFor(() => expect(panelTitle()).toBe("Changes"));
   });
 
   it("SNV-FR-67: a tab whose draft is gone leaves the panel and its selection alone", async () => {
@@ -284,7 +284,7 @@ describe("Selection follows tab (SNV-FR-64 / SNV-FR-69)", () => {
     // The backend lists no drafts here, so the created draft has no row and
     // no name field opens on it (DRP-FR-36).
     await createDraftFromPanel({ listed: false });
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
 
     // Park the panel somewhere with a surface of its own, and leave for a tab
     // that names nothing.
@@ -312,11 +312,11 @@ describe("Selection follows tab (SNV-FR-64 / SNV-FR-69)", () => {
     // The backend lists no drafts here, so the created draft has no row and
     // no name field opens on it (DRP-FR-36).
     await createDraftFromPanel({ listed: false });
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
 
     // Creating the draft made Drafts the active surface (SNV-FR-64). Hide the
     // panel outright from there (SNV-FR-45), then leave and come back.
-    await userEvent.click(screen.getByRole("button", { name: "Drafts" }));
+    await userEvent.click(screen.getByRole("button", { name: "Changes" }));
     await waitFor(() => expect(screen.queryByTestId("vpanel-resizer")).toBeNull());
     const strip = screen.getByTestId("tabstrip");
     await userEvent.click(within(strip).getByText("Dashboard"));

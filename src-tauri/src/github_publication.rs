@@ -272,7 +272,7 @@ fn get_draft_publication_impl<R: tauri::Runtime>(
     } else if held {
         PublicationEligibility::refused(
             ERR_DRAFT_LOCKED,
-            "A graduation run is working from this draft.",
+            "An implementation run is working from this change.",
         )
     } else {
         let local =

@@ -428,23 +428,23 @@ export async function createDraftFromPanel(
   opts: { listed?: boolean } = {},
 ) {
   const listed = opts.listed ?? true;
-  await userEvent.click(screen.getByRole("button", { name: "Drafts" }));
+  await userEvent.click(screen.getByRole("button", { name: "Changes" }));
   // DRP-FR-15: an empty worktree offers the affordance in its empty state; one
   // holding anything offers the pinned one below the tree.
   const create =
-    screen.queryByRole("button", { name: "New draft" }) ??
-    screen.getByRole("button", { name: /Draft$/ });
+    screen.queryByRole("button", { name: "New change" }) ??
+    screen.getByRole("button", { name: /Change$/ });
   await userEvent.click(create);
-  await screen.findByRole("button", { name: "Draft actions" });
+  await screen.findByRole("button", { name: "Change actions" });
   // DRP-FR-36: the new row opens in rename mode with focus in its name field.
   // Asserted rather than assumed — without it the Escape below would pass on a
   // field that never opened. These tests are about what happens after the draft
   // exists, so the field is abandoned with Escape, which leaves the created name
   // standing and the row in its ordinary form (DRP-FR-36, DRP-FR-11, DRP-FR-16).
   if (!listed) return;
-  await screen.findByLabelText("Draft name");
+  await screen.findByLabelText("Change name");
   await userEvent.keyboard("{Escape}");
   await waitFor(() =>
-    expect(screen.queryByLabelText("Draft name")).toBeNull(),
+    expect(screen.queryByLabelText("Change name")).toBeNull(),
   );
 }

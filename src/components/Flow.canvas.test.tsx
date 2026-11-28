@@ -489,7 +489,7 @@ describe("kind changes (FLO-FR-HGIY)", () => {
     selectItem("x1");
     await userEvent.selectOptions(within(panel()).getByRole("combobox", { name: "Kind" }), "epic");
     const ask = screen.getByTestId("flow-kind-confirm");
-    expect(ask).toHaveTextContent("Change X1 to epic? This removes its draft link and its footprint.");
+    expect(ask).toHaveTextContent("Change X1 to epic? This removes its change link and its footprint.");
     await userEvent.click(within(ask).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByTestId("flow-kind-confirm")).toBeNull();
     expect(planOf(flows)).toBe(before);
@@ -508,7 +508,7 @@ describe("kind changes (FLO-FR-HGIY)", () => {
     selectItem("x1");
     await userEvent.selectOptions(within(panel()).getByRole("combobox", { name: "Kind" }), "feature");
     const ask = screen.getByTestId("flow-kind-confirm");
-    expect(ask).toHaveTextContent("This removes its draft link and its footprint.");
+    expect(ask).toHaveTextContent("This removes its change link and its footprint.");
     expect(findItem(planOf(flows), "x1")!.kind).toBe("defect");
     await userEvent.click(within(ask).getByRole("button", { name: "Change kind" }));
     const x1 = findItem(planOf(flows), "x1")!;

@@ -952,7 +952,7 @@ describe("WorktreeSelector and work streams (WTS-FR-ROMD / WTS-FR-BQCI)", () => 
     await userEvent.click(screen.getByText("main"));
 
     const error = await screen.findByTestId("worktree-error");
-    expect(error).toHaveTextContent(/graduation run is working/);
+    expect(error).toHaveTextContent(/implementation run is working/);
     expect(error).toHaveTextContent(/waits until the run ends/);
     expect(error.textContent).not.toContain("direct graduation active");
     expect(screen.getByTestId("worktree-selector-menu")).toBeInTheDocument();

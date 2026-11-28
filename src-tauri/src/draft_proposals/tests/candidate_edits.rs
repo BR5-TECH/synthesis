@@ -162,7 +162,7 @@ fn accepting_an_edited_candidate_lands_the_authors_text_and_says_so() {
     assert_eq!(f2.file_body(), ORIGINAL);
     let thread = f2.discussion();
     let body = &thread.comments.last().expect("decision").body;
-    assert!(body.contains("having edited it first"), "{body}");
+    assert!(body.contains("having edited them first"), "{body}");
 }
 
 #[test]

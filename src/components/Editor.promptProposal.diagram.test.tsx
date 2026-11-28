@@ -179,7 +179,7 @@ afterEach(() => {
 });
 
 async function compare() {
-  await screen.findByRole("region", { name: "Proposed changes" });
+  await screen.findByRole("region", { name: "Proposed edits" });
   fireEvent.click(await screen.findByRole("button", { name: "Compare diagrams" }));
   return screen.getByRole("dialog", { name: "Compare Mermaid diagrams" });
 }
@@ -187,7 +187,7 @@ async function compare() {
 describe("a diagram hunk on the rich surface of a file (PCR-FR-DMXE)", () => {
   it("PCR-FR-DMXE, DCR-FR-JKVA, DCR-FR-HBTM: the new diagram is drawn and the chip holds Compare", async () => {
     open(MD);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
     const drawn = await waitFor(() => {
       const el = document.querySelector<HTMLElement>(".hunk--diagram[data-hunk='h1']");
       expect(el).not.toBeNull();
@@ -200,7 +200,7 @@ describe("a diagram hunk on the rich surface of a file (PCR-FR-DMXE)", () => {
 
   it("PCR-FR-DMXE, DCR-FR-WTCQ: the file takes no edit and no hunk edit is written", async () => {
     open(MD);
-    await screen.findByRole("region", { name: "Proposed changes" });
+    await screen.findByRole("region", { name: "Proposed edits" });
     await waitFor(() => expect(document.querySelector(".hunk--diagram")).not.toBeNull());
     expect(document.querySelector(".hunk--diagram [contenteditable='true'], .hunk--diagram textarea")).toBeNull();
     expect(callsTo("edit_prompt_change_hunk")).toEqual([]);
@@ -222,7 +222,7 @@ describe("a diagram hunk on the rich surface of a file (PCR-FR-DMXE)", () => {
     open(MD);
     const dialog = await compare();
     fireEvent.click(within(dialog).getByRole("button", { name: "Accept" }));
-    const message = "The text this change alters is no longer in the file.";
+    const message = "The text this edit alters is no longer in the file.";
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(message);
     expect(screen.getByRole("dialog", { name: "Compare Mermaid diagrams" })).toBeInTheDocument();
     // Beside the hunk too: the review bar says it.
@@ -270,7 +270,7 @@ describe("a diagram hunk on the source surface (PCR-FR-GZSV)", () => {
     });
     expect(block).toHaveTextContent("B --> C");
     expect(block.querySelector("textarea")).toBeNull();
-    expect(block).toHaveAccessibleName(/diagram change proposed by/);
+    expect(block).toHaveAccessibleName(/diagram edit proposed by/);
     expect(await screen.findByRole("button", { name: "Compare diagrams" })).toBeInTheDocument();
     expect(callsTo("edit_prompt_change_hunk")).toEqual([]);
   });

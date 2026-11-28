@@ -68,7 +68,7 @@ fn a_resume_while_the_paused_turn_still_stops_starts_no_second_loop() {
         .expect_interruption("author_pause")
         .expect_interruption_detail_is("You paused this run.")
         .expect_commits(1)
-        .expect_commit_message_contains(0, "Abandoned graduation turn")
+        .expect_commit_message_contains(0, "Abandoned implementation turn")
         .expect_checkpoint_paths(&["src/panel.ts"])
         .expect_queue_offered_the_run_with_no_loop_standing()
         .driven_again(vec![
@@ -141,7 +141,7 @@ fn a_turn_that_finishes_after_pause_and_continue_takes_nothing_of_its_answer() {
         .expect_dispatch_count(1)
         .expect_interruption("author_pause")
         .expect_commits(1)
-        .expect_commit_message_contains(0, "Abandoned graduation turn")
+        .expect_commit_message_contains(0, "Abandoned implementation turn")
         .expect_checkpoint_paths(&["src/panel.ts"])
         .expect_queue_offered_the_run_with_no_loop_standing()
         .expect_interruption_detail_is("You paused this run.");

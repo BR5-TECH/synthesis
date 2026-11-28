@@ -16,30 +16,33 @@ export function refusalCode(error: unknown): string {
   return String(error);
 }
 
-/** OCW-FR-DTRX: a typed refusal of a decision, in words. */
+/**
+ * OCW-FR-DTRX, PVC-FR-VBPY: a typed refusal of a decision, in words. One
+ * proposed hunk is an edit.
+ */
 export function changeDecisionMessage(code: string): string {
   const E = CHANGE_PROPOSAL_ERRORS;
   if (code.includes(E.anchorLost)) {
-    return "The text this change alters is no longer in the file. Reject it to clear it.";
+    return "The text this edit alters is no longer in the file. Reject it to clear it.";
   }
   if (code.includes(E.hunkAlreadyDecided) || code.includes(E.alreadyDecided)) {
-    return "This change has already been decided.";
+    return "This edit has already been decided.";
   }
   if (code.includes(E.hunkWithdrawn)) {
-    return "The agent withdrew this change, so it cannot be decided. Nothing was changed.";
+    return "The agent withdrew this edit, so it cannot be decided. Nothing was changed.";
   }
-  if (code.includes(E.hunkNotFound)) return "This change is no longer part of the proposal.";
+  if (code.includes(E.hunkNotFound)) return "This edit is no longer part of the proposal.";
   if (code.includes(E.fileExists)) {
     return "A file is already at this path, so this new file cannot be created. Nothing was changed.";
   }
   if (code.includes(E.changeNotFound)) {
-    return "The change is no longer on its stream, so this change cannot be applied.";
+    return "The OpenSpec change is no longer on its stream, so this edit cannot be applied.";
   }
   if (code.includes(E.unknownStream)) {
-    return "The work stream is gone, so this change cannot be applied.";
+    return "The work stream is gone, so this edit cannot be applied.";
   }
   if (code.includes(E.discussionResolved)) {
-    return "The discussion this proposal was posted in is resolved. Reopen it to decide this change. Nothing was changed.";
+    return "The discussion this proposal was posted in is resolved. Reopen it to decide this edit. Nothing was changed.";
   }
   // OCW-FR-XJMR / CEP-FR-KGOL: the questions of the plan update stand.
   if (code.includes(E.planQuestionsPending)) {
@@ -47,13 +50,13 @@ export function changeDecisionMessage(code: string): string {
   }
   if (code.includes(E.writeFailed)) return "The file could not be written. Nothing was changed.";
   if (code.includes(E.acceptanceInProgress)) {
-    return "Another change to this proposal is still being applied. Try again in a moment.";
+    return "Another edit to this proposal is still being applied. Try again in a moment.";
   }
   if (code.includes(E.candidateStale)) {
-    return "This change has been rewritten elsewhere since you edited it.";
+    return "This edit has been rewritten elsewhere since you edited it.";
   }
-  if (code.includes(E.notFound)) return "This proposed change is no longer available.";
-  return "The change could not be decided. Nothing was changed.";
+  if (code.includes(E.notFound)) return "This proposal is no longer available.";
+  return "The edit could not be decided. Nothing was changed.";
 }
 
 /**
@@ -84,9 +87,9 @@ export async function runHoldingStream(streamId: string): Promise<string> {
 export async function streamBusyMessage(streamId: string): Promise<string> {
   const title = await runHoldingStream(streamId);
   if (title !== "") {
-    return `The run “${title}” holds this stream, so this change was not applied. Try again when the run stops working.`;
+    return `The run “${title}” holds this stream, so this edit was not applied. Try again when the run stops working.`;
   }
-  return "A graduation run holds this stream, so this change was not applied. Try again when the run stops working.";
+  return "An implementation run holds this stream, so this edit was not applied. Try again when the run stops working.";
 }
 
 /**

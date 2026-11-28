@@ -30,8 +30,8 @@ The AI API section of the Settings window:
 │ Appearance          │  AI API                                            │
 │ Recent projects     │  The endpoints Synthesis calls itself.             │
 │ Installed plugins   │  The model and reasoning here are used only by the │
-│ Installed adapters  │  graduation loop. An agent uses its own model and  │
-│ GitHub              │  reasoning, set in the agent editor.               │
+│ Installed adapters  │  implementation loop. An agent uses its own model  │
+│ GitHub              │  and reasoning, set in the agent editor.           │
 │ AI API            ◂ │                                                    │
 │ Agentic AI          │  ┌─ OpenRouter ─┬─ Anthropic ─┬─ OpenAI ─┬ Custom ┐│
 │                     │  │  ● Active                                      ││

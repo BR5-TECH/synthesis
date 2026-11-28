@@ -24,13 +24,18 @@ use crate::tools::plan_refusals::PlanRefusal;
 
 pub const OP_CREATE: &str = "create_issue";
 pub const OP_MODIFY: &str = "modify_issue";
-pub const OP_DRAFT: &str = "new_draft";
+/// PVC-FR-RWDM: the `op` a model sends for a new change. The stored row kind
+/// stays `RowFields::NewDraft` (PVC-FR-ODXM).
+pub const OP_DRAFT: &str = "new_change";
+/// PVC-FR-SQAF: the earlier spelling of [`OP_DRAFT`], still accepted and
+/// absent from the schema.
+pub const OP_DRAFT_ALIAS: &str = "new_draft";
 
 // PPT contract surface, "Refusals".
 pub const BAD_ROWS: &str = "Give 1 to 20 rows, each with its own `key` and an `op`, and no label in both `labels_add` and `labels_remove`.";
 pub const BLANK_TITLE: &str = "Give the row a title.";
-pub const BLANK_NAME: &str = "Give the new draft a name.";
-pub const BLANK_BODY: &str = "Give the full prompt of the new draft in `body`.";
+pub const BLANK_NAME: &str = "Give the new change a name.";
+pub const BLANK_BODY: &str = "Give the full prompt of the new change in `body`.";
 pub const BAD_CLOSE_REASON: &str = "`close_reason` is `completed` or `not_planned`.";
 
 /// The longest name of the model that a refusal repeats, in characters.

@@ -195,7 +195,7 @@ fn a_direct_start_reads_past_the_application_owned_storage() {
     // GSU-FR-RNOM / PST-FR-YWXF: an enqueued start asks for one commit.
     std::fs::remove_file(fx.root().join("a.txt")).unwrap();
     fx.start_direct(&draft).expect("the draft storage does not refuse it");
-    assert_eq!(graduation_events(), vec!["draft: graduate \"direct\"".to_string()]);
+    assert_eq!(graduation_events(), vec!["change: implement \"direct\"".to_string()]);
 }
 
 /// GSU-FR-MZGD: a worktree that is a stream's working copy says which stream.

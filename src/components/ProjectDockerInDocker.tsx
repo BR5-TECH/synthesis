@@ -47,7 +47,7 @@ export const UNDER_MICROSANDBOX_CHOICES: [UnderMicrosandbox, string, string][] =
   [
     "host_socket",
     "No isolation: use the host Docker socket",
-    "Gives up the isolation for the graduation runs of this project. Their agents run in a Docker container with the host Docker socket, as with Isolation None.",
+    "Gives up the isolation for the implementation runs of this project. Their agents run in a Docker container with the host Docker socket, as with Isolation None.",
   ],
 ];
 

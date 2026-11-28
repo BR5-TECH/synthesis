@@ -26,43 +26,43 @@ use crate::new_draft_proposals::{self as nd, NewDraftInput, NewDraftUpdate};
 mod tests;
 
 /// PND-FR-UXPK.
-pub const NAME: &str = "propose_new_draft";
+pub const NAME: &str = "propose_new_change";
 
 /// PND-FR-XJHL: the fixed description of the contract surface.
-pub const DESCRIPTION: &str = "Propose one new draft that replaces a part of the draft under discussion, when the author has decided to decompose this draft into two or more new drafts that do the same job one after another. Use it only after the author asked for a decomposition and you understand how they want it split; ask them first where you are not sure. Each call proposes **one** draft. Give its `name`, its full prompt in `body`, its `position` counted from 1, and the `total` number of new drafts you expect now. The author accepts, rejects, or discusses it, and nothing is created until they accept. Propose the next draft only after the author decided the one before it, and use what they said about it. You can propose a draft again at the same position after a rejection. To change the draft you proposed while it is still open, pass `update` with `action` `change` and the fields to replace. To take it back, pass `update` with `action` `withdraw`. You can not end the decomposition on your own: the author confirms it on the card, or tells you to confirm it, and then you use `decide_draft_changes`. Say why this draft is the right next part, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. A rationale with no tag is refused. Your turn ends when the proposal is recorded.";
+pub const DESCRIPTION: &str = "Propose one new change that replaces a part of the change under discussion, when the author has decided to decompose this change into two or more new changes that do the same job one after another. Use it only after the author asked for a decomposition and you understand how they want it split; ask them first where you are not sure. Each call proposes **one** change. Give its `name`, its full prompt in `body`, its `position` counted from 1, and the `total` number of new changes you expect now. The author accepts, rejects, or discusses it, and nothing is created until they accept. Propose the next change only after the author decided the one before it, and use what they said about it. You can propose a change again at the same position after a rejection. To change the change you proposed while it is still open, pass `update` with `action` `change` and the fields to replace. To take it back, pass `update` with `action` `withdraw`. You can not end the decomposition on your own: the author confirms it on the card, or tells you to confirm it, and then you use `decide_change_edits`. Say why this change is the right next part, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. A rationale with no tag is refused. Your turn ends when the proposal is recorded.";
 
-const RATIONALE_DESCRIPTION: &str = "Why this draft is the right next part, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud.";
+const RATIONALE_DESCRIPTION: &str = "Why this change is the right next part, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud.";
 const NAME_DESCRIPTION: &str =
-    "The name of the new draft. With `update` and `change`, give it only to replace the name.";
-const BODY_DESCRIPTION: &str = "The full prompt of the new draft, in Markdown, as the author will work on it. With `update` and `change`, give it only to replace the whole prompt.";
-const POSITION_DESCRIPTION: &str = "The place of this draft in the sequence, counted from 1.";
-const TOTAL_DESCRIPTION: &str = "The number of new drafts you expect the decomposition to have now. It can change in a later call.";
+    "The name of the new change. With `update` and `change`, give it only to replace the name.";
+const BODY_DESCRIPTION: &str = "The full prompt of the new change, in Markdown, as the author will work on it. With `update` and `change`, give it only to replace the whole prompt.";
+const POSITION_DESCRIPTION: &str = "The place of this change in the sequence, counted from 1.";
+const TOTAL_DESCRIPTION: &str = "The number of new changes you expect the decomposition to have now. It can change in a later call.";
 const UPDATE_DESCRIPTION: &str = "Changes your proposal that is still open. `change` replaces the fields you give. `withdraw` takes the proposal back and gives no other field.";
 
 // PND contract surface, "Refusals".
-pub const NOT_A_DRAFT: &str = "This conversation is not about a draft, so there is no draft here to decompose. Say how you would split it instead; asking again will not succeed.";
+pub const NOT_A_DRAFT: &str = "This conversation is not about a change, so there is no change here to decompose. Say how you would split it instead; asking again will not succeed.";
 pub const DRAFT_ARCHIVED: &str =
-    "This draft is archived, so it can not be decomposed. Tell the author; asking again will not succeed.";
+    "This change is archived, so it can not be decomposed. Tell the author; asking again will not succeed.";
 pub const DRAFT_GRADUATED: &str =
-    "This draft is graduated, so it can not be decomposed. Tell the author; asking again will not succeed.";
-pub const DRAFT_LOCKED: &str = "A graduation run holds this draft, so it can not be decomposed now. Tell the author; asking again will not succeed.";
-pub const DRAFT_GITHUB_TASK: &str = "This draft mirrors a GitHub task, so it can not be decomposed. Tell the author; asking again will not succeed.";
-pub const DECOMPOSITION_CONFIRMED: &str = "The author confirmed the decomposition of this draft, so it takes no new proposals. Tell the author; asking again will not succeed.";
-pub const PROPOSAL_OPEN: &str = "A new draft you proposed is still waiting on the author. Wait for their decision, or change it with `update`. Nothing was proposed.";
+    "This change is implemented, so it can not be decomposed. Tell the author; asking again will not succeed.";
+pub const DRAFT_LOCKED: &str = "An implementation run holds this change, so it can not be decomposed now. Tell the author; asking again will not succeed.";
+pub const DRAFT_GITHUB_TASK: &str = "This change mirrors a GitHub task, so it can not be decomposed. Tell the author; asking again will not succeed.";
+pub const DECOMPOSITION_CONFIRMED: &str = "The author confirmed the decomposition of this change, so it takes no new proposals. Tell the author; asking again will not succeed.";
+pub const PROPOSAL_OPEN: &str = "A new change you proposed is still waiting on the author. Wait for their decision, or change it with `update`. Nothing was proposed.";
 pub const CONVERSATION_RESOLVED: &str = "This conversation is resolved and takes no further comments, so nothing was proposed. Answer with what you already have; proposing again will not succeed.";
-pub const BLANK_NAME: &str = "Give the new draft a name.";
-pub const BLANK_BODY: &str = "Give the full prompt of the new draft in `body`.";
+pub const BLANK_NAME: &str = "Give the new change a name.";
+pub const BLANK_BODY: &str = "Give the full prompt of the new change in `body`.";
 pub const BAD_POSITION: &str = "`position` starts at 1 and can not be more than `total`.";
 pub const BLANK_RATIONALE: &str =
-    "Say why this draft is the right next part. The author reads this beside the proposal.";
-pub const NO_OPEN_PROPOSAL: &str = "No new draft you proposed is open on this draft, so there is nothing to update. Propose a new draft without `update`.";
+    "Say why this change is the right next part. The author reads this beside the proposal.";
+pub const NO_OPEN_PROPOSAL: &str = "No new change you proposed is open on this change, so there is nothing to update. Propose a new change without `update`.";
 pub const UPDATE_MALFORMED: &str = "`update` gives `action`: `change` with at least one of `name`, `body`, `position`, and `total`, or `withdraw` with none of them.";
 pub const NO_CHANGE: &str =
     "The fields you gave are the ones the open proposal already has, so there is nothing to decide.";
-pub const NOT_RECORDED: &str = "The proposed draft could not be recorded.";
+pub const NOT_RECORDED: &str = "The proposed change could not be recorded.";
 
 /// PND-FR-YPCH: what a second proposal in one reply is told.
-pub const ONE_AT_A_TIME: &str = "Only one new draft can be proposed at a time, so this one was not recorded. Propose the next draft after the author decided this one.";
+pub const ONE_AT_A_TIME: &str = "Only one new change can be proposed at a time, so this one was not recorded. Propose the next change after the author decided this one.";
 
 /// The `update` argument.
 #[derive(Debug, Clone, Deserialize)]

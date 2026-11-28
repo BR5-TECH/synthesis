@@ -665,7 +665,7 @@ fn stage_for_test(
         comment_id: new_note_id(),
         event_id: new_note_id(),
         thread_id: proposal.thread_id.clone(),
-        comment_body: format!("Accepted the proposed change to `{}`.", proposal.path),
+        comment_body: format!("Accepted the proposed edits to `{}`.", proposal.path),
         created_at: now_rfc3339(),
         phase,
         hunk_prior_state: None,

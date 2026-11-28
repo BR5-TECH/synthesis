@@ -92,7 +92,7 @@ describe("the drafts panel (DRP-FR-MKCP)", () => {
 
     const cancelled = createDraft({ folder: "Specs" });
     const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveTextContent("You asked to create a draft.");
+    expect(dialog).toHaveTextContent("You asked to create a change.");
     expect(calls("create_draft")).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await act(async () => {

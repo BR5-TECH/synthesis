@@ -99,7 +99,7 @@ fn an_artifact_proposal_hunk_names_its_change_on_the_current_comment() {
     let sections =
         build_input(Roots::same(&h.root()), &ConversationOrigin::of(&discussion), &trigger);
     let expected = format!(
-        "[about proposed change {hunk_id} to {PROMPT_PATH}: replace — undecided — changes: \"file a note\" — offers: \"file two notes\"]"
+        "[about proposed edit {hunk_id} to {PROMPT_PATH}: replace — undecided — changes: \"file a note\" — offers: \"file two notes\"]"
     );
     let current = section_of(&sections, TAG_CURRENT_COMMENT);
     assert!(current.body.contains(&expected), "{}", current.body);
@@ -119,7 +119,9 @@ fn an_artifact_proposal_hunk_names_the_state_its_hunk_holds_now() {
         build_input(Roots::same(&h.root()), &ConversationOrigin::of(&discussion), &trigger);
     let current = section_of(&sections, TAG_CURRENT_COMMENT);
     assert!(
-        current.body.contains(&format!("change {hunk_id} to {PROMPT_PATH}: replace — undecided")),
+        current
+            .body
+            .contains(&format!("proposed edit {hunk_id} to {PROMPT_PATH}: replace — undecided")),
         "{}",
         current.body
     );
@@ -137,7 +139,7 @@ fn an_artifact_proposal_hunk_that_cannot_be_read_keeps_a_bare_line() {
         build_input(Roots::same(&h.root()), &ConversationOrigin::of(&discussion), &trigger);
     let current = section_of(&sections, TAG_CURRENT_COMMENT);
     assert!(
-        current.body.contains(&format!("[about proposed change h-nonesuch to {PROMPT_PATH}]")),
+        current.body.contains(&format!("[about proposed edit h-nonesuch to {PROMPT_PATH}]")),
         "{}",
         current.body
     );
@@ -198,7 +200,7 @@ fn a_prompt_proposal_reference_renders_its_changes_and_an_update_its_counts() {
     assert!(history.body.contains("1 withdrawn]"), "{}", history.body);
     assert!(
         history.body.contains(&format!(
-            "[updated the proposed changes to {PROMPT_PATH}: 0 changed, 0 added, 1 withdrawn]"
+            "[updated the proposed edits to {PROMPT_PATH}: 0 changed, 0 added, 1 withdrawn]"
         )),
         "{}",
         history.body

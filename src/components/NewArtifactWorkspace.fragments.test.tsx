@@ -114,7 +114,7 @@ describe("a comment on a passage of the prompt (DDS-FR-QMBC, NAW-FR-32)", () => 
     expect(within(column).getByTestId("discussion-opening-fragment")).toHaveTextContent(
       "body",
     );
-    const field = within(column).getByRole("textbox", { name: "Discuss this draft" });
+    const field = within(column).getByRole("textbox", { name: "Discuss this change" });
     await waitFor(() => expect(field).toHaveFocus());
 
     fireEvent.change(field, { target: { value: "tighten this" } });

@@ -62,6 +62,14 @@ describe("Project OpenSpec section", () => {
     expect(screen.queryByTestId("openspec-install")).not.toBeInTheDocument();
   });
 
+  it("PVC-FR-NEXL: the lead names the OpenSpec changes, not bare changes", async () => {
+    render(<OpenSpecSection />);
+    await screen.findByText("This project uses OpenSpec.");
+    expect(screen.getByTestId("openspec-settings")).toHaveTextContent(
+      "agents in discussions can read the capabilities and the OpenSpec changes of the project.",
+    );
+  });
+
   it("SET-FR-FZKL: states a project that does not use OpenSpec and an inactive mode", async () => {
     status = { setting: "auto", usesOpenspec: false, active: false, cli: AVAILABLE };
     render(<OpenSpecSection />);

@@ -141,7 +141,7 @@ describe("the window a graduation starts in", () => {
     await waitFor(() => expect(picker()).toBeInTheDocument());
     expect(dialog()).toHaveAttribute("aria-modal", "true");
     // Named by the title it shows, so what it is called is what is read.
-    expect(dialog()).toHaveAccessibleName(/Graduate .artifact-window./);
+    expect(dialog()).toHaveAccessibleName(/Implement .artifact-window./);
     expect(document.querySelector(".scrim")).not.toBeNull();
   });
 

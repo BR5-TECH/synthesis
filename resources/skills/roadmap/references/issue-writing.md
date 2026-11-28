@@ -24,7 +24,7 @@ Keep the body short. A task needs less text than a feature.
 - **Parent**: an epic holds features, and a feature holds tasks. Set `parent_issue` for an existing parent, or `parent_row` for a new parent of the same proposal.
 - **Labels**: only labels that exist. Do not add a label only to decorate the issue.
 
-## A change to an issue
+## An edit to an issue
 
 - Read the issue first.
 - Change only the fields that the request changes.

@@ -15,7 +15,7 @@ A request of the author names an outcome. Find the rows that make that outcome t
 | "X is done" | `modify_issue` with `close_reason` `completed`, or with the `status` that means done. |
 | "Start X", "X is blocked" | `modify_issue` with the matching `status`. |
 | "Label X as Y" | `modify_issue` with `labels_add` or `labels_remove`. Use only labels that exist. |
-| "Feature X exists but is not finished" | `new_draft` that finishes X, with the full prompt in `body`. |
+| "Feature X exists but is not finished" | `new_change` that finishes X, with the full prompt in `body`. |
 
 ## When the request is not clear
 

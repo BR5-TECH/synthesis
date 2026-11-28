@@ -108,7 +108,7 @@ async function open(view: "all" | "archived" = "all") {
  * (GRT-FR-AMHS), so a lookup across the page would find two.
  */
 function rowButton(name: string) {
-  return within(screen.getByRole("list", { name: "Graduation run history" })).getByRole(
+  return within(screen.getByRole("list", { name: "Implementation run history" })).getByRole(
     "button",
     { name },
   );
@@ -214,7 +214,7 @@ describe("the rail's Restart", () => {
     await waitFor(() => expect(region).toHaveAttribute("data-run", "r2"));
     await waitFor(() =>
       expect(document.activeElement).toBe(
-        within(region).getByRole("button", { name: "Open draft" }),
+        within(region).getByRole("button", { name: "Open change" }),
       ),
     );
   });
@@ -283,7 +283,7 @@ describe("the rail's Restart", () => {
     await userEvent.click(within(confirmation).getByRole("button", { name: "Restart run" }));
     const alert = await within(confirmation).findByRole("alert");
     expect(alert).toHaveTextContent("No new run was created, and this run is unchanged.");
-    const rail = screen.getByRole("list", { name: "Graduation run history" });
+    const rail = screen.getByRole("list", { name: "Implementation run history" });
     expect(within(rail).queryByRole("alert")).toBeNull();
     expect(screen.getAllByRole("alert")).toHaveLength(1);
   });
@@ -350,7 +350,7 @@ describe("after an accepted restart", () => {
     await waitFor(() => expect(region).toHaveAttribute("data-run", "r2"));
     await waitFor(() =>
       expect(document.activeElement).toBe(
-        within(region).getByRole("button", { name: "Open draft" }),
+        within(region).getByRole("button", { name: "Open change" }),
       ),
     );
     expect(rowButton("Run r2")).toHaveAttribute("aria-current", "true");
@@ -379,7 +379,7 @@ describe("after an accepted restart", () => {
     expect(rowButton("Run r2")).toHaveAttribute("aria-current", "true");
     await waitFor(() =>
       expect(document.activeElement).toBe(
-        within(region).getByRole("button", { name: "Open draft" }),
+        within(region).getByRole("button", { name: "Open change" }),
       ),
     );
   });
@@ -446,7 +446,7 @@ describe("a refused restart", () => {
     expect(alerts[0]).toHaveTextContent("No new run was created, and this run is unchanged.");
     expect(restartCalls()).toHaveLength(1);
     expect(region).toHaveAttribute("data-run", "r1");
-    expect(within(screen.getByRole("list", { name: "Graduation run history" })).queryByRole("button", { name: "Run r2" })).toBeNull();
+    expect(within(screen.getByRole("list", { name: "Implementation run history" })).queryByRole("button", { name: "Run r2" })).toBeNull();
     expect(filter).toHaveValue("Run r");
     // GRT-FR-KSBC: the surface retries nothing by itself, and the author can.
     refuse = false;

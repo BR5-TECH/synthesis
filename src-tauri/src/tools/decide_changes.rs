@@ -1,4 +1,4 @@
-//! What `decide_draft_changes` and `decide_prompt_changes` share
+//! What `decide_change_edits` and `decide_prompt_changes` share
 //! (`DDC-decide-draft-changes-tool.md`, `DPC-decide-prompt-changes-tool.md`).
 //!
 //! The two tools decide hunks of an open proposal on an explicit instruction of
@@ -27,11 +27,11 @@ pub const MAX_DECISIONS: usize = 50;
 
 /// DDC contract surface: the body of the opening comment of a hunk discussion
 /// that a `discuss` entry opens (DDC-FR-ILCB, DPC-FR-AFVA).
-pub const DISCUSSION_BODY: &str = "The author asked to discuss this change.";
+pub const DISCUSSION_BODY: &str = "The author asked to discuss this edit.";
 
 /// DDC-FR-WRFY: the shared **malformed arguments** refusal, in this tool's
 /// words.
-pub const DECISIONS_MALFORMED: &str = "Pass `instruction` with the author's words, up to 500 characters, and `decisions` with 1 to 50 entries, each with the `id` of a change and an `action`.";
+pub const DECISIONS_MALFORMED: &str = "Pass `instruction` with the author's words, up to 500 characters, and `decisions` with 1 to 50 entries, each with the `id` of an edit and an `action`.";
 
 /// DDC-FR-ZYOL: the speech-not-posted refusal.
 pub const SPEECH_NOT_POSTED: &str = "The author is still speaking, and the comment of the speech has not arrived. Nothing was decided. Call again after the comment arrives.";
@@ -43,10 +43,14 @@ pub const INSTRUCTION_NOT_FOUND: &str = "The words in `instruction` are not in t
 pub const INSTRUCTION_USED: &str = "The author's latest comment already gave a decision. Nothing was decided. Ask the author what to do next.";
 
 /// DDC-FR-ROLG / DPC-FR-HWOT: the parameter text of `instruction`.
-const INSTRUCTION_DESCRIPTION: &str = "The words of the author's latest comment that ask for these decisions, copied exactly as the author wrote or said them, for example \"accept the second change\".";
+const INSTRUCTION_DESCRIPTION: &str = "The words of the author's latest comment that ask for these decisions, copied exactly as the author wrote or said them, for example \"accept the second edit\".";
 
-/// DDC-FR-VAYO / DPC-FR-RJBJ: the parameter text of `decisions`.
+/// DPC-FR-RJBJ: the parameter text of `decisions`.
 const DECISIONS_DESCRIPTION: &str = "The decisions the author asked for in the latest comment, in the order the author gave them. Each entry names one change by its `id` and gives one `action`.";
+
+/// DDC-FR-VAYO, PVC-FR-VBPY: the parameter text of `decisions` for the
+/// proposal of a change, where a hunk is an "edit".
+const EDIT_DECISIONS_DESCRIPTION: &str = "The decisions the author asked for in the latest comment, in the order the author gave them. Each entry names one edit by its `id` and gives one `action`.";
 
 /// DDC-FR-VAYO / DPC-FR-RJBJ: the parameter text of `id`.
 const ID_DESCRIPTION: &str = "The id of a change of the open proposal, as your input lists it.";
@@ -100,6 +104,25 @@ pub fn parameters_with(
     id_description: &str,
     actions: &[&str],
 ) -> serde_json::Value {
+    parameters_full(DECISIONS_DESCRIPTION, action_description, id_description, actions)
+}
+
+/// [`parameters_with`] for the proposal of a change, whose `decisions` text
+/// names an "edit" (DDC contract surface, PVC-FR-VBPY).
+pub fn edit_parameters(
+    action_description: &str,
+    id_description: &str,
+    actions: &[&str],
+) -> serde_json::Value {
+    parameters_full(EDIT_DECISIONS_DESCRIPTION, action_description, id_description, actions)
+}
+
+fn parameters_full(
+    decisions_description: &str,
+    action_description: &str,
+    id_description: &str,
+    actions: &[&str],
+) -> serde_json::Value {
     serde_json::json!({
         "type": "object",
         "properties": {
@@ -110,7 +133,7 @@ pub fn parameters_with(
             },
             "decisions": {
                 "type": "array",
-                "description": DECISIONS_DESCRIPTION,
+                "description": decisions_description,
                 "minItems": 1,
                 "maxItems": MAX_DECISIONS,
                 "items": {
@@ -356,25 +379,26 @@ impl RefusalCode {
 /// DDC contract surface: the text after "Decision N of M: " for each code.
 ///
 /// `file` is "the prompt" for a draft and "the file" for a prompt or a
-/// project document (DPC contract surface).
+/// project document (DPC contract surface). DPC and DCE take the messages of
+/// DDC, so every tool names the hunk an "edit" (PVC-FR-VBPY).
 fn refusal_text(code: RefusalCode, file: &str, already: Option<Action>) -> String {
     match code {
         RefusalCode::UnknownHunk => {
-            "the id you gave is not a change of the open proposal. Use an id from your input."
+            "the id you gave is not an edit of the open proposal. Use an id from your input."
                 .to_string()
         }
         RefusalCode::HunkLost => format!(
-            "the text this change replaces is no longer in {file}, so it can not be decided here. Tell the author to clear it in the review."
+            "the text this edit replaces is no longer in {file}, so it can not be decided here. Tell the author to clear it in the review."
         ),
         RefusalCode::HunkAccepted => {
-            "this change is already accepted, and an accepted change is final.".to_string()
+            "this edit is already accepted, and an accepted edit is final.".to_string()
         }
         RefusalCode::HunkWithdrawn => {
-            "this change was withdrawn, so there is nothing to decide.".to_string()
+            "this edit was withdrawn, so there is nothing to decide.".to_string()
         }
         RefusalCode::AlreadyInState => match already {
-            Some(Action::Discuss) => "this change already has a discussion, so nothing changed.",
-            _ => "this change is already rejected, so nothing changed.",
+            Some(Action::Discuss) => "this edit already has a discussion, so nothing changed.",
+            _ => "this edit is already rejected, so nothing changed.",
         }
         .to_string(),
         // DDC contract surface: a draft also takes `confirm`. A file has no
@@ -396,13 +420,13 @@ fn refusal_text(code: RefusalCode, file: &str, already: Option<Action>) -> Strin
 // ---------------------------------------------------------------------------
 
 /// DDC-FR-OEJB: the not-a-draft-conversation refusal.
-pub const NOT_A_DRAFT_CONVERSATION: &str = "This conversation is not about a draft, so there is no proposal here to decide. Asking again will not succeed.";
+pub const NOT_A_DRAFT_CONVERSATION: &str = "This conversation is not about a change, so there is no proposal here to decide. Asking again will not succeed.";
 /// DPC-FR-JJGY: the not-an-artifact-conversation refusal.
 pub const NOT_AN_ARTIFACT_CONVERSATION: &str = "This conversation is not about a prompt or a project document, so there is no proposal here to decide. Asking again will not succeed.";
 /// DDC-FR-ZGXF: no open proposal on the draft.
-pub const NO_OPEN_DRAFT_PROPOSAL: &str = "No proposal, no proposed draft, and no decomposition to confirm is open on this draft, so there is nothing to decide. Tell the author that nothing is waiting for a decision.";
+pub const NO_OPEN_DRAFT_PROPOSAL: &str = "No proposal, no proposed change, and no decomposition to confirm is open on this change, so there is nothing to decide. Tell the author that nothing is waiting for a decision.";
 /// DDC-FR-JCSV: the `invalid_action` text of a draft entry.
-pub const INVALID_DRAFT_ACTION: &str = "the action must be `accept`, `reject`, or `discuss` for a change or a proposed draft, and `confirm` for the decomposition.";
+pub const INVALID_DRAFT_ACTION: &str = "the action must be `accept`, `reject`, or `discuss` for an edit or a proposed change, and `confirm` for the decomposition.";
 /// DPC-FR-RGGP: no open proposal on the file.
 /// DCE-FR-XVLE: no open proposal on the change.
 pub const NO_OPEN_CHANGE_PROPOSAL: &str = "No proposal is open on this OpenSpec change, so there is no edit to decide. Tell the author that nothing is waiting for a decision.";

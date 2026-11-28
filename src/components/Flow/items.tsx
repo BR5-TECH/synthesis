@@ -283,7 +283,7 @@ export function CardView(props: CardViewProps) {
         (state?.draftMissing ? (
           <div className="flow-draft flow-draft--missing" data-testid="flow-draft-missing">
             <span aria-hidden="true">⚠</span>
-            <span className="flow-draft__name">Draft {item.draftId} is missing</span>
+            <span className="flow-draft__name">Change {item.draftId} is missing</span>
             <button
               type="button"
               className="flow-btn flow-btn--xs"
@@ -297,7 +297,7 @@ export function CardView(props: CardViewProps) {
           <button
             type="button"
             className="flow-draft"
-            aria-label={`Open draft ${draftName}`}
+            aria-label={`Open change ${draftName}`}
             onClick={() => props.onOpenDraft(item.draftId!)}
           >
             <span aria-hidden="true">✎</span>

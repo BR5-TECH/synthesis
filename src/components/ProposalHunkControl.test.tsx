@@ -79,7 +79,7 @@ describe("CMT-FR-48: the control a change reference renders", () => {
   it("CMT-FR-48, CMS-FR-TQVB: names the change by its place and says how it stands", () => {
     act(() => noteProposalChanged({ draftId: "d1", proposal: proposal(["pending", "rejected", "pending"]) }));
     const control = mount();
-    expect(control).toHaveTextContent("Change 2 of 3");
+    expect(control).toHaveTextContent("Edit 2 of 3");
     expect(control).toHaveTextContent("rejected");
     expect(control).toBeEnabled();
   });
@@ -131,6 +131,6 @@ describe("CMT-FR-48: the control a change reference renders", () => {
     act(() =>
       noteProposalChanged({ draftId: "d1", proposal: proposal(["withdrawn", "pending", "pending"]) }),
     );
-    expect(mount()).toHaveTextContent("Change 1 of 2");
+    expect(mount()).toHaveTextContent("Edit 1 of 2");
   });
 });

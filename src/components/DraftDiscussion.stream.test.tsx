@@ -452,7 +452,7 @@ describe("a change reference is one row (DDS-FR-XHRB, DDS-FR-MCUP, DDS-FR-YSNB)"
     ]);
     const row = await screen.findByTestId("dds-change-row");
     expect(row).toHaveTextContent("Post draft to Github.md");
-    expect(row).toHaveTextContent("2 changes");
+    expect(row).toHaveTextContent("2 edits");
     expect(row).toHaveTextContent("accepted");
     // DDS-FR-MCUP: the chip names the kind of the row.
     expect(within(row).getByText("CHG")).toBeInTheDocument();

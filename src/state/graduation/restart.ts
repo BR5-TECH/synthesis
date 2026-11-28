@@ -48,7 +48,7 @@ export function restartConfirmation(run: GraduationRun): string {
     const same = phase === "rework" ? ", with the same instruction" : "";
     return (
       `Start a new run of “${runTitle(run)}” on the work stream “${run.streamName}”. ` +
-      `It works on the same change there${same}. ` +
+      `It works on the same OpenSpec change there${same}. ` +
       "The discarded run stays discarded and unchanged."
     );
   }

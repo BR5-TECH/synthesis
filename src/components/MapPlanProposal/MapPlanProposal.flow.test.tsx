@@ -79,7 +79,7 @@ describe("update comments (MPV-FR-QZUD)", () => {
     renderPair(b, { update: { changed: 1, added: 0, withdrawn: 2 } });
     const second = screen.getByTestId("second");
     expect(await within(second).findByText("Updated: 1 changed, 2 removed")).toBeInTheDocument();
-    await within(screen.getByTestId("first")).findByText("3 draft");
+    await within(screen.getByTestId("first")).findByText("3 change");
     const user = userEvent.setup();
     await user.click(within(second).getByTestId("map-plan-entry-toggle"));
     expect(await screen.findByTestId("pp-sheet")).toBeInTheDocument();
@@ -105,7 +105,7 @@ describe("the sheet opens on its own (MPV-FR-UWQL, MPV-FR-KHDP)", () => {
     const openWhenShown: boolean[] = [];
     const showDelivery = vi.fn(() => openWhenShown.push(screen.queryByTestId("pp-sheet") !== null));
     const { store } = renderPair(b, { host: fakeHost({ showDelivery }) });
-    await screen.findByText("3 draft");
+    await screen.findByText("3 change");
     const composer = screen.getByLabelText("Composer");
     composer.focus();
     act(() => store.arrived("t1", "p1", showDelivery));
@@ -118,7 +118,7 @@ describe("the sheet opens on its own (MPV-FR-UWQL, MPV-FR-KHDP)", () => {
   it("MPV-FR-UWQL: a proposal that is not read yet opens once its read lands", async () => {
     const b = backend(invokeMock, proposal([draftRow("x", "Other", "X.")], { id: "p0" }));
     const { store } = renderPair(b);
-    await screen.findByText("1 draft");
+    await screen.findByText("1 change");
     b.proposal = THREE();
     act(() => store.arrived("t1", "p1"));
     expect(await screen.findByTestId("pp-sheet")).toBeInTheDocument();
@@ -143,7 +143,7 @@ describe("an update redraws the sheet (MPV-FR-GRTP)", () => {
   it("MPV-FR-GRTP: a changed row redraws in place, an added row joins the list, and the selection stays", async () => {
     const b = backend(invokeMock, THREE());
     renderPair(b);
-    await screen.findByText("3 draft");
+    await screen.findByText("3 change");
     const user = userEvent.setup();
     await user.click(screen.getByTestId("map-plan-entry-toggle"));
     await screen.findByTestId("pp-sheet");
@@ -185,7 +185,7 @@ describe("a withdrawn selected row in the middle (MPV-FR-GRTP)", () => {
     ]);
     const b = backend(invokeMock, four);
     renderPair(b);
-    await screen.findByText("4 draft");
+    await screen.findByText("4 change");
     const user = userEvent.setup();
     await user.click(screen.getByTestId("map-plan-entry-toggle"));
     await screen.findByTestId("pp-sheet");
@@ -216,7 +216,7 @@ describe("the sheet closes on its own (MPV-FR-BBQY, MPV-FR-VXHC)", () => {
     const b = backend(invokeMock, THREE());
     b.reject = async ({ rowKey }) => (b.proposal = withRow(b.proposal, rowKey, { state: "rejected" }));
     renderPair(b);
-    await screen.findByText("3 draft");
+    await screen.findByText("3 change");
     const user = userEvent.setup();
     await user.click(screen.getByTestId("map-plan-entry-toggle"));
     await screen.findByTestId("pp-sheet");
@@ -245,7 +245,7 @@ describe("the sheet closes on its own (MPV-FR-BBQY, MPV-FR-VXHC)", () => {
     b.accept = async ({ rowKey }) =>
       (b.proposal = withRow(b.proposal, rowKey, rowKey === "b" ? { state: "failed", error: { code: "x", message: "No." } } : { state: "accepted" }));
     renderPair(b);
-    await screen.findByText("3 draft");
+    await screen.findByText("3 change");
     const user = userEvent.setup();
     await user.click(screen.getByTestId("map-plan-entry-toggle"));
     await screen.findByTestId("pp-sheet");
@@ -275,7 +275,7 @@ describe("code blocks in the body diff (MPV-FR-ZCWQ, MPV-FR-JVZN)", () => {
     const body = "Intro.\n\n```mermaid\nflowchart LR\n    A --> B\n```\n";
     const b = backend(invokeMock, proposal([draftRow("a", "Diagram", body)]));
     renderPair(b);
-    await screen.findByText("1 draft");
+    await screen.findByText("1 change");
     const user = userEvent.setup();
     await user.click(screen.getByTestId("map-plan-entry-toggle"));
     const code = await screen.findByTestId("pp-code");

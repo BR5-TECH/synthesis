@@ -174,7 +174,7 @@ fn a_ready_on_a_deleted_change_file_starts_another_pass() {
     let instruction =
         dispatch.of_part("work")[1].instruction_field("loop_instruction").unwrap_or_default();
     assert!(instruction.contains("[critical]"), "{instruction}");
-    assert!(instruction.contains("deletes files of the change folder"), "{instruction}");
+    assert!(instruction.contains("deletes files of the OpenSpec change folder"), "{instruction}");
     assert!(instruction.contains(&spec), "{instruction}");
 }
 

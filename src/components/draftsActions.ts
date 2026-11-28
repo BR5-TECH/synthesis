@@ -233,7 +233,7 @@ export function createDraftActions(deps: DraftActionDeps) {
     setSelected(first);
     focusNext.current = first;
     setAnnouncement(
-      `Folder ${folderName(path)} deleted; its contents moved to ${parent === ROOT ? "Drafts" : parent}.`,
+      `Folder ${folderName(path)} deleted; its contents moved to ${parent === ROOT ? "Changes" : parent}.`,
     );
     onDraftChanged();
   };

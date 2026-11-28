@@ -193,7 +193,7 @@ fn accepting_with_no_feedback_appends_the_decision_alone_in_order() {
     let decision = &thread.comments[2];
     assert_eq!(
         decision.body,
-        format!("Accepted the proposed change to `{FILE}`. 1 accepted, 0 rejected."),
+        format!("Accepted the proposed edits to `{FILE}`. 1 accepted, 0 rejected."),
         "no feedback means the sentence and its tally alone (DCP-FR-15)",
     );
     assert!(

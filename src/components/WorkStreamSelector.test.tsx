@@ -402,7 +402,7 @@ describe("merging a stream (WSS-FR-YPDA, WSS-FR-VMNV, WSS-FR-OMAP)", () => {
     expect(within(row).getByText("a.ts")).toBeInTheDocument();
     expect(within(row).getByText("b/c.md")).toBeInTheDocument();
     // It neither commits nor discards that work here.
-    await userEvent.click(within(row).getByRole("button", { name: "Open Changes" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Open Commits" }));
     expect(onOpenChanges).toHaveBeenCalled();
     expect(calls("commit_paths")).toHaveLength(0);
   });

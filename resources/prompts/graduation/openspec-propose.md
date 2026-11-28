@@ -18,7 +18,7 @@
 
 This project uses OpenSpec. This run does not implement the prompt. It writes the OpenSpec change that proposes it: the folder `openspec/changes/{{ change-name }}/`.
 
-- Write the change as this project's OpenSpec schema defines it. Before you write each artifact, run `openspec instructions <artifact> --change {{ change-name }} --json` and follow what it returns. Run `openspec status --change {{ change-name }} --json` to see which artifact comes next.
+- Write the OpenSpec change as this project's OpenSpec schema defines it. Before you write each artifact, run `openspec instructions <artifact> --change {{ change-name }} --json` and follow what it returns. Run `openspec status --change {{ change-name }} --json` to see which artifact comes next.
 - If the folder does not exist yet, create it with `openspec new change {{ change-name }}`.
 - State in the deltas what the prompt asks for, and nothing that it does not ask for. Read the live specs in `openspec/specs/` first, and cite each requirement you modify or remove by its exact name.
 - Change no file outside `openspec/changes/{{ change-name }}/` and the check folder. Write no code.
@@ -28,9 +28,9 @@ This project uses OpenSpec. This run does not implement the prompt. It writes th
 
 ## This review judges a proposed OpenSpec change
 
-This run proposes an OpenSpec change: the folder `openspec/changes/{{ change-name }}/`. It implements nothing, so judge the change, not code.
+This run proposes an OpenSpec change: the folder `openspec/changes/{{ change-name }}/`. It implements nothing, so judge the OpenSpec change, not code.
 
-- Judge the change against the prompt: whether its proposal, its deltas, its design, and its tasks state what the prompt asks for, and nothing that it does not ask for.
+- Judge the OpenSpec change against the prompt: whether its proposal, its deltas, its design, and its tasks state what the prompt asks for, and nothing that it does not ask for.
 - Each delta must cite the live requirement it modifies or removes by its exact name in `openspec/specs/`.
 - A path changed outside `openspec/changes/{{ change-name }}/` and the check folder is a finding.
-- `input.openspec_validation` is the result of `openspec validate {{ change-name }} --strict` on the tree you judge. Do not run it yourself. A change that does not validate is not ready, and each issue it names is a finding.
+- `input.openspec_validation` is the result of `openspec validate {{ change-name }} --strict` on the tree you judge. Do not run it yourself. An OpenSpec change that does not validate is not ready, and each issue it names is a finding.

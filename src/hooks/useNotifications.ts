@@ -88,7 +88,7 @@ export function resolveActivation(
     };
   }
   if (target.kind === "draft" && !context.draftExists(target.draftId)) {
-    return { kind: "state", message: "That draft no longer exists." };
+    return { kind: "state", message: "That change no longer exists." };
   }
 
   return { kind: "open", target };

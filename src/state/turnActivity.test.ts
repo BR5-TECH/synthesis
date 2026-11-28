@@ -186,6 +186,21 @@ describe("CTA-FR-RFQB, CMS-FR-HRDN: the saved activity row of a comment", () => 
     expect(activityRowLabel(row!)).toBe("@arch called 2 tools");
   });
 
+  it("PVC-FR-LGYT, PVC-FR-PXOE, PVC-FR-JBPC: a saved call with a legacy name shows its current name for the target kind", () => {
+    const one = (tool: string) => agent({ toolCalls: [{ tool, keyInput: null, state: "done" }] });
+    const toolOf = (row: ReturnType<typeof savedActivityRowOf>) => row?.calls[0].tool;
+    expect(toolOf(savedActivityRowOf(one("read_draft"), "draft"))).toBe("read_change");
+    expect(toolOf(savedActivityRowOf(one("propose_change_edits"), "change"))).toBe(
+      "propose_openspec_change_edits",
+    );
+    expect(toolOf(savedActivityRowOf(one("propose_change_edits"), "draft"))).toBe(
+      "propose_change_edits",
+    );
+    // With no target kind known, only the rows of every kind apply.
+    expect(toolOf(savedActivityRowOf(one("search_drafts")))).toBe("search_changes");
+    expect(toolOf(savedActivityRowOf(one("request_change_action")))).toBe("request_change_action");
+  });
+
   it("gives no row for a comment with an empty or absent list, or one that no agent wrote", () => {
     expect(savedActivityRowOf(agent())).toBeNull();
     expect(savedActivityRowOf(agent({ toolCalls: [] }))).toBeNull();

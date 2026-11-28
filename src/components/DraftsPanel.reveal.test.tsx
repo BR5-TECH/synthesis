@@ -95,12 +95,12 @@ describe("reveal a draft by id (DRP-FR-34)", () => {
     // `UI` and `UI/Components` both collapsed, and something else selected.
     const { revealDraft } = renderPanel({ expanded: [] });
     await screen.findByRole("treeitem", { name: "Folder UI" });
-    expect(screen.queryByRole("treeitem", { name: /^Draft button-lens/ })).toBeNull();
+    expect(screen.queryByRole("treeitem", { name: /^Change button-lens/ })).toBeNull();
 
     act(() => revealDraft("d-button"));
 
     const row = await screen.findByRole("treeitem", {
-      name: /^Draft button-lens/,
+      name: /^Change button-lens/,
     });
     expect(row).toHaveAttribute("aria-selected", "true");
     // DRP-FR-34: the reveal ends with the row in view. jsdom implements no
@@ -128,7 +128,7 @@ describe("reveal a draft by id (DRP-FR-34)", () => {
     act(() => revealDraft("d-button", { focus: true }));
 
     const row = await screen.findByRole("treeitem", {
-      name: /^Draft button-lens/,
+      name: /^Change button-lens/,
     });
     await waitFor(() => expect(row).toHaveFocus());
   });
@@ -140,20 +140,20 @@ describe("reveal a draft by id (DRP-FR-34)", () => {
     });
     // The default position: an archived draft is not in the tree at all.
     const { revealDraft } = renderPanel({ filter: "active" });
-    await screen.findByRole("treeitem", { name: /^Draft editor-tweaks/ });
-    expect(screen.queryByRole("treeitem", { name: /^Draft artifact-window/ })).toBeNull();
+    await screen.findByRole("treeitem", { name: /^Change editor-tweaks/ });
+    expect(screen.queryByRole("treeitem", { name: /^Change artifact-window/ })).toBeNull();
 
     act(() => revealDraft("d-archived"));
 
     const row = await screen.findByRole("treeitem", {
-      name: /^Draft artifact-window/,
+      name: /^Change artifact-window/,
     });
     expect(row).toHaveAttribute("aria-selected", "true");
     // **all drafts** rather than **archived**: nothing else leaves the tree to
     // make room for the revealed row.
-    expect(selectorValue("Draft status")).toBe("all");
+    expect(selectorValue("Change status")).toBe("all");
     expect(
-      screen.getByRole("treeitem", { name: /^Draft editor-tweaks/ }),
+      screen.getByRole("treeitem", { name: /^Change editor-tweaks/ }),
     ).toBeInTheDocument();
   });
 
@@ -172,15 +172,15 @@ describe("reveal a draft by id (DRP-FR-34)", () => {
     // Wait for the debounced search to actually land: until it does, `matches`
     // is null and the tree admits everything, so asserting a row is absent would
     // pass on an unrendered panel rather than on a filtered one.
-    await screen.findByRole("treeitem", { name: /^Draft library-lens/ });
+    await screen.findByRole("treeitem", { name: /^Change library-lens/ });
     await waitFor(() =>
-      expect(screen.queryByRole("treeitem", { name: /^Draft editor-tweaks/ })).toBeNull(),
+      expect(screen.queryByRole("treeitem", { name: /^Change editor-tweaks/ })).toBeNull(),
     );
 
     act(() => revealDraft("d-active"));
 
-    await screen.findByRole("treeitem", { name: /^Draft editor-tweaks/ });
-    expect(screen.getByLabelText("Filter drafts")).toHaveValue("");
+    await screen.findByRole("treeitem", { name: /^Change editor-tweaks/ });
+    expect(screen.getByLabelText("Filter changes")).toHaveValue("");
   });
 
   it("leaves both filters alone when neither is hiding the row", async () => {
@@ -189,17 +189,17 @@ describe("reveal a draft by id (DRP-FR-34)", () => {
       return undefined;
     });
     const { revealDraft } = renderPanel({ filter: "active" });
-    await screen.findByRole("treeitem", { name: /^Draft editor-tweaks/ });
+    await screen.findByRole("treeitem", { name: /^Change editor-tweaks/ });
 
     act(() => revealDraft("d-active"));
 
     await waitFor(() =>
       expect(
-        screen.getByRole("treeitem", { name: /^Draft editor-tweaks/ }),
+        screen.getByRole("treeitem", { name: /^Change editor-tweaks/ }),
       ).toHaveAttribute("aria-selected", "true"),
     );
-    expect(selectorValue("Draft status")).toBe("active");
-    expect(screen.getByLabelText("Filter drafts")).toHaveValue("");
+    expect(selectorValue("Change status")).toBe("active");
+    expect(screen.getByLabelText("Filter changes")).toHaveValue("");
   });
 
   it("SNV-FR-67: an id the tree does not hold changes nothing and says nothing", async () => {
@@ -209,7 +209,7 @@ describe("reveal a draft by id (DRP-FR-34)", () => {
     });
     const { revealDraft } = renderPanel({ filter: "active" });
     const first = await screen.findByRole("treeitem", {
-      name: /^Draft editor-tweaks/,
+      name: /^Change editor-tweaks/,
     });
     fireEvent.click(first);
     await waitFor(() => expect(first).toHaveAttribute("aria-selected", "true"));
@@ -219,9 +219,9 @@ describe("reveal a draft by id (DRP-FR-34)", () => {
     // The author's own selection, the filter, and the tree are all as they were,
     // and nothing was rendered to explain it.
     expect(
-      screen.getByRole("treeitem", { name: /^Draft editor-tweaks/ }),
+      screen.getByRole("treeitem", { name: /^Change editor-tweaks/ }),
     ).toHaveAttribute("aria-selected", "true");
-    expect(selectorValue("Draft status")).toBe("active");
+    expect(selectorValue("Change status")).toBe("active");
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -236,7 +236,7 @@ describe("reveal a draft by id (DRP-FR-34)", () => {
     const before = invokeMock.mock.calls.length;
 
     act(() => revealDraft("d-window"));
-    await screen.findByRole("treeitem", { name: /^Draft artifact-window/ });
+    await screen.findByRole("treeitem", { name: /^Change artifact-window/ });
 
     expect(onOpenDraft).not.toHaveBeenCalled();
     expect(invokeMock.mock.calls.length).toBe(before);
@@ -248,20 +248,20 @@ describe("reveal a draft by id (DRP-FR-34)", () => {
       return undefined;
     });
     const { revealDraft } = renderPanel({ filter: "all" });
-    await screen.findByRole("treeitem", { name: /^Draft editor-tweaks/ });
+    await screen.findByRole("treeitem", { name: /^Change editor-tweaks/ });
 
     act(() => revealDraft("d-active"));
     await waitFor(() =>
       expect(
-        screen.getByRole("treeitem", { name: /^Draft editor-tweaks/ }),
+        screen.getByRole("treeitem", { name: /^Change editor-tweaks/ }),
       ).toHaveAttribute("aria-selected", "true"),
     );
 
     // The author selects something else, and then returns to that tab.
-    fireEvent.click(screen.getByRole("treeitem", { name: /^Draft library-lens/ }));
+    fireEvent.click(screen.getByRole("treeitem", { name: /^Change library-lens/ }));
     await waitFor(() =>
       expect(
-        screen.getByRole("treeitem", { name: /^Draft library-lens/ }),
+        screen.getByRole("treeitem", { name: /^Change library-lens/ }),
       ).toHaveAttribute("aria-selected", "true"),
     );
 
@@ -269,7 +269,7 @@ describe("reveal a draft by id (DRP-FR-34)", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole("treeitem", { name: /^Draft editor-tweaks/ }),
+        screen.getByRole("treeitem", { name: /^Change editor-tweaks/ }),
       ).toHaveAttribute("aria-selected", "true"),
     );
   });
@@ -280,19 +280,19 @@ describe("reveal a draft by id (DRP-FR-34)", () => {
       return undefined;
     });
     const { revealDraft, bump } = renderPanel({ filter: "all" });
-    await screen.findByRole("treeitem", { name: /^Draft editor-tweaks/ });
+    await screen.findByRole("treeitem", { name: /^Change editor-tweaks/ });
 
     act(() => revealDraft("d-active"));
     await waitFor(() =>
       expect(
-        screen.getByRole("treeitem", { name: /^Draft editor-tweaks/ }),
+        screen.getByRole("treeitem", { name: /^Change editor-tweaks/ }),
       ).toHaveAttribute("aria-selected", "true"),
     );
 
-    fireEvent.click(screen.getByRole("treeitem", { name: /^Draft library-lens/ }));
+    fireEvent.click(screen.getByRole("treeitem", { name: /^Change library-lens/ }));
     await waitFor(() =>
       expect(
-        screen.getByRole("treeitem", { name: /^Draft library-lens/ }),
+        screen.getByRole("treeitem", { name: /^Change library-lens/ }),
       ).toHaveAttribute("aria-selected", "true"),
     );
 
@@ -302,7 +302,7 @@ describe("reveal a draft by id (DRP-FR-34)", () => {
     await waitFor(() => expect(calls("list_drafts").length).toBeGreaterThan(1));
 
     expect(
-      screen.getByRole("treeitem", { name: /^Draft library-lens/ }),
+      screen.getByRole("treeitem", { name: /^Change library-lens/ }),
     ).toHaveAttribute("aria-selected", "true");
   });
 });

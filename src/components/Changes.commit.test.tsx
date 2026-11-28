@@ -111,7 +111,7 @@ describe("the footer action control", () => {
     // author does here makes a level branch pushable.
     backend({ uncommitted: changeSet([]) });
     renderPanel();
-    await screen.findByText("No changes.");
+    await screen.findByText("Nothing to commit.");
     expect(primary()).toBeDisabled();
 
     await userEvent.click(screen.getByRole("button", { name: "Choose action" }));
@@ -158,7 +158,7 @@ describe("the footer action control", () => {
       sync: { hasRemote: true, hasUpstream: true, ahead: 2, behind: 0, repositories: [] },
     });
     renderPanel();
-    await screen.findByText("No changes.");
+    await screen.findByText("Nothing to commit.");
 
     await chooseAction("Push");
 
@@ -578,7 +578,7 @@ describe("committing and pushing", () => {
     await act(async () => {
       listeners[CHANGES_UPDATED]?.({ payload: { changeCount: 0 } });
     });
-    await screen.findByText("No changes.");
+    await screen.findByText("Nothing to commit.");
     await chooseAction("Push");
     await waitFor(() => expect(primary()).toBeEnabled());
     await userEvent.click(primary());
@@ -616,7 +616,7 @@ describe("dismissing the action dropdown", () => {
     await openMenu();
 
     // Anywhere that is not the split control or the menu itself.
-    await userEvent.click(screen.getByLabelText("Filter changes"));
+    await userEvent.click(screen.getByLabelText("Filter files"));
     expect(menu()).toBeNull();
   });
 

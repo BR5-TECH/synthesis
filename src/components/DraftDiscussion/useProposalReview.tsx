@@ -43,8 +43,11 @@ import {
 import { rereadHunks, useProposalHunks, type HunkSource } from "../../state/proposalHunks";
 import { requestDiscussionFoot } from "../../state/discussionSession";
 
-/** DCR-FR-31: why Accept is off for a change whose text the prompt lacks. */
-const LOST_REASON = "The text this change alters is no longer in the prompt";
+/**
+ * DCR-FR-31: why Accept is off for a change whose text the prompt lacks.
+ * PVC-FR-VBPY: the review calls one hunk an edit.
+ */
+const LOST_REASON = "The text this edit alters is no longer in the prompt";
 
 /**
  * DCR-FR-GAFN: whether the state of a hunk ends the pop-up that opened on it.
@@ -218,8 +221,8 @@ export function useProposalReview<P extends ReviewableProposal>({
         if (!landed) {
           setDecisionError(
             buffers.get(key)?.conflict
-              ? "This change has been rewritten elsewhere since you edited it. Choose which text to keep before deciding it."
-              : "Your edit to this change could not be written, so it has not been decided.",
+              ? "This edit has been rewritten elsewhere since you changed it. Choose which text to keep before deciding it."
+              : "Your rewrite of this edit could not be written, so it has not been decided.",
           );
           return false;
         }
@@ -451,14 +454,16 @@ export function useProposalReview<P extends ReviewableProposal>({
    */
   const standing = useMemo(() => {
     const accepted = pendingProposal?.counts?.accepted ?? 0;
+    // PVC-FR-VBPY: one hunk of the proposal is an edit.
+    const item = noun === "draft" ? "change" : "file";
+    const subject = noun === "draft" ? "The prompt" : "The file";
     if (accepted > 0) {
       return accepted === 1
-        ? `1 change accepted into this ${noun}`
-        : `${accepted} changes accepted into this ${noun}`;
+        ? `1 edit accepted into this ${item}`
+        : `${accepted} edits accepted into this ${item}`;
     }
-    const subject = noun === "draft" ? "The draft" : "The file";
     if (reviewHunks.some((h) => h.draft != null && h.draft !== h.after)) {
-      return `You have edited a proposed change. ${subject} has not changed.`;
+      return `You have rewritten a proposed edit. ${subject} has not changed.`;
     }
     return `${subject} has not changed.`;
   }, [pendingProposal, reviewHunks, noun]);

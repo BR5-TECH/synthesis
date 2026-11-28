@@ -163,7 +163,7 @@ describe("arrival (PCR-FR-16)", () => {
 // ---------------------------------------------------------------------------
 
 describe("the routes into the review (PCR-FR-RFJC, PCR-FR-18)", () => {
-  it("PCR-FR-RFJC: opens or focuses the tab, then scrolls to the first undecided change", () => {
+  it("PCR-FR-RFJC: opens or focuses the tab, then scrolls to the first undecided edit", () => {
     notePromptProposalChanged({
       artifactId: ARTIFACT,
       proposal: proposal({

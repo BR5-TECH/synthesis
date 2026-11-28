@@ -6,7 +6,7 @@
 The tool an agent in an OpenSpec change discussion uses to ask the author to **apply** the change or to **rework** it. A run writes the stream and costs time and tokens, so the agent does not start it. The tool **records an action request** and posts it into the conversation as one comment of the agent with a card (per `../core/CAR-change-action-requests.md`). The author confirms or declines the request on the card, or tells an agent to decide it, and only a confirmation starts the run. Out of scope: the runs, which are `../core/OCR-openspec-change-runs.md`'s; the card, which is `../ui/OCW-openspec-change-workspace.md`'s; and the decision by tool, which is `DCE-decide-change-edits-tool.md`'s.
 
 ## Functional requirements
-1. **RCA-FR-UZJK** The tool is a `rig` portable tool named `request_change_action` and conforms to `TLC-tool-conventions.md` in full. It is one of the tools of TLC-FR-17 that declare a side effect, and its side effect is the one the contract surface declares.
+1. **RCA-FR-UZJK** The tool is a `rig` portable tool named `request_openspec_change_action` and conforms to `TLC-tool-conventions.md` in full. It is one of the tools of TLC-FR-17 that declare a side effect, and its side effect is the one the contract surface declares.
 2. **RCA-FR-PTAK** Its `description()` returns the fixed text of the contract surface, and its `parameters()` returns the JSON Schema of the contract surface with its parameter descriptions (per TLC-FR-05, TLC-FR-06).
 3. **RCA-FR-QANG** The tool is constructed per turn. Its constructor binds it to the change of the turn's target, the turn's conversation, and the turn's agent participant. No argument names a stream, a change, a conversation, or a participant.
 4. **RCA-FR-KZIJ** The tool is attached to every turn whose target is a change, with or without a fragment, and to no other turn (per `../ai/CVL-conversation-loop.md` CVL-FR-XHKB). An advisor turn is not attached it (per CVL-FR-HNGB).
@@ -29,12 +29,12 @@ The tool an agent in an OpenSpec change discussion uses to ask the author to **a
 One tool, conforming to `TLC-tool-conventions.md` in full. It is attached by `../ai/CVL-conversation-loop.md` (CVL-FR-XHKB), and has no Tauri command, event, or frontend reach of its own.
 
 ### The tool
-`request_change_action` — a `rig` portable tool, constructed per turn (per TLC-FR-15). Its constructor takes the change of the turn's target, the conversation the turn belongs to, and the agent participant the turn answers as.
+`request_openspec_change_action` — a `rig` portable tool, constructed per turn (per TLC-FR-15). Its constructor takes the change of the turn's target, the conversation the turn belongs to, and the agent participant the turn answers as.
 
 ### The description
 The fixed text the model reads (per TLC-FR-05):
 
-> Ask the author to start a run on the OpenSpec change under discussion. Use `apply` when the change is ready to build: an apply run implements its tasks and commits the work on the stream. Use `rework` when the change itself must be revised: a rework run revises the files of the change on your instruction, and its result comes back as a proposal that the author decides. You cannot start a run: this posts a request, and the author confirms or declines it. For `rework`, write in `instruction` what the revision must do; give no `instruction` for `apply`. Tell the author in `rationale` why you ask. Put one `<spoken>…</spoken>` tag in `rationale`: one short sentence that a voice can read aloud. Your turn ends when the request is posted. Make one request at a time.
+> Ask the author to start a run on the OpenSpec change under discussion. Use `apply` when the OpenSpec change is ready to build: an apply run implements its tasks and commits the work on the stream. Use `rework` when the OpenSpec change itself must be revised: a rework run revises the files of the OpenSpec change on your instruction, and its result comes back as a proposal that the author decides. You cannot start a run: this posts a request, and the author confirms or declines it. For `rework`, write in `instruction` what the revision must do; give no `instruction` for `apply`. Tell the author in `rationale` why you ask. Put one `<spoken>…</spoken>` tag in `rationale`: one short sentence that a voice can read aloud. Your turn ends when the request is posted. Make one request at a time.
 
 ### Arguments
 ```text
@@ -47,7 +47,7 @@ RequestChangeActionArgs {
 
 Their descriptions in the parameter schema (per TLC-FR-06):
 
-- `action` — *"`apply` to implement the tasks of the change, or `rework` to revise the change itself."*
+- `action` — *"`apply` to implement the tasks of the OpenSpec change, or `rework` to revise the OpenSpec change itself."*
 - `instruction` — *"For `rework` alone: what the revision must do, in the words a reviser can act on. Leave it out for `apply`."*
 - `rationale` — *"Why you ask, in one or two sentences. It holds one `<spoken>…</spoken>` tag with one short sentence that a voice can read aloud."*
 
@@ -61,14 +61,14 @@ The `rationale`, its spoken part hidden (per `../ui/CMT-comments.md` CMT-FR-BMCI
 - **no open project** — the shared refusal of `TLC-tool-conventions.md`: kind `NotFound`, not retryable.
 - **bad action** — kind `InvalidArgs`, retryable: *"`action` is `apply` or `rework`."*
 - **no instruction** — kind `InvalidArgs`, retryable: *"A rework needs an instruction. Write in `instruction` what the revision must do."*
-- **apply takes no instruction** — kind `InvalidArgs`, retryable: *"An apply run builds the change as it stands and takes no instruction. Leave `instruction` out, or ask for `rework` to change the change first."*
+- **apply takes no instruction** — kind `InvalidArgs`, retryable: *"An apply run builds the OpenSpec change as it stands and takes no instruction. Leave `instruction` out, or ask for `rework` to change the OpenSpec change first."*
 - **blank rationale** — kind `InvalidArgs`, retryable: *"Tell the author in `rationale` why you ask."*
 - **no spoken part** — kind `InvalidArgs`, retryable: *"The rationale has no spoken part. Put one short sentence in one `<spoken>…</spoken>` tag in `rationale`."*
 - **not a change conversation** — kind `PermissionDenied`, not retryable: *"This conversation is not about an OpenSpec change, so no run can be requested here."*
 - **conversation resolved** — kind `PermissionDenied`, not retryable: *"This conversation is resolved and takes no further comments, so nothing was requested. Answer with what you already have; asking again will not succeed."*
-- **stream gone** — kind `NotFound`, not retryable: *"The work stream of this change is gone, so no run can be requested."*
-- **change gone** — kind `NotFound`, not retryable: *"The change is not on its work stream any more, so no run can be requested."*
-- **request pending** — kind `PermissionDenied`, not retryable: *"A request for this change waits for the author. Answer with what you have; the author decides that request first."*
+- **stream gone** — kind `NotFound`, not retryable: *"The work stream of this OpenSpec change is gone, so no run can be requested."*
+- **change gone** — kind `NotFound`, not retryable: *"The OpenSpec change is not on its work stream any more, so no run can be requested."*
+- **request pending** — kind `PermissionDenied`, not retryable: *"A request for this OpenSpec change waits for the author. Answer with what you have; the author decides that request first."*
 - **could not record** — kind `Other`, retryable: *"The request could not be recorded."*
 - **one at a time** — the result of a call that is not dispatched (RCA-FR-ABXT): *"Only one request can be posted in a reply, so this one was not recorded."*
 

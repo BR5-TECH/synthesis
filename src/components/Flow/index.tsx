@@ -772,7 +772,7 @@ export function FlowCanvas(props: FlowCanvasProps & { ref?: Ref<FlowCanvasHandle
                   Change <strong>{a.pendingKind.name}</strong> to{" "}
                   {kindLabel(a.pendingKind.kind).toLowerCase()}? This removes its{" "}
                   {a.pendingKind.drops
-                    .map((d) => (d === "draftId" ? "draft link" : "footprint"))
+                    .map((d) => (d === "draftId" ? "change link" : "footprint"))
                     .join(" and its ")}
                   .
                 </p>

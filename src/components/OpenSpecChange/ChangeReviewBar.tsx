@@ -16,7 +16,7 @@ import { logInfo } from "../../logging";
 import { Modal } from "../DraftsPanelParts";
 
 function changes(count: number): string {
-  return count === 1 ? "1 undecided change" : `${count} undecided changes`;
+  return count === 1 ? "1 undecided edit" : `${count} undecided edits`;
 }
 
 export function ChangeReviewBar({
@@ -64,8 +64,8 @@ export function ChangeReviewBar({
     >
       <span className="openspec-review__count t-ui-sm" role="status" data-testid="openspec-review-count">
         {undecided === 0
-          ? "Every proposed change is decided."
-          : `${changes(undecided)} in this change. Decide each one in the Source of its file.`}
+          ? "Every proposed edit is decided."
+          : `${changes(undecided)} in this OpenSpec change. Decide each one in the Source of its file.`}
       </span>
       {/* OCW-FR-XJMR: the held sentence follows the count, so Reject all
           keeps its place at the end of the bar in every state. */}

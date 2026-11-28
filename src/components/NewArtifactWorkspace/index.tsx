@@ -231,9 +231,9 @@ export function NewArtifactWorkspace({
     const changes = reviewedHunkTotal(pendingProposal);
     return {
       label: `${participantName(pendingProposal.agent)} · proposal of ${changes} ${
-        changes === 1 ? "change" : "changes"
+        changes === 1 ? "edit" : "edits"
       }`,
-      action: at > 0 ? `Back to change ${at}` : "Back to the proposal",
+      action: at > 0 ? `Back to edit ${at}` : "Back to the proposal",
       onActivate: () => {
         const hunkId = focusedHunkId ?? undecided[0]?.id ?? null;
         if (hunkId !== null) revealHunk(draftId, hunkId);
@@ -402,7 +402,7 @@ export function NewArtifactWorkspace({
   const saveCurrent = useCallback(async () => {
     const res = await drafts.flush(draftId);
     if (!res.ok) {
-      setError("Could not write this draft's prompt. Your changes are still here.");
+      setError("Could not write this change's prompt. Your edits are still here.");
       return false;
     }
     setSaved(true);
@@ -724,8 +724,8 @@ export function NewArtifactWorkspace({
         {locked && (
           <div className="draft-workspace__locked t-ui-xs" role="note">
             {graduated
-              ? "This draft has been graduated. Its prompt is kept as the record of what the specification was written from, and is read-only."
-              : "A graduation run is answering this prompt, so it is read-only until the run finishes."}
+              ? "This change has been implemented. Its prompt is kept as the record of what the specification was written from, and is read-only."
+              : "An implementation run is answering this prompt, so it is read-only until the run finishes."}
           </div>
         )}
       </div>
@@ -822,7 +822,7 @@ export function NewArtifactWorkspace({
           hidden={view.hidden}
           column={draftColumn(draftId)}
           target={{ kind: "draft", draftId }}
-          noun="draft"
+          noun="change"
           material="prompt"
           discussions={draftDiscussions}
           selectedThreadId={focusedThreadId}

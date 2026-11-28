@@ -456,7 +456,7 @@ export function DiscussionColumn(props: DiscussionColumnProps) {
                     : quoted
                       ? `Discussion ${at + 1}: ${quoted.quote}`
                       : change
-                        ? `Discussion ${at + 1}: a change to ${change.path}`
+                        ? `Discussion ${at + 1}: an edit to ${change.path}`
                         : `Discussion ${at + 1}`
                 }
                 onClick={() => {

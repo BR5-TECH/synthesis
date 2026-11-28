@@ -442,6 +442,24 @@ fn several_tags_are_answered_in_parallel_and_the_driver_writes_the_synthesis() {
     let candidates = classifier.input.iter().find(|s| s.tag == "candidates").unwrap();
     assert!(candidates.body.contains("ARCH-PERSONA") && candidates.body.contains("SEC-PERSONA"));
     assert!(!candidates.body.contains("OPS-PERSONA"));
+    // AGC-FR-WPCZ, PVC-FR-ODXM: the classifier prompt names each tag of its
+    // input, and only tags that a builder emits.
+    let described = super::request_shape::tags_described_by(&classifier.instructions);
+    for section in &classifier.input {
+        assert!(described.contains(&section.tag), "<{}> is not described", section.tag);
+    }
+    let emitted = [
+        "candidates",
+        TAG_ARTIFACT,
+        crate::agent_conversations::change_material::TAG_OPENSPEC_CHANGE,
+        TAG_NOTE_CONTEXT,
+        TAG_MAP_CONTEXT,
+        TAG_DISCUSSION_HISTORY,
+        TAG_CURRENT_COMMENT,
+    ];
+    for tag in &described {
+        assert!(emitted.contains(&tag.as_str()), "the classifier prompt names <{tag}>");
+    }
     // The synthesis turn sees the replies in the discussion.
     let synthesis = requests.iter().find(|r| r.instructions.contains(SYNTHESIS_MARK)).unwrap();
     let section = synthesis.input.iter().find(|s| s.tag == "synthesis").unwrap();
@@ -567,13 +585,13 @@ fn an_advisor_tool_call_is_recorded_on_the_meta_turn_with_its_name() {
 
     let handle = h.app.handle().clone();
     let (call, _) = turns
-        .begin_tool_call(&handle, &advisor.id, "search_drafts", Some("q".into()))
+        .begin_tool_call(&handle, &advisor.id, "search_changes", Some("q".into()))
         .expect("call");
     let on_meta = turns.in_flight(None).into_iter().find(|t| t.id == meta.id).expect("meta");
     assert_eq!(on_meta.active_tool_calls.len(), 1);
     assert_eq!(on_meta.active_tool_calls[0].advisor.as_deref(), Some("sec"));
     assert_eq!(on_meta.tool_calls[0].advisor.as_deref(), Some("sec"));
-    assert_eq!(on_meta.tool_calls[0].tool, "search_drafts");
+    assert_eq!(on_meta.tool_calls[0].tool, "search_changes");
     // The advisor's own record names no advisor.
     let own = turns.in_flight(None).into_iter().find(|t| t.id == advisor.id).expect("advisor");
     assert_eq!(own.tool_calls[0].advisor, None);
@@ -689,10 +707,13 @@ fn the_proposals_of_the_agents_are_merged_into_one_proposal_by_the_driver() {
         if r.instructions.contains(CLASSIFIER_MARK) {
             Ok(text_reply("sec".into()))
         } else if r.instructions.contains(SYNTHESIS_MARK) {
-            let held = r
-                .input
-                .iter()
-                .any(|s| s.tag == "group_proposals" && s.body.contains("Arch rewrite."));
+            // PVC-FR-VBPY: the driver is told to merge the edits, with the
+            // tool of a change.
+            let held = r.input.iter().any(|s| {
+                s.tag == "group_proposals"
+                    && s.body.starts_with("Propose the merged edits with `propose_change_edits`.")
+                    && s.body.contains("Arch rewrite.")
+            });
             if first_call && held {
                 Ok(tool_reply_with_text(
                     crate::tools::propose_draft_changes::NAME,

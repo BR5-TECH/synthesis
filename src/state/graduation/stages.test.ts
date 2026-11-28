@@ -6,7 +6,13 @@
 
 import { describe, expect, it } from "vitest";
 
-import { conditionSentence, iterationLabel, passOf, retryStatement } from "./stages";
+import {
+  conditionSentence,
+  iterationLabel,
+  outcomeStatement,
+  passOf,
+  retryStatement,
+} from "./stages";
 import { makeRun } from "../../test/graduationFixtures";
 
 describe("passOf", () => {
@@ -252,5 +258,16 @@ describe("retryStatement", () => {
     });
 
     expect(retryStatement(run)).toBeNull();
+  });
+});
+
+describe("outcomeStatement", () => {
+  it("GRU-FR-QYEE, PVC-FR-HMJD: a completed run counts its commits, and never calls a commit a change", () => {
+    expect(outcomeStatement(makeRun("r1", "completed", { commits: ["c1"] }))).toBe(
+      "Made one commit on the work stream.",
+    );
+    expect(outcomeStatement(makeRun("r1", "completed", { commits: ["c1", "c2", "c3"] }))).toBe(
+      "Made 3 commits on the work stream.",
+    );
   });
 });

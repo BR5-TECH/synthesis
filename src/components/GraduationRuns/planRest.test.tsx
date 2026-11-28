@@ -112,8 +112,8 @@ describe("Graduation runs — plan rests", () => {
   it("GRU-FR-TCSM, GRU-FR-FZCN: a plan_update rest says what it asks and where, and renders no question form", async () => {
     const region = await selectedRegion();
     const notice = within(region).getByTestId("graduation-plan-rest");
-    expect(notice).toHaveTextContent("The run asks to change the plan of its change.");
-    expect(notice).toHaveTextContent("Answer its questions and decide its edits in the change discussion");
+    expect(notice).toHaveTextContent("The run asks to change the plan of its OpenSpec change.");
+    expect(notice).toHaveTextContent("Answer its questions and decide its edits in the discussion of the OpenSpec change");
     // OPU-FR-QUST: the rest holds no escalation, so no question block renders.
     expect(screen.queryByTestId("graduation-escalation")).toBeNull();
     expect(within(region).queryByRole("button", { name: "Submit" })).toBeNull();
@@ -122,9 +122,9 @@ describe("Graduation runs — plan rests", () => {
     expect(within(region).getByRole("button", { name: "Discard run" })).toBeInTheDocument();
   });
 
-  it("GRU-FR-TCSM, OCW-FR-QSZP: Open change opens the change tab with the plan thread selected", async () => {
+  it("GRU-FR-TCSM, OCW-FR-QSZP: Open OpenSpec change opens the change tab with the plan thread selected", async () => {
     const region = await selectedRegion();
-    await userEvent.click(within(region).getByRole("button", { name: "Open change" }));
+    await userEvent.click(within(region).getByRole("button", { name: "Open OpenSpec change" }));
     expect(openChange).toHaveBeenCalledTimes(1);
     const [location, name, options] = openChange.mock.calls[0];
     expect(location).toEqual({ kind: "stream", streamId: "s-1" });
@@ -132,7 +132,7 @@ describe("Graduation runs — plan rests", () => {
     expect(options).toMatchObject({ thread: "pt-1" });
   });
 
-  it("GRU-FR-TVDF, OCW-FR-QSZP: a plan_findings rest counts its plan findings, and Open change selects the plan thread", async () => {
+  it("GRU-FR-TVDF, OCW-FR-QSZP: a plan_findings rest counts its plan findings, and Open OpenSpec change selects the plan thread", async () => {
     const finding = (kind: "work" | "plan") => ({
       severity: "major" as const,
       description: "d",
@@ -151,11 +151,11 @@ describe("Graduation runs — plan rests", () => {
     ]);
     const region = await selectedRegion();
     expect(within(region).getByTestId("graduation-plan-rest")).toHaveTextContent(
-      "The review found that the plan of the change is wrong: 2 plan findings. Settle them in the change discussion",
+      "The review found that the plan of the OpenSpec change is wrong: 2 plan findings. Settle them in the discussion of the OpenSpec change",
     );
     expect(within(region).getByRole("button", { name: "Continue" })).toBeInTheDocument();
     expect(within(region).getByRole("button", { name: "Discard run" })).toBeInTheDocument();
-    await userEvent.click(within(region).getByRole("button", { name: "Open change" }));
+    await userEvent.click(within(region).getByRole("button", { name: "Open OpenSpec change" }));
     expect(openChange.mock.calls[0][2]).toMatchObject({ thread: "pt-2" });
   });
 
@@ -172,7 +172,7 @@ describe("Graduation runs — plan rests", () => {
     expect(within(region).getByRole("button", { name: "Continue" })).toBeInTheDocument();
     expect(within(region).getByRole("button", { name: "Discard run" })).toBeInTheDocument();
     // A refused plan update has no plan thread to select.
-    await userEvent.click(within(region).getByRole("button", { name: "Open change" }));
+    await userEvent.click(within(region).getByRole("button", { name: "Open OpenSpec change" }));
     expect(openChange.mock.calls[0][2]).not.toHaveProperty("thread");
   });
 
@@ -194,10 +194,10 @@ describe("Graduation runs — plan rests", () => {
   });
 
   it.each([
-    ["plan_questions_pending", "Answer the questions in the change discussion first, then continue the run."],
+    ["plan_questions_pending", "Answer the questions in the discussion of the OpenSpec change first, then continue the run."],
     [
       "proposal_pending",
-      "Decide the plan edits in the change discussion first, or their commit is still owed. Then continue the run.",
+      "Decide the plan edits in the discussion of the OpenSpec change first, or their commit is still owed. Then continue the run.",
     ],
     ["write_failed", WRITE_FAILED_WORDS],
   ])("GRU-FR-BPNJ: a Continue refused with %s is stated in words beside the action row", async (code, words) => {
@@ -212,7 +212,7 @@ describe("Graduation runs — plan rests", () => {
     expect(within(region).getByTestId("graduation-plan-rest")).toBeInTheDocument();
   });
 
-  it("GRU-FR-BPNJ, OFN-FR-RLSO, OFN-FR-DPIJ: a Continue refused with openspec_validation_unavailable renders its notice beside the action row, with Open change and no Retry", async () => {
+  it("GRU-FR-BPNJ, OFN-FR-RLSO, OFN-FR-DPIJ: a Continue refused with openspec_validation_unavailable renders its notice beside the action row, with Open OpenSpec change and no Retry", async () => {
     continueRefusal = {
       code: "openspec_validation_unavailable",
       cause: "cli_rejected",
@@ -223,11 +223,11 @@ describe("Graduation runs — plan rests", () => {
     await userEvent.click(within(region).getByRole("button", { name: "Continue" }));
     const refusal = await screen.findByTestId("graduation-action-refusal");
     expect(within(refusal).getByRole("alert").textContent).toBe(
-      "OpenSpec reported a problem in the OpenSpec files of this change. The run did not continue.",
+      "OpenSpec reported a problem in the files of this OpenSpec change. The run did not continue.",
     );
     // OFN-FR-DPIJ: the Continue of the region is the retry.
     expect(within(refusal).queryByRole("button", { name: "Retry" })).toBeNull();
-    await userEvent.click(within(refusal).getByRole("button", { name: "Open change" }));
+    await userEvent.click(within(refusal).getByRole("button", { name: "Open OpenSpec change" }));
     expect(openChange).toHaveBeenCalledWith(
       { kind: "stream", streamId: queue.runs[0].streamId },
       CHANGE,

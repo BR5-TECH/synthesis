@@ -269,7 +269,7 @@ export function DraftSection({
   const { loading, linkable } = useLinkableDrafts(doc, item, true);
   return (
     <div className={className}>
-      <span className="flow-panel__label">Draft</span>
+      <span className="flow-panel__label">Change</span>
       {item.draftId === undefined && handlers.onCreateDraft && (
         <div className="flow-panel__row">
           <button
@@ -278,7 +278,7 @@ export function DraftSection({
             disabled={inert || creating}
             onClick={handlers.onCreateDraft}
           >
-            {creating ? "Creating draft…" : "Create draft"}
+            {creating ? "Creating change…" : "Create change"}
           </button>
         </div>
       )}
@@ -287,7 +287,7 @@ export function DraftSection({
           <button
             type="button"
             className="flow-draft"
-            aria-label={`Open draft ${state?.draft?.name ?? item.draftId}`}
+            aria-label={`Open change ${state?.draft?.name ?? item.draftId}`}
             data-testid="flow-panel-draft"
             onClick={() => handlers.onOpenDraft!(item.draftId!)}
           >
@@ -302,14 +302,14 @@ export function DraftSection({
       <div className="flow-panel__row">
         <select
           className={look.control("flow-select")}
-          aria-label="Link draft"
+          aria-label="Link change"
           disabled={inert}
           value=""
           onChange={(e) => {
             if (e.target.value) handlers.onLinkDraft(e.target.value);
           }}
         >
-          <option value="">{loading ? "Loading drafts…" : "Link draft…"}</option>
+          <option value="">{loading ? "Loading changes…" : "Link change…"}</option>
           {linkable.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
@@ -320,7 +320,7 @@ export function DraftSection({
           <button
             type="button"
             className={look.plain}
-            aria-label="Unlink draft"
+            aria-label="Unlink change"
             disabled={inert}
             onClick={() => handlers.onLinkDraft(null)}
           >
@@ -329,7 +329,7 @@ export function DraftSection({
         )}
       </div>
       {state?.draftMissing && (
-        <div className="flow-panel__note">The linked draft {item.draftId} is missing.</div>
+        <div className="flow-panel__note">The linked change {item.draftId} is missing.</div>
       )}
     </div>
   );

@@ -176,7 +176,7 @@ fn an_older_proposal_contributes_its_counts_alone() {
         history.body,
     );
     assert_eq!(
-        history.body.matches("[proposed 1 change to").count(),
+        history.body.matches("[proposed 1 edit to").count(),
         5,
         "every reference keeps its count line: {}",
         history.body,
@@ -265,7 +265,8 @@ fn a_proposal_of_many_changes_names_only_the_bounded_number_of_them() {
     assert_eq!(listed, super::sections::CHANGES_RENDERED_PER_PROPOSAL, "{line}");
     assert!(line.contains("…and 28 more, not listed here"), "{line}");
     // The header still counts every change, decided or not.
-    assert!(line.contains("[proposed 40 changes to spec.md"), "{line}");
+    // PVC-FR-VBPY: the header calls each hunk an edit.
+    assert!(line.contains("[proposed 40 edits to spec.md"), "{line}");
 }
 
 /// AGC-FR-RVQP: an excerpt is bounded and is always one line, so the change after

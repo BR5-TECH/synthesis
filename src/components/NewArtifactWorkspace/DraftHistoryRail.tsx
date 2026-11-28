@@ -45,9 +45,9 @@ export function DraftHistoryRail({
                 is never left to infer from an unchanging list that their typing
                 failed to save. */}
             <p className="draft-rail__legend t-ui-xs">
-              The prompt as it stood before and after each change you accepted
+              The prompt as it stood before and after each edit you accepted
               from an agent. Your own edits are the live prompt, which is the
-              Original until the first change lands.
+              Original until the first edit lands.
             </p>
 
             {/* NAW-FR-41: a history that could not be reconciled renders its own

@@ -941,7 +941,7 @@ describe("CMP-FR-02, CMP-FR-06, CMP-FR-27: every target kind is indexed", () => 
     expect(within(wholeArtifact).getByText("Whole")).toBeInTheDocument();
     expect(within(wholeArtifact).getByText(/about the whole file/i)).toBeInTheDocument();
     expect(within(byLabel(/^Fragment discussion on Onboarding rewrite/)).getByText("one")).toBeInTheDocument();
-    expect(within(byLabel(/^Whole discussion on Onboarding rewrite/)).getByText(/whole draft/i)).toBeInTheDocument();
+    expect(within(byLabel(/^Whole discussion on Onboarding rewrite/)).getByText(/whole change/i)).toBeInTheDocument();
     expect(within(byLabel(/^Whole discussion on Ask legal/)).getByText(/whole note/i)).toBeInTheDocument();
   });
 

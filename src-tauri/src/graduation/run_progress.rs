@@ -31,7 +31,7 @@ pub(super) fn label_of(run: &GraduationRun) -> String {
     }
     match run.merge.as_ref() {
         Some(merge) => format!("{}…", merge.name),
-        None => format!("Graduating {}…", run.input.draft_name),
+        None => format!("Implementing {}…", run.input.draft_name),
     }
 }
 

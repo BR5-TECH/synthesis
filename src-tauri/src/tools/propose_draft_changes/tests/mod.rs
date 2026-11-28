@@ -219,7 +219,7 @@ fn the_definition_is_fixed_text_and_names_the_two_required_arguments() {
 
     assert_eq!(
         <ProposeDraftChangesTool<tauri::test::MockRuntime> as PortableTool>::NAME,
-        "propose_draft_changes",
+        "propose_change_edits",
     );
     assert_eq!(tool.description(), DESCRIPTION);
 
@@ -433,7 +433,7 @@ fn a_second_proposal_is_refused_while_one_is_pending_and_is_retryable() {
         "it tells the model to say so to the author: {message:?}",
     );
     assert!(
-        message.contains("do not describe this change as proposed"),
+        message.contains("do not describe this edit as proposed"),
         "and not to describe the refused change as proposed: {message:?}",
     );
     assert!(
@@ -542,7 +542,7 @@ fn the_comment_is_the_rationale_and_one_reference_by_the_agent() {
 
     // PDC-FR-12: nothing machine-shaped in the body a person reads.
     for marker in
-        [&f.proposals()[0].id[..], &f.draft_id[..], FILE, "proposal", "propose_draft_changes"]
+        [&f.proposals()[0].id[..], &f.draft_id[..], FILE, "proposal", "propose_change_edits"]
     {
         assert!(
             !posted.body.contains(marker),
@@ -622,7 +622,7 @@ fn a_call_records_the_draft_the_conversation_and_the_path_and_nothing_composed()
 
         for record in [info, warn] {
             let fields = serde_json::to_string(&record.fields).expect("fields");
-            assert!(fields.contains("propose_draft_changes"), "names the tool");
+            assert!(fields.contains("propose_change_edits"), "names the tool");
             assert!(fields.contains(&f.draft_id), "names the draft");
             assert!(fields.contains(&f.thread_id), "names the conversation");
             // PDC-FR-18: `path` is this tool's one loggable argument.
@@ -660,7 +660,7 @@ fn a_very_long_path_is_bounded_before_it_reaches_a_record() {
          reason (PDC-FR-18, LGC-FR-08): {} chars",
         fields.len(),
     );
-    assert!(fields.contains("propose_draft_changes"));
+    assert!(fields.contains("propose_change_edits"));
     assert!(fields.contains("proposal_path_missing"));
 }
 

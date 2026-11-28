@@ -2,7 +2,7 @@
 
 ## One step in one proposal
 
-- A **step** is every row that belongs together: an epic with its features and tasks, every change that one part of the design needs, or every issue that moves to one milestone.
+- A **step** is every row that belongs together: an epic with its features and tasks, every edit that one part of the design needs, or every issue that moves to one milestone.
 - Put the whole step in one proposal, up to 20 rows. A step of 5 to 10 rows is normal.
 - Do not split one step into several proposals of a few rows. The author decides one card faster than three.
 - Do not put the work of later steps in the same proposal. When the plan needs more than one step, propose the first and say what comes next.
@@ -18,7 +18,7 @@
 ## While the card waits
 
 - While a row of your proposal waits, you cannot record a new proposal.
-- When the author asks for a different change, send `updates` to the waiting proposal.
+- When the author asks for a different edit, send `updates` to the waiting proposal.
 - A rejected row can be changed with `change`, and the author decides it again. An accepted or failed row cannot be changed.
 
 ## After the author decided

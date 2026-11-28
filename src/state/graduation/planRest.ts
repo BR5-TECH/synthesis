@@ -6,7 +6,7 @@
  * `../../../specifications/core/OPU-openspec-plan-updates.md`).
  *
  * A plan rest holds no escalation (OPU-FR-QUST): the author answers its
- * questions and decides its edits in the change discussion, and Continue
+ * questions and decides its edits in the discussion of the OpenSpec change, and Continue
  * takes the run on. Pure functions of a run as the backend reports it.
  */
 
@@ -65,11 +65,11 @@ export function planFindingCount(rest: GraduationRest): number {
 export function planUpdateCauseSentence(cause: GraduationRest["cause"]): string {
   switch (cause as PlanUpdateRefusalCause | undefined) {
     case "plan_path_outside_change":
-      return "It proposed a file outside the folder of its change.";
+      return "It proposed a file outside the folder of its OpenSpec change.";
     case "plan_file_not_text":
       return "It proposed a file that is not text.";
     case "plan_deletes_file":
-      return "It proposed to delete a file of the change, and a plan update cannot delete a file.";
+      return "It proposed to delete a file of the OpenSpec change, and a plan update cannot delete a file.";
     case "plan_update_empty":
       return "It proposed no edit and asked no question.";
     default:
@@ -98,13 +98,13 @@ export function planRestStatement(rest: PlanRest): string {
   switch (rest.reason) {
     case "plan_update":
       return (
-        "The run asks to change the plan of its change. " +
-        "Answer its questions and decide its edits in the change discussion, then continue the run."
+        "The run asks to change the plan of its OpenSpec change. " +
+        "Answer its questions and decide its edits in the discussion of the OpenSpec change, then continue the run."
       );
     case "plan_findings":
       return (
-        `The review found that the plan of the change is wrong: ${findings(planFindingCount(rest))}. ` +
-        "Settle them in the change discussion, then continue the run."
+        `The review found that the plan of the OpenSpec change is wrong: ${findings(planFindingCount(rest))}. ` +
+        "Settle them in the discussion of the OpenSpec change, then continue the run."
       );
     case "plan_update_invalid":
       return `The run gave a plan update that the application refused. ${planUpdateCauseSentence(rest.cause)}`;
@@ -123,9 +123,9 @@ export const PLAN_UPDATE_INVALID_DETAIL =
 export function planRaiseStatement(rest: PlanRest, title: string, change: string): string {
   switch (rest.reason) {
     case "plan_update":
-      return `“${title}” asks to change the plan of ${change}. Decide it in the change discussion.`;
+      return `“${title}” asks to change the plan of ${change}. Decide it in the discussion of the OpenSpec change.`;
     case "plan_findings":
-      return `The review of “${title}” found the plan of ${change} wrong. Decide it in the change discussion.`;
+      return `The review of “${title}” found the plan of ${change} wrong. Decide it in the discussion of the OpenSpec change.`;
     case "plan_update_invalid":
       return `“${title}” gave a plan update for ${change} that was refused.`;
   }
@@ -138,9 +138,9 @@ export function planRaiseStatement(rest: PlanRest, title: string, change: string
 export function planContinueRefusal(code: string, detail: string | null): string | null {
   switch (code) {
     case PLAN_CONTINUE_ERRORS.planQuestionsPending:
-      return "Answer the questions in the change discussion first, then continue the run.";
+      return "Answer the questions in the discussion of the OpenSpec change first, then continue the run.";
     case PLAN_CONTINUE_ERRORS.proposalPending:
-      return "Decide the plan edits in the change discussion first, or their commit is still owed. Then continue the run.";
+      return "Decide the plan edits in the discussion of the OpenSpec change first, or their commit is still owed. Then continue the run.";
     case PLAN_CONTINUE_ERRORS.validationUnavailable: {
       // GRU-FR-BPNJ: the sentence of the notice of its cause (OFN-FR-QZEC).
       const sentence = shortForm({ code, cause: detail, diagnostics: [] });

@@ -174,7 +174,7 @@ pub(super) fn stop_of_launch_error(error: &AgentExecutionError, limit_ms: u64) -
             "The project has no agentic integration to run the turn with. Choose one in Project settings."
         }
         AgentExecutionError::UnsupportedIntegration(_) => {
-            "The project's agentic integration cannot run graduation turns."
+            "The project's agentic integration cannot run implementation turns."
         }
         AgentExecutionError::CredentialUnavailable(_) => {
             "The credential of the project's agentic integration was not available."

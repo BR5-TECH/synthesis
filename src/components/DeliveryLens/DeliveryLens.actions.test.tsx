@@ -168,11 +168,11 @@ describe("removing an item of a GitHub plan (MDL-FR-XQGD)", () => {
 });
 
 describe("claims (MDL-FR-QEXS, MDL-FR-UKGH)", () => {
-  it("MDL-FR-QEXS: a selected task that is eligible and that no shadow draft or pending claim names offers Claim and graduate", async () => {
+  it("MDL-FR-QEXS: a selected task that is eligible and that no shadow draft or pending claim names offers Claim and implement", async () => {
     const claims = claimsOf();
     await openPlan({ claims });
     selectItem("t1");
-    await userEvent.click(within(panel()).getByRole("button", { name: "Claim and graduate" }));
+    await userEvent.click(within(panel()).getByRole("button", { name: "Claim and implement" }));
     expect(claims.claim).toHaveBeenCalledWith(51);
   });
 
@@ -221,7 +221,7 @@ describe("claims (MDL-FR-QEXS, MDL-FR-UKGH)", () => {
     await openPlan({ claims });
     selectItem("t1");
     // t1 is eligible, but its pending claim offers Retry and no new claim.
-    expect(within(panel()).queryByRole("button", { name: "Claim and graduate" })).toBeNull();
+    expect(within(panel()).queryByRole("button", { name: "Claim and implement" })).toBeNull();
     await userEvent.click(within(panel()).getByRole("button", { name: "Retry claim" }));
     expect(claims.retry).toHaveBeenCalledWith(51);
     expect(within(panel()).getByRole("alert")).toHaveTextContent("The claim could not be made.");
@@ -235,7 +235,7 @@ describe("claims (MDL-FR-QEXS, MDL-FR-UKGH)", () => {
     const claims = claimsOf();
     await openPlan({ claims });
     selectItem("t2");
-    await userEvent.click(within(panel()).getByRole("button", { name: "Graduate" }));
+    await userEvent.click(within(panel()).getByRole("button", { name: "Implement" }));
     expect(claims.graduateShadow).toHaveBeenCalledWith("d-53", "card-form");
   });
 
@@ -260,14 +260,14 @@ describe("claims (MDL-FR-QEXS, MDL-FR-UKGH)", () => {
     const claims = claimsOf(shadow(false));
     await openPlan({ claims });
     selectItem("t2");
-    await userEvent.click(within(panel()).getByRole("button", { name: "Graduate" }));
+    await userEvent.click(within(panel()).getByRole("button", { name: "Implement" }));
     expect(claims.graduateShadow).toHaveBeenCalledWith("d-53", "card-form");
     cleanup();
     clearLensStores();
     const lockedClaims = claimsOf(shadow(true));
     await openPlan({ claims: lockedClaims });
     selectItem("t2");
-    expect(within(panel()).queryByRole("button", { name: "Graduate" })).toBeNull();
+    expect(within(panel()).queryByRole("button", { name: "Implement" })).toBeNull();
     expect(lockedClaims.graduateShadow).not.toHaveBeenCalled();
   });
 
@@ -279,7 +279,7 @@ describe("claims (MDL-FR-QEXS, MDL-FR-UKGH)", () => {
     const claims = claimsOf();
     await openPlan({ claims });
     selectItem("t3");
-    expect(within(panel()).queryByRole("button", { name: "Graduate" })).toBeNull();
+    expect(within(panel()).queryByRole("button", { name: "Implement" })).toBeNull();
     expect(claims.graduateShadow).not.toHaveBeenCalled();
   });
 
@@ -295,7 +295,7 @@ describe("claims (MDL-FR-QEXS, MDL-FR-UKGH)", () => {
       });
     await openPlan({ claims: claimsOf() });
     selectItem("t2");
-    expect(within(panel()).queryByRole("button", { name: "Graduate" })).toBeNull();
+    expect(within(panel()).queryByRole("button", { name: "Implement" })).toBeNull();
   });
 });
 
@@ -462,7 +462,7 @@ describe("requests of the map (MDL-FR-EEDO, MDL-FR-JIKK)", () => {
     const onOpenDraft = vi.fn();
     await openPlan({ onCreateDraft, onOpenDraft });
     selectItem("t3");
-    fireEvent.click(within(panel()).getByRole("button", { name: "Create draft" }));
+    fireEvent.click(within(panel()).getByRole("button", { name: "Create change" }));
     await waitFor(() => expect(onCreateDraft).toHaveBeenCalledWith("T3"));
     await waitFor(() => expect(onOpenDraft).toHaveBeenCalledWith({ id: "d-new", name: "T3" }));
   });

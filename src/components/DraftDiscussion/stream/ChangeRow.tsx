@@ -75,7 +75,7 @@ export function ChangeRow(props: ChangeRowProps) {
  * holds no question set.
  */
 export const PLAN_DECISION_HINT =
-  "Decide these edits with the chips in the change, or by voice or comment: address an agent, for example “@arch accept the first two edits”.";
+  "Decide these edits with the chips in the document, or by voice or comment: address an agent, for example “@arch accept the first two edits”.";
 
 /**
  * OCW-FR-COLR / CMT-FR-48: the edits proposed to an OpenSpec change. The row

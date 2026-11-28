@@ -1,9 +1,11 @@
 //! What a replay does to the rounds of an entry (`ERP-exchange-replay.md`
 //! ERP-FR-QZNV, ERP-FR-RVYX, ERP-FR-GVHU, ERP-FR-UGII, ERP-FR-LXFF,
-//! ERP-FR-XJGI). Every function here is pure.
+//! ERP-FR-XJGI), and the current names of the tools that its calls name
+//! (`PVC-product-vocabulary.md` PVC-FR-LGYT). Every function here is pure.
 
 use super::super::*;
-use rig::completion::message::{AssistantContent, ToolResultContent, UserContent};
+use crate::tools::legacy_names::{self, CallTarget};
+use rig::completion::message::{AssistantContent, ToolName, ToolResultContent, UserContent};
 use rig::completion::Message;
 use std::collections::{BTreeSet, HashMap};
 
@@ -70,6 +72,43 @@ pub(in crate::agent_conversations) fn omit_results(rounds: &mut [Message]) -> us
         }
     }
     changed
+}
+
+/// PVC-FR-LGYT, PVC-FR-PXOE: the rounds with each call, and each result, of a
+/// legacy name read as a call of the tool's current name, for a conversation
+/// of `target`. A renamed call loses its provider item, which holds the old
+/// name. Every other part is as stored.
+fn with_current_names(rounds: &[Message], target: CallTarget) -> Vec<Message> {
+    let current = |name: &ToolName| -> Option<ToolName> {
+        let now = legacy_names::current_name(name.as_str(), target);
+        (now != name.as_str()).then(|| ToolName::new(now).ok()).flatten()
+    };
+    let mut out = rounds.to_vec();
+    for message in out.iter_mut() {
+        match message {
+            Message::Assistant(assistant) => {
+                for block in assistant.content.iter_mut() {
+                    if let AssistantContent::ToolCall(call) = block {
+                        if let Some(now) = current(&call.function.name) {
+                            call.function.name = now;
+                            call.native = None;
+                        }
+                    }
+                }
+            }
+            Message::User { content } => {
+                for part in content.iter_mut() {
+                    if let UserContent::ToolResult(result) = part {
+                        if let Some(now) = current(&result.name) {
+                            result.name = now;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 /// ERP-FR-UGII: the rounds with every round that calls a tool not in `offered`
@@ -230,14 +269,18 @@ pub(in crate::agent_conversations) enum Identity {
 }
 
 /// ERP-FR-UGII, ERP-FR-LXFF, ERP-FR-XJGI, ERP-FR-GAXX: the rounds of an entry
-/// as the current turn replays them.
+/// as the current turn replays them. A call of a legacy name is read as a call
+/// of its current name first (PVC-FR-LGYT), so that it is compared with
+/// `offered` by that name.
 pub(in crate::agent_conversations) fn rounds_for_turn(
     rounds: &[Message],
     offered: &BTreeSet<String>,
     identity: Identity,
     seq: u64,
+    target: CallTarget,
 ) -> Vec<Message> {
-    let texted = with_text_rounds(rounds, offered);
+    let current = with_current_names(rounds, target);
+    let texted = with_text_rounds(&current, offered);
     match identity {
         Identity::Stored => texted,
         Identity::Renamed => renamed_rounds(&texted, seq),
@@ -335,7 +378,13 @@ mod tests {
     fn a_round_of_a_tool_not_offered_becomes_text() {
         let mut rounds = round("c1", "list_plan_issues", "ISSUES");
         rounds.extend(round("c2", "read_file", "FILE"));
-        let out = rounds_for_turn(&rounds, &offered(&["read_file"]), Identity::Stored, 1);
+        let out = rounds_for_turn(
+            &rounds,
+            &offered(&["read_file"]),
+            Identity::Stored,
+            1,
+            CallTarget::Other,
+        );
         assert_eq!(out.len(), 4);
         assert!(calls_of(&out[0]).is_empty(), "the first round is text");
         let Message::Assistant(text) = &out[0] else { panic!("assistant") };
@@ -361,9 +410,13 @@ mod tests {
             );
         }
         let all = offered(&["read_file"]);
-        assert_eq!(rounds_for_turn(&rounds, &all, Identity::Stored, 7), rounds);
-        let out = rounds_for_turn(&rounds, &all, Identity::Canonical, 7);
-        assert_eq!(out, rounds_for_turn(&rounds, &all, Identity::Canonical, 7), "stable");
+        assert_eq!(rounds_for_turn(&rounds, &all, Identity::Stored, 7, CallTarget::Other), rounds);
+        let out = rounds_for_turn(&rounds, &all, Identity::Canonical, 7, CallTarget::Other);
+        assert_eq!(
+            out,
+            rounds_for_turn(&rounds, &all, Identity::Canonical, 7, CallTarget::Other),
+            "stable"
+        );
         let Message::Assistant(a) = &out[0] else { panic!("assistant") };
         assert!(!a.content.iter().any(|c| matches!(c, AssistantContent::Reasoning(_))));
         let id = calls_of(&out[0])[0].id.wire().into_owned();
@@ -388,7 +441,13 @@ mod tests {
                 AssistantContent::Reasoning(rig::completion::message::Reasoning::new("think")),
             );
         }
-        let out = rounds_for_turn(&rounds, &offered(&["read_file"]), Identity::Renamed, 3);
+        let out = rounds_for_turn(
+            &rounds,
+            &offered(&["read_file"]),
+            Identity::Renamed,
+            3,
+            CallTarget::Other,
+        );
         let Message::Assistant(a) = &out[0] else { panic!("assistant") };
         assert!(a.content.iter().any(|c| matches!(c, AssistantContent::Reasoning(_))));
         assert_eq!(call_ids(&out), vec![derived_call_id(3, 0)]);
@@ -396,6 +455,115 @@ mod tests {
         let UserContent::ToolResult(r) = &content[0] else { panic!("result") };
         assert_eq!(r.call.wire(), derived_call_id(3, 0).as_str());
         assert_eq!(call_ids(&rounds), vec!["call_0".to_string()]);
+    }
+
+    /// The names of the calls and of the results of `rounds`, in order.
+    fn names(rounds: &[Message]) -> (Vec<String>, Vec<String>) {
+        let calls = rounds.iter().flat_map(calls_of).map(|c| c.function.name.to_string()).collect();
+        let results = rounds
+            .iter()
+            .flat_map(|m| match m {
+                Message::User { content } => content
+                    .iter()
+                    .filter_map(|p| match p {
+                        UserContent::ToolResult(r) => Some(r.name.to_string()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>(),
+                _ => Vec::new(),
+            })
+            .collect();
+        (calls, results)
+    }
+
+    // PVC-FR-LGYT, ERP-FR-UGII: a stored call of a legacy draft-tool name is
+    // replayed as a native call of its current name, which the turn offers,
+    // and its result names that tool too.
+    #[test]
+    fn a_legacy_call_is_replayed_as_a_call_of_its_current_name() {
+        let mut rounds = round("c1", "read_draft", "PROMPT");
+        rounds.extend(round("c2", "search_drafts", "HITS"));
+        let all = offered(&["read_change", "search_changes"]);
+        for identity in [Identity::Stored, Identity::Renamed, Identity::Canonical] {
+            let out = rounds_for_turn(&rounds, &all, identity, 4, CallTarget::Other);
+            let (calls, results) = names(&out);
+            assert_eq!(calls, vec!["read_change", "search_changes"], "{identity:?}");
+            assert_eq!(results, vec!["read_change", "search_changes"], "{identity:?}");
+            assert_eq!(calls_of(&out[0]).len(), 1, "the round stays native: {identity:?}");
+        }
+        assert_eq!(names(&rounds).0, vec!["read_draft", "search_drafts"], "the entry is unchanged");
+    }
+
+    // PVC-FR-PXOE: an old OpenSpec name maps on an OpenSpec change, and on any
+    // other target it keeps its name, which is the current name of a change
+    // tool.
+    #[test]
+    fn an_old_openspec_name_maps_on_an_openspec_change_alone() {
+        let rounds = round("c1", "propose_change_edits", "RECORDED");
+        let all = offered(&["propose_openspec_change_edits", "propose_change_edits"]);
+        let on_change =
+            rounds_for_turn(&rounds, &all, Identity::Stored, 1, CallTarget::OpenSpecChange);
+        assert_eq!(names(&on_change).0, vec!["propose_openspec_change_edits"]);
+        assert_eq!(names(&on_change).1, vec!["propose_openspec_change_edits"]);
+        let on_draft = rounds_for_turn(&rounds, &all, Identity::Stored, 1, CallTarget::Other);
+        assert_eq!(on_draft, rounds, "the call keeps its name and stays as stored");
+    }
+
+    // PVC-FR-LGYT, ERP-FR-LXFF: in one round, the call of a legacy name loses
+    // its provider item, which holds the old name. The call of a current name
+    // beside it keeps its item under `Identity::Stored`.
+    #[test]
+    fn a_legacy_call_loses_its_provider_item_and_its_neighbour_keeps_one() {
+        let legacy = call("c1", "read_draft");
+        let current = call("c2", "read_file");
+        let rounds = vec![
+            Message::Assistant(AssistantMessage::new(vec![
+                AssistantContent::ToolCall(legacy.clone())
+                    .with_native(serde_json::json!({ "name": "read_draft" })),
+                AssistantContent::ToolCall(current.clone())
+                    .with_native(serde_json::json!({ "name": "read_file" })),
+            ])),
+            Message::tool_result(legacy.id.clone(), legacy.function.name.clone(), "PROMPT"),
+            Message::tool_result(current.id.clone(), current.function.name.clone(), "FILE"),
+        ];
+        let out = rounds_for_turn(
+            &rounds,
+            &offered(&["read_change", "read_file"]),
+            Identity::Stored,
+            1,
+            CallTarget::Other,
+        );
+        let Message::Assistant(assistant) = &out[0] else { panic!("assistant") };
+        let items: Vec<(String, Option<serde_json::Value>)> = assistant
+            .content
+            .iter()
+            .filter_map(|block| match block {
+                AssistantContent::ToolCall(c) => {
+                    Some((c.function.name.to_string(), block.native_item().cloned()))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            items,
+            vec![
+                ("read_change".to_string(), None),
+                ("read_file".to_string(), Some(serde_json::json!({ "name": "read_file" }))),
+            ],
+        );
+        assert_eq!(call_ids(&out), vec!["c1".to_string(), "c2".to_string()], "stored ids");
+    }
+
+    // PVC-FR-PXOE: a call of a name that is not a legacy name is replayed as
+    // stored.
+    #[test]
+    fn a_call_of_another_name_is_replayed_as_stored() {
+        let rounds = round("c1", "read_file", "FILE");
+        for target in [CallTarget::Other, CallTarget::OpenSpecChange] {
+            let out =
+                rounds_for_turn(&rounds, &offered(&["read_file"]), Identity::Stored, 1, target);
+            assert_eq!(out, rounds, "{target:?}");
+        }
     }
 
     // ERP-FR-QZNV: the ending call keeps its result, and every other call gets

@@ -66,7 +66,7 @@ fn a_builtin_descriptor_has_the_builtin_ecosystem_and_a_virtual_path() {
 fn the_roadmap_skill_names_its_references_and_each_exists() {
     let skill = builtin_skill_file("roadmap", "SKILL.md").expect("SKILL.md");
     assert!(skill.contains("name: roadmap"));
-    assert!(skill.contains("the deliverable of the discussion is a **change to the plan**"));
+    assert!(skill.contains("the deliverable of the discussion is an **edit to the plan**"));
     assert!(skill.contains("Record it with `propose_plan_changes`"));
     let named: Vec<&str> = skill
         .split('`')

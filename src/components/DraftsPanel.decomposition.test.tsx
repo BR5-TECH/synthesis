@@ -75,16 +75,16 @@ describe("Decomposition badges", () => {
     expect(within(original).getByTestId("draft-superseded-marker")).toHaveAccessibleName(
       "Superseded by relay-auth",
     );
-    expect(original).toHaveAccessibleName("Draft relay, archived, superseded");
-    expect(draftRow("relay-auth")).toHaveAccessibleName("Draft relay-auth, part 1 of 3");
+    expect(original).toHaveAccessibleName("Change relay, archived, superseded");
+    expect(draftRow("relay-auth")).toHaveAccessibleName("Change relay-auth, part 1 of 3");
     const names = screen
       .getAllByRole("treeitem")
       .map((r) => r.getAttribute("aria-label") ?? "")
-      .filter((n) => n.startsWith("Draft"));
+      .filter((n) => n.startsWith("Change"));
     expect(names.map((n) => n.split(",")[0])).toEqual([
-      "Draft relay-auth",
-      "Draft relay",
-      "Draft relay-sync",
+      "Change relay-auth",
+      "Change relay",
+      "Change relay-sync",
     ]);
   });
 
@@ -98,7 +98,7 @@ describe("Decomposition badges", () => {
     ];
     renderPanel({ filter: "active" });
     await waitFor(() => draftRow("other"));
-    expect(screen.queryByRole("treeitem", { name: /^Draft relay/ })).toBeNull();
+    expect(screen.queryByRole("treeitem", { name: /^Change relay/ })).toBeNull();
   });
 
   it("DRP-FR-TCRW: a pending new-draft proposal shows the pending-proposal marker from the row", async () => {

@@ -25,7 +25,7 @@ export function directBlocker(
     return "This worktree is not on a branch, so a run has no branch to work on. Check a branch out first.";
   }
   if (preflight.dirtyPaths.length > 0) {
-    return "This worktree holds uncommitted work. Commit or discard it, then graduate again.";
+    return "This worktree holds uncommitted work. Commit or discard it, then implement again.";
   }
   return null;
 }

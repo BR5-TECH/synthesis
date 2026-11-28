@@ -83,7 +83,7 @@ const PUBLICATION_ERROR_TEXT: Record<string, string> = {
   invalid_publication_settings:
     "The publication settings need at least one parent issue Type and a sub-issue Type.",
   // GHP-FR-MZMW / GHP-FR-SVXP: the failures of Update on GitHub.
-  no_publication_record: "This draft has no published issue to update.",
+  no_publication_record: "This change has no published issue to update.",
   issue_not_found:
     "GitHub does not find the published issue. It was deleted or moved, or the token cannot read it.",
   issue_moved: "The published issue moved to another repository, so it was not updated.",
@@ -99,7 +99,7 @@ const UPDATE_ERROR_TEXT: Record<string, string> = {
   github_unreachable: "GitHub could not be reached.",
   publication_store_write_failed:
     "The issue was edited, but the publication record could not be written.",
-  attempt_in_progress: "A publication attempt for this draft is already in progress.",
+  attempt_in_progress: "A publication attempt for this change is already in progress.",
 };
 
 export function publicationErrorText(raw: string): string {

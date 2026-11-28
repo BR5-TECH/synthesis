@@ -45,7 +45,7 @@ export function pullErrorText(error: string): string {
     case PULL_ERRORS.pullRunActive:
       return "A pull run is already reconciling this branch.";
     case PULL_ERRORS.directGraduationActive:
-      return "A graduation run is working in this worktree. Pull again when it ends.";
+      return "An implementation run is working in this worktree. Pull again when it ends.";
     case PULL_ERRORS.workStreamBusy:
       return "A run is working in this work stream. Pull again when it ends.";
     case GIT_REMOTE_ERRORS.noRemoteConfigured:

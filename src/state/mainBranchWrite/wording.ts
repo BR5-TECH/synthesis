@@ -8,11 +8,11 @@ import type { BranchWriteGuard, MainBranchWriteKind } from "../../types";
 export function writeSentence(write: MainBranchWriteKind, branch: string): string {
   switch (write) {
     case "create_draft":
-      return `You asked to create a draft. The draft is committed to ${branch}.`;
+      return `You asked to create a change. The change is committed to ${branch}.`;
     case "delete_draft":
-      return `You asked to delete a draft. The deletion is committed to ${branch}.`;
+      return `You asked to delete a change. The deletion is committed to ${branch}.`;
     case "change_drafts":
-      return `You asked to change the drafts. The change is written to ${branch}.`;
+      return `You asked to edit the changes. The edit is written to ${branch}.`;
     case "edit_file":
       return `You asked to change a file. The change is saved to ${branch}.`;
     case "commit":
@@ -32,7 +32,7 @@ export function writeSentence(write: MainBranchWriteKind, branch: string): strin
     case "paste_artifact":
       return `You asked to paste an artifact. The copy is written to ${branch}.`;
     case "start_graduation":
-      return `You asked to start a graduation. Its draft storage is committed to ${branch}.`;
+      return `You asked to start an implementation. Its change storage is committed to ${branch}.`;
     case "start_direct_run":
       return `You asked to start a direct run. The run commits to ${branch}.`;
   }

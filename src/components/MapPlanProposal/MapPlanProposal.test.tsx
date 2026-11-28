@@ -272,7 +272,7 @@ describe("field changes (MPV-FR-CCDM .. MPV-FR-OCYF)", () => {
 
   it("MPV-FR-OCYF: a draft row shows its name as the title, no field change, and its prompt as new", async () => {
     await renderReview(backend(invokeMock, proposal([draftRow("d", "Payout draft", "Write the payout flow.")])));
-    await screen.findByText("1 draft");
+    await screen.findByText("1 change");
     await openSheet();
     expect(within(detail()).getByRole("heading", { name: "Payout draft" })).toBeInTheDocument();
     expect(within(detail()).queryByTestId("pp-fields")).toBeNull();
@@ -632,8 +632,8 @@ describe("more row states (MPV-FR-QOPR, MPV-FR-PIQU, MPV-FR-GYLV)", () => {
     await renderReview(backend(invokeMock, p), { host: fakeHost({ openDraft }) });
     await waitFor(() => expect(screen.getByTestId("map-plan-entry-toggle")).toHaveTextContent("Show review"));
     const { user } = await openSheet();
-    expect(within(detail()).getByText("Created the draft")).toBeInTheDocument();
-    await user.click(within(detail()).getByRole("button", { name: "Open draft" }));
+    expect(within(detail()).getByText("Created the change")).toBeInTheDocument();
+    await user.click(within(detail()).getByRole("button", { name: "Open change" }));
     expect(openDraft).toHaveBeenCalledWith("dr-1");
   });
 
@@ -752,7 +752,7 @@ describe("smaller cases (MPV-FR-LYKS, MPV-FR-CCDM, MPV-FR-PVXW, MPV-FR-PBAD, MPV
     const b = backend(invokeMock, p);
     b.accept = async ({ rowKey }) => (b.proposal = withRow(b.proposal, rowKey, { state: "accepted" }));
     await renderReview(b);
-    await screen.findByText("1 added, 1 draft");
+    await screen.findByText("1 added, 1 change");
     const { user } = await openSheet();
     await user.click(within(screen.getByTestId("pp-bar")).getByRole("button", { name: "Accept all" }));
     await waitFor(() => expect(screen.queryByTestId("pp-sheet")).toBeNull());

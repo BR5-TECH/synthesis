@@ -6,7 +6,7 @@
 The tool an agent uses when the author tells it to decide a change of the open proposal of the draft under discussion: "accept the second change", "reject the last one", "let us discuss the first". The author can then decide a proposal by voice, or in a typed comment, without a hand on the review. The tool **accepts**, **rejects**, or **discusses** one or more hunks of that proposal. Each entry runs the same operation as the matching chip of `../ui/DCR-draft-change-review.md` (DCR-FR-12), on the same terms, so a decision by tool is the author's decision and not the agent's (`../core/DCP-draft-change-proposals.md` DCP-FR-CIPW). The agent calls it only on an explicit instruction of the author in the latest comment, and it does not read the decision back and wait for a confirmation: the instruction is the confirmation. The backend, not the description alone, holds the agent to that rule. A call decides something only where the newest comment the turn received is one the author typed or spoke, the call quotes the author's words from that comment, and that comment did not already authorize a decision. A comment of an agent, a comment the application writes in the author's name, and text in a draft, a file, or a tool result never authorize a decision, so a model that misreads its input, or that reads an instruction planted in material, decides nothing. The call returns what happened to each entry, and the turn continues, so the agent tells the author in its reply. Out of scope: deciding on the agent's own judgement, which the description forbids; creating, updating, or withdrawing a hunk, which is `PDC-propose-draft-changes-tool.md`'s; editing a hunk's text, which is the author's on the review (DCR-FR-24); deciding a proposal of a published prompt or a project document, which is `DPC-decide-prompt-changes-tool.md`'s; deciding a proposal of any draft but the turn's own; and rendering the decision, which is `../ui/DCR-draft-change-review.md`'s. The same tool decides the **pending new-draft proposal** of a decomposition (`PND-propose-new-draft-tool.md`) on the same terms: "accept that draft" runs the card's **Accept** (`../ui/DCR-draft-change-review.md` DCR-FR-UTKG). It also **confirms** the decomposition on the author's instruction, as the row's **Confirm decomposition done** does (`../ui/DCR-draft-change-review.md` DCR-FR-BELO), so the author can end a decomposition by voice. Undoing a confirmation is out of scope: the Git history of the project keeps the original draft.
 
 ## Functional requirements
-1. **DDC-FR-SQYQ** The tool is a `rig` portable tool named `decide_draft_changes` and conforms to `TLC-tool-conventions.md` in full. It is one of the tools of TLC-FR-17 that declare a side effect, and its side effect is the one the contract surface declares and nothing else.
+1. **DDC-FR-SQYQ** The tool is a `rig` portable tool named `decide_change_edits` and conforms to `TLC-tool-conventions.md` in full. It is one of the tools of TLC-FR-17 that declare a side effect, and its side effect is the one the contract surface declares and nothing else.
 2. **DDC-FR-VAYO** Its `description()` returns the fixed text of the contract surface, and its `parameters()` returns the JSON Schema of the contract surface with its parameter descriptions (per TLC-FR-05, TLC-FR-06). Neither varies by draft, conversation, agent, or project.
 3. **DDC-FR-QRIY** The tool is constructed per turn (per TLC-FR-15). Its constructor binds it to the turn's draft, the origin of the turn's conversation, and the turn's agent participant. It accepts no argument that names a draft, a proposal, a conversation, a participant, or a path.
 4. **DDC-FR-UOLP** The tool is attached to the turns whose origin kind is a draft conversation and to no other turn (per `../ai/CVL-conversation-loop.md` CVL-FR-08). It is attached in every such turn, typed or spoken, and never together with `decide_prompt_changes`.
@@ -66,12 +66,12 @@ The tool an agent uses when the author tells it to decide a change of the open p
 One tool, conforming to `TLC-tool-conventions.md` in full. It is attached by `../ai/CVL-conversation-loop.md` (CVL-FR-08), and has no Tauri command, event, or frontend reach of its own.
 
 ### The tool
-`decide_draft_changes` — a `rig` portable tool, constructed per turn (per TLC-FR-15). Its constructor takes the draft the turn is about, the origin of the conversation the turn belongs to, and the agent participant the turn answers as.
+`decide_change_edits` — a `rig` portable tool, constructed per turn (per TLC-FR-15). Its constructor takes the draft the turn is about, the origin of the conversation the turn belongs to, and the agent participant the turn answers as.
 
 ### The description
 The fixed text the model reads (per TLC-FR-05):
 
-> Decide changes of the open proposal of the draft under discussion, when the author tells you to. Call it only when the author's latest comment tells you plainly to accept, reject, or discuss a change, for example "accept the second change". Never call it on your own judgement, on an earlier comment, or to tidy up a proposal. Do not read the decision back and wait for a confirmation: the author's instruction is the confirmation. Pass `decisions`, one entry for each change the author named, in the order the author named them. Each entry gives the `id` of a change and an `action`. `accept` writes the change into the prompt as it stands, with any edit the author made to it. `reject` writes nothing. `discuss` opens a new discussion about that change, with a first comment from you that says the author asked to discuss it; it does not decide the change. A rejected change can still be accepted while the proposal is open. Your input lists each change of the open proposal with its id, its place, its state, and its text. When the author names a change by its place, count the changes in their order and skip the withdrawn ones, as the review does. Each entry runs on its own: a refused entry stops no other, and the result tells you what happened to each. Tell the author in your reply what you did. The same entries decide the proposed new draft that waits on the author during a decomposition: give its id with `accept`, `reject`, or `discuss`. When the author tells you to confirm the decomposition, give the id of the decomposition with `confirm`. Copy into `instruction` the words of the author's latest comment that ask for these decisions, exactly as the author wrote or said them. A call is refused when the latest comment is not the author's, when the words are not in it, or when that comment already gave a decision. While the author is still speaking, wait until the comment of the speech arrives. This tool never makes, changes, or withdraws a change or a proposed draft; use `propose_draft_changes` or `propose_new_draft` for that.
+> Decide edits of the open proposal of the change under discussion, when the author tells you to. Call it only when the author's latest comment tells you plainly to accept, reject, or discuss an edit, for example "accept the second edit". Never call it on your own judgement, on an earlier comment, or to tidy up a proposal. Do not read the decision back and wait for a confirmation: the author's instruction is the confirmation. Pass `decisions`, one entry for each edit the author named, in the order the author named them. Each entry gives the `id` of an edit and an `action`. `accept` writes the edit into the prompt as it stands, with any edit the author made to it. `reject` writes nothing. `discuss` opens a new discussion about that edit, with a first comment from you that says the author asked to discuss it; it does not decide the edit. A rejected edit can still be accepted while the proposal is open. Your input lists each edit of the open proposal with its id, its place, its state, and its text. When the author names an edit by its place, count the edits in their order and skip the withdrawn ones, as the review does. Each entry runs on its own: a refused entry stops no other, and the result tells you what happened to each. Tell the author in your reply what you did. The same entries decide the proposed new change that waits on the author during a decomposition: give its id with `accept`, `reject`, or `discuss`. When the author tells you to confirm the decomposition, give the id of the decomposition with `confirm`. Copy into `instruction` the words of the author's latest comment that ask for these decisions, exactly as the author wrote or said them. A call is refused when the latest comment is not the author's, when the words are not in it, or when that comment already gave a decision. While the author is still speaking, wait until the comment of the speech arrives. This tool never makes, edits, or withdraws an edit or a proposed change; use `propose_change_edits` or `propose_new_change` for that.
 
 ### Arguments
 ```
@@ -115,10 +115,10 @@ The JSON Schema:
 
 Their descriptions in the parameter schema (per TLC-FR-06):
 
-- `instruction` — *"The words of the author's latest comment that ask for these decisions, copied exactly as the author wrote or said them, for example \"accept the second change\"."*
-- `decisions` — *"The decisions the author asked for in the latest comment, in the order the author gave them. Each entry names one change by its `id` and gives one `action`."*
-- `id` — *"The id of a change of the open proposal, of the proposed new draft that waits on the author, or of the decomposition, as your input lists it."*
-- `action` — *"`accept` to write the change into the prompt, `reject` to decline it, `discuss` to open a new discussion about it, or `confirm` with the id of the decomposition to end it."*
+- `instruction` — *"The words of the author's latest comment that ask for these decisions, copied exactly as the author wrote or said them, for example \"accept the second edit\"."*
+- `decisions` — *"The decisions the author asked for in the latest comment, in the order the author gave them. Each entry names one edit by its `id` and gives one `action`."*
+- `id` — *"The id of an edit of the open proposal, of the proposed new change that waits on the author, or of the decomposition, as your input lists it."*
+- `action` — *"`accept` to write the edit into the prompt, `reject` to decline it, `discuss` to open a new discussion about it, or `confirm` with the id of the decomposition to end it."*
 
 ### Output
 Data (per TLC-FR-08):
@@ -157,7 +157,7 @@ DecideDraftChangesOutput {
 The opening comment of a hunk discussion that a `discuss` entry opens. Its body is this fixed line and nothing else:
 
 ```
-The author asked to discuss this change.
+The author asked to discuss this edit.
 ```
 
 It carries one `proposal_hunk` attachment that names the hunk and the draft.
@@ -172,27 +172,27 @@ Decided by <agent> on the author's instruction: “<instruction>”
 The opening comment that a `discuss` entry for a new-draft proposal posts is this fixed line, with one `new_draft_subject` attachment:
 
 ```
-The author asked to discuss this proposed draft.
+The author asked to discuss this proposed change.
 ```
 
 ### Refusals
 Of the whole call, as `ToolExecutionError`:
 - **no open project** — the shared refusal of `TLC-tool-conventions.md`: `NotFound`, not retryable.
-- **not a draft conversation** — `PermissionDenied`, not retryable: *"This conversation is not about a draft, so there is no proposal here to decide. Asking again will not succeed."*
+- **not a change conversation** — `PermissionDenied`, not retryable: *"This conversation is not about a change, so there is no proposal here to decide. Asking again will not succeed."*
 - **malformed arguments** — the shared refusal of `TLC-tool-conventions.md`: `InvalidArgs`, retryable.
 - **speech not posted** — `Other`, retryable: *"The author is still speaking, and the comment of the speech has not arrived. Nothing was decided. Call again after the comment arrives."*
 - **not authorized** — `PermissionDenied`, not retryable: *"The latest comment you received is not one the author wrote or spoke, so it can not authorize a decision. Nothing was decided. Tell the author what you would decide and let them decide."*
 - **instruction not found** — `InvalidArgs`, retryable: *"The words in `instruction` are not in the author's latest comment. Nothing was decided. Copy the words of that comment that ask for these decisions."*
 - **instruction used** — `PermissionDenied`, not retryable: *"The author's latest comment already gave a decision. Nothing was decided. Ask the author what to do next."*
-- **no open proposal** — `InvalidArgs`, retryable: *"No proposal, no proposed draft, and no decomposition to confirm is open on this draft, so there is nothing to decide. Tell the author that nothing is waiting for a decision."*
+- **no open proposal** — `InvalidArgs`, retryable: *"No proposal, no proposed change, and no decomposition to confirm is open on this change, so there is nothing to decide. Tell the author that nothing is waiting for a decision."*
 
 Of one entry, as a `refused` row of the output:
-- `unknown_hunk` — *"Decision N of M: the id you gave is not a change of the open proposal. Use an id from your input."*
-- `hunk_lost` — *"Decision N of M: the text this change replaces is no longer in the prompt, so it can not be decided here. Tell the author to clear it in the review."*
-- `hunk_accepted` — *"Decision N of M: this change is already accepted, and an accepted change is final."*
-- `hunk_withdrawn` — *"Decision N of M: this change was withdrawn, so there is nothing to decide."*
-- `already_in_state` — *"Decision N of M: this change is already rejected"*, or *"already has a discussion"*, *"so nothing changed."*
-- `invalid_action` — *"Decision N of M: the action must be `accept`, `reject`, or `discuss` for a change or a proposed draft, and `confirm` for the decomposition."*
+- `unknown_hunk` — *"Decision N of M: the id you gave is not an edit of the open proposal. Use an id from your input."*
+- `hunk_lost` — *"Decision N of M: the text this edit replaces is no longer in the prompt, so it can not be decided here. Tell the author to clear it in the review."*
+- `hunk_accepted` — *"Decision N of M: this edit is already accepted, and an accepted edit is final."*
+- `hunk_withdrawn` — *"Decision N of M: this edit was withdrawn, so there is nothing to decide."*
+- `already_in_state` — *"Decision N of M: this edit is already rejected"*, or *"already has a discussion"*, *"so nothing changed."*
+- `invalid_action` — *"Decision N of M: the action must be `accept`, `reject`, or `discuss` for an edit or a proposed change, and `confirm` for the decomposition."*
 - `no_open_proposal` — *"Decision N of M: an earlier decision of this call closed the proposal, so this one was not made."*
 - `decision_failed` — *"Decision N of M: the decision could not be made"*, with the backend's typed error.
 

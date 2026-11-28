@@ -80,10 +80,12 @@ fn is_a_portable_tool_with_two_optional_parameters() {
     let properties = definition.parameters["properties"].as_object().expect("an object");
     assert_eq!(properties.len(), 2);
     assert_eq!(definition.parameters["properties"]["path"]["description"], PATH_DESCRIPTION);
+    // PVC-FR-SQAF: the schema names `change_id` alone, not its alias.
     assert_eq!(
-        definition.parameters["properties"]["draft_id"]["description"],
-        DRAFT_ID_DESCRIPTION
+        definition.parameters["properties"]["change_id"]["description"],
+        CHANGE_ID_DESCRIPTION
     );
+    assert!(definition.parameters["properties"].get("draft_id").is_none());
     assert_eq!(definition.parameters["required"], serde_json::json!([]), "neither alone");
     // MDT-FR-QYLP: the description calls the count an estimate.
     assert!(DESCRIPTION.contains("estimate"));
@@ -110,6 +112,7 @@ fn the_window_is_bound_at_construction_and_never_an_argument() {
 }
 
 // MDT-FR-OTUZ: exactly one target; both, neither, or only blanks are refused.
+// PVC-FR-SQAF: a `path` beside the alias `draft_id` is two targets too.
 #[test]
 fn a_call_names_exactly_one_target() {
     let fixture = MeasureFixture::new();

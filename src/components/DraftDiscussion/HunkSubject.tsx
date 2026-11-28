@@ -84,7 +84,7 @@ export function HunkSubject({
   const position = proposal ? hunkPosition(proposal, hunkId) : (place?.position ?? 0);
   // DCR-FR-OZVU: a withdrawn change is not counted, and has no position.
   const total = proposal ? reviewedHunkTotal(proposal) : (place?.total ?? 0);
-  const name = position > 0 ? `Change ${position} of ${total}` : "Change";
+  const name = position > 0 ? `Edit ${position} of ${total}` : "Edit";
   const word =
     state !== undefined
       ? hunkStateWord(state)
@@ -110,7 +110,7 @@ export function HunkSubject({
     <section
       ref={stripRef}
       className="dds-subject"
-      aria-label="The change this discussion is about"
+      aria-label="The edit this discussion is about"
       data-testid="discussion-subject"
       data-expanded={expanded}
     >
@@ -156,7 +156,7 @@ export function HunkSubject({
       )}
       {reading?.status === "failed" && (
         <p className="dds-subject__note t-ui-xs" role="status">
-          The text of this change could not be read.
+          The text of this edit could not be read.
         </p>
       )}
       {(long || reachable) && (

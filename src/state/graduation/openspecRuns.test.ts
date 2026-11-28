@@ -11,7 +11,7 @@ import type { GraduationRun } from "../../types";
 import { runTitle } from "./merge";
 import { actionsFor } from "./runState";
 import { conditionOf, conditionSentence, stageDescriptorsFor, stageOf } from "./stages";
-import { changeRunTitle, tasksSentence } from "./openspecRuns";
+import { changeRunOutcome, changeRunTitle, reworkBlockerSentence, tasksSentence } from "./openspecRuns";
 
 const run = (phase: "propose" | "apply" | "rework", over: Partial<GraduationRun> = {}) =>
   makeRun("r1", "working", { openspec: { phase, change: "add-logout" }, ...over });
@@ -58,7 +58,7 @@ describe("OpenSpec change run words", () => {
     expect(runTitle(run("propose"))).toBe("Run r1");
   });
 
-  it("GRU-FR-HABG, GRU-FR-WDWB: an OpenSpec change run offers no Open draft, and Restart once discarded", () => {
+  it("GRU-FR-HABG, GRU-FR-WDWB: an OpenSpec change run offers no Open change, and Restart once discarded", () => {
     expect(actionsFor(run("apply"))).not.toContain("open-draft");
     expect(actionsFor(run("rework", { state: "discarded" }))).toEqual(["restart"]);
   });
@@ -67,5 +67,20 @@ describe("OpenSpec change run words", () => {
     const base = { state: "all_done" as const, total: 4, complete: 4, missingArtifacts: [] };
     expect(tasksSentence({ ...base, nextTask: null })).toBe("4 of 4 tasks");
     expect(tasksSentence({ ...base, nextTask: "  " })).toBe("4 of 4 tasks");
+  });
+
+  it("GRU-FR-IKEQ, GRU-FR-NGQE, PVC-FR-NEXL: the words of a rework run name an OpenSpec change, never a bare change", () => {
+    const proposed = run("rework", {
+      state: "completed",
+      openspec: { phase: "rework", change: "add-logout", proposalId: "p1" },
+    });
+    expect(changeRunOutcome(proposed)).toBe("The result is a proposal in the discussion of the OpenSpec change.");
+    expect(changeRunOutcome(run("rework", { state: "discarded" }))).toBe(
+      "Discarded. Nothing was written to the OpenSpec change.",
+    );
+    expect(reworkBlockerSentence(run("rework", { state: "blocked" }), "proposal_pending")).toBe(
+      "The OpenSpec change holds a pending edit proposal, so the result of the rework could not be recorded. " +
+        "Decide that proposal first, then continue the run.",
+    );
   });
 });

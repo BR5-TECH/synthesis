@@ -131,6 +131,18 @@ describe("the History rail (NAW-FR-07 … NAW-FR-43)", () => {
     }
   });
 
+  it("NAW-FR-36, PVC-FR-VBPY: the legend of the rail calls an accepted hunk an edit", async () => {
+    stub({ history: threeVersions() });
+    renderWorkspace();
+    const rail = await showRail();
+
+    const legend = rail.querySelector(".draft-rail__legend");
+    expect(legend).toHaveTextContent(
+      "The prompt as it stood before and after each edit you accepted from an agent. " +
+        "Your own edits are the live prompt, which is the Original until the first edit lands.",
+    );
+  });
+
   it("NAW-FR-37, NAW-FR-38: the live-prompt row names the baseline the prompt has moved on from", async () => {
     // Byte-identical to the newest version: rendered plainly.
     stub({ history: threeVersions() });
@@ -180,7 +192,7 @@ describe("the History rail (NAW-FR-07 … NAW-FR-43)", () => {
     await waitFor(() => {
       const toggle = screen.getByRole("button", { name: "Show History" });
       expect(within(toggle).getByText("1")).toBeInTheDocument();
-      expect(toggle).toHaveAttribute("title", "1 version of this draft");
+      expect(toggle).toHaveAttribute("title", "1 version of this change");
     });
 
     const rail = await showRail();
@@ -608,7 +620,7 @@ describe("the History rail (NAW-FR-07 … NAW-FR-43)", () => {
     });
     renderWorkspace();
 
-    await screen.findByText("This draft cannot be opened.");
+    await screen.findByText("This change cannot be opened.");
     // NAW-FR-41: no editing surface, no rail, and no file of it presented as
     // the prompt.
     expect(
@@ -616,7 +628,7 @@ describe("the History rail (NAW-FR-07 … NAW-FR-43)", () => {
     ).toBeNull();
     expect(document.querySelector(".draft-rail")).toBeNull();
     expect(screen.queryByRole("button", { name: /Show History/ })).toBeNull();
-    expect(screen.getByText(/Delete it from the Drafts panel/)).toBeInTheDocument();
+    expect(screen.getByText(/Delete it from the Changes panel/)).toBeInTheDocument();
     // Nothing under the draft was read or written for it.
     expect(callsNamed("load_draft_file_contents")).toHaveLength(0);
     expect(callsNamed("list_draft_history")).toHaveLength(0);
@@ -650,7 +662,7 @@ describe("the History rail (NAW-FR-07 … NAW-FR-43)", () => {
     // "this has moved on from it" — NAW-FR-41 forbids both.
     expect(liveRow()).not.toHaveTextContent("Original");
     // Nor does the toggle claim a count. A draft holding three versions whose
-    // history refused would otherwise report "1 version of this draft", which
+    // history refused would otherwise report "1 version of this change", which
     // is a statement about the draft rather than about the failure.
     const toggle = screen.getByRole("button", { name: "Hide History" });
     expect(toggle).toHaveAttribute("title", "Version history");
@@ -664,7 +676,7 @@ describe("the History rail (NAW-FR-07 … NAW-FR-43)", () => {
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "Hide History" }),
-      ).toHaveAttribute("title", "3 versions of this draft"),
+      ).toHaveAttribute("title", "3 versions of this change"),
     );
   });
 

@@ -26,8 +26,8 @@ describe("PanelEmptyState (SNV-FR-60)", () => {
   it("composes the line, the sentence, and the action in that fixed order", () => {
     const { container } = render(
       <PanelEmptyState
-        line="No drafts yet."
-        action={{ label: "New draft", onClick: vi.fn() }}
+        line="No changes yet."
+        action={{ label: "New change", onClick: vi.fn() }}
       >
         A draft is where a new artifact is developed.
       </PanelEmptyState>,
@@ -40,7 +40,7 @@ describe("PanelEmptyState (SNV-FR-60)", () => {
     // every presence assertion in every panel suite.
     const parts = [...block!.children];
     expect(parts).toHaveLength(3);
-    expect(parts[0]).toHaveTextContent("No drafts yet.");
+    expect(parts[0]).toHaveTextContent("No changes yet.");
     expect(parts[0].tagName).toBe("P");
     expect(parts[1]).toHaveTextContent(
       "A draft is where a new artifact is developed.",
@@ -52,12 +52,12 @@ describe("PanelEmptyState (SNV-FR-60)", () => {
   it("renders the action as a button that invokes its handler", async () => {
     const onClick = vi.fn();
     render(
-      <PanelEmptyState line="No drafts yet." action={{ label: "New draft", onClick }}>
+      <PanelEmptyState line="No changes yet." action={{ label: "New change", onClick }}>
         A sentence.
       </PanelEmptyState>,
     );
 
-    const button = screen.getByRole("button", { name: "New draft" });
+    const button = screen.getByRole("button", { name: "New change" });
     // Not a submit: this is the shared block for every vertical panel, and one
     // of them enclosing it in a form would otherwise submit it.
     expect(button).toHaveAttribute("type", "button");
@@ -68,9 +68,9 @@ describe("PanelEmptyState (SNV-FR-60)", () => {
   it("carries an icon beside the action's label when one is given", () => {
     render(
       <PanelEmptyState
-        line="No drafts yet."
+        line="No changes yet."
         action={{
-          label: "New draft",
+          label: "New change",
           icon: <svg data-testid="plus" />,
           onClick: vi.fn(),
         }}
@@ -79,7 +79,7 @@ describe("PanelEmptyState (SNV-FR-60)", () => {
       </PanelEmptyState>,
     );
 
-    const button = screen.getByRole("button", { name: "New draft" });
+    const button = screen.getByRole("button", { name: "New change" });
     expect(button.querySelector("[data-testid=plus]")).not.toBeNull();
   });
 
@@ -115,10 +115,10 @@ describe("PanelEmptyState (SNV-FR-60)", () => {
 describe("PanelFilteredState (SNV-FR-61)", () => {
   it("renders the message alone, with no line, sentence, or action", () => {
     const { container } = render(
-      <PanelFilteredState>No draft matches this filter.</PanelFilteredState>,
+      <PanelFilteredState>No change matches this filter.</PanelFilteredState>,
     );
 
-    expect(screen.getByText("No draft matches this filter.")).toBeInTheDocument();
+    expect(screen.getByText("No change matches this filter.")).toBeInTheDocument();
     expect(container.querySelector(".panel-filtered")).not.toBeNull();
     // Reaching for the empty-state block here is the mistake SNV-FR-61 names.
     expect(container.querySelector(".panel-empty")).toBeNull();

@@ -30,7 +30,7 @@ describe("a proposed text the Editor cannot render (DCR-FR-09)", () => {
     const host = document.createElement("div");
     const teardown = mountProposedText(host, "\n\nThe *secret* body\n\nA second line\n", {
       editable: true,
-      label: "Proposed text of change 1 of 1",
+      label: "Proposed text of edit 1 of 1",
       onChange: () => {},
     });
     expect(host.textContent).toBe("The *secret* body\n\nA second line");

@@ -149,7 +149,7 @@ describe("a project limit that is full", () => {
     await settled();
     await waitFor(() => expect(slotNote()).toBeInTheDocument());
     expect(slotNote()).toHaveTextContent(
-      /.editor-work. is free, but the project already works its limit of 2 graduation runs\. This one waits for a project slot\./,
+      /.editor-work. is free, but the project already works its limit of 2 implementation runs\. This one waits for a project slot\./,
     );
     // The stream itself is free, so no busy note stands.
     expect(screen.queryByTestId("graduation-start-busy")).toBeNull();
@@ -196,7 +196,7 @@ describe("a project limit that is full", () => {
     expect(screen.getByTestId("graduation-start-busy")).toHaveTextContent(
       /A run holds .editor-work. now/,
     );
-    expect(slotNote()).toHaveTextContent(/limit of 2 graduation runs/);
+    expect(slotNote()).toHaveTextContent(/limit of 2 implementation runs/);
     expect(slotNote()).toHaveTextContent(/waits for a project slot too/);
     expect(choice()).toBeInTheDocument();
   });
@@ -284,7 +284,7 @@ describe("a new stream", () => {
     await chooseNew();
     await waitFor(() => expect(slotNote()).toBeInTheDocument());
     expect(slotNote()).toHaveTextContent(
-      /The new stream is free, but the project already works its limit of 1 graduation run\. This run waits for a project slot\./,
+      /The new stream is free, but the project already works its limit of 1 implementation run\. This run waits for a project slot\./,
     );
     await userEvent.click(position("commit_and_push"));
     await userEvent.type(

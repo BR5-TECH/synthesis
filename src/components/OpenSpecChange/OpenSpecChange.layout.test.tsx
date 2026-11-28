@@ -136,7 +136,7 @@ describe("the narrow window (OCW-FR-GCME)", () => {
     await screen.findByTestId("openspec-review-bar");
     resizeAll(400);
     const select = within(await screen.findByTestId("openspec-artifact-menu")).getByRole("combobox");
-    expect(within(select).getAllByRole("option")[0]).toHaveTextContent("proposal · done · 1 undecided change");
+    expect(within(select).getAllByRole("option")[0]).toHaveTextContent("proposal · done · 1 undecided edit");
   });
 
   it("OCW-FR-GCME: the discussion column gives up width before the reading pane, down to its own minimum", () => {

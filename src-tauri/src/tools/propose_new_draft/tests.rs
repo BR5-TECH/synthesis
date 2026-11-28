@@ -131,7 +131,7 @@ fn it_is_a_portable_tool_with_the_fixed_description() {
     let tool = f.tool();
     assert_eq!(
         <ProposeNewDraftTool<tauri::test::MockRuntime> as PortableTool>::NAME,
-        "propose_new_draft"
+        "propose_new_change"
     );
     assert_eq!(tool.description(), DESCRIPTION);
     let schema = tool.parameters();
@@ -441,7 +441,7 @@ fn each_call_is_logged_without_the_name_the_body_or_the_rationale() {
 // PND-FR-YPCH: the result a second call of one reply is told.
 #[test]
 fn a_second_call_in_one_reply_is_told_one_at_a_time() {
-    assert!(ONE_AT_A_TIME.contains("Only one new draft"));
+    assert!(ONE_AT_A_TIME.contains("Only one new change"));
 }
 
 // PDC-FR-WEWV / PND-FR-XGNE: a pending new-draft proposal does not take the

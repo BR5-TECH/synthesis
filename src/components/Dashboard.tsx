@@ -308,7 +308,7 @@ export function Dashboard({
         <div className="dash-empty">
           <div className="dash-empty__title">Nothing here yet</div>
           <div className="dash-empty__hint">
-            Open a file from the Project panel, or start a draft in the Drafts
+            Open a file from the Project panel, or start a change in the Changes
             panel, and this page will fill in.
           </div>
         </div>
@@ -360,7 +360,7 @@ export function Dashboard({
           stale={drafts.state.stale}
         >
           {drafts.state.error !== null ? (
-            <WidgetNotice kind="error">Active drafts could not be read</WidgetNotice>
+            <WidgetNotice kind="error">Active changes could not be read</WidgetNotice>
           ) : drafts.state.loading ? (
             <WidgetNotice kind="loading">Loading…</WidgetNotice>
           ) : (

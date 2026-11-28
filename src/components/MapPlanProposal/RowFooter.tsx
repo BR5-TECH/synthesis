@@ -34,10 +34,10 @@ function Applied({ row, host }: { row: MapPlanRow; host: MapPlanHost | null }) {
     const draftId = row.result?.draftId;
     return (
       <div className="pp-out">
-        <span>Created the draft</span>
+        <span>Created the change</span>
         {draftId && host?.openDraft && (
           <button type="button" className="btn btn--ghost btn--sm" onClick={() => host.openDraft?.(draftId)}>
-            Open draft
+            Open change
           </button>
         )}
       </div>

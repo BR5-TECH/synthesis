@@ -39,17 +39,17 @@ use crate::logging::{LogBuffer, LogSink, BUFFER};
 use crate::text_hunks::hunks::{ContextSide, ProposedHunk};
 
 /// PCE-FR-QYDD.
-pub const NAME: &str = "propose_change_edits";
+pub const NAME: &str = "propose_openspec_change_edits";
 
 /// PCE-FR-MRWZ: the fixed text of the contract surface.
-pub const DESCRIPTION: &str = "Propose edits to the OpenSpec change under discussion. Use this when you can show the author how the change should read: give the hunks in the files they belong to, across the proposal, the deltas, the design, and the tasks, so that the change stays coherent. Each hunk names its path relative to the change folder, for example `specs/auth/spec.md`. A path that the change does not hold yet creates a new file. The author decides each hunk in the text; nothing is written until they accept. To change the open proposal, call again with `updates`. Your turn ends when the proposal is recorded.";
+pub const DESCRIPTION: &str = "Propose edits to the OpenSpec change under discussion. Use this when you can show the author how the OpenSpec change should read: give the hunks in the files they belong to, across the proposal, the deltas, the design, and the tasks, so that the OpenSpec change stays coherent. Each hunk names its path relative to the OpenSpec change folder, for example `specs/auth/spec.md`. A path that the OpenSpec change does not hold yet creates a new file. The author decides each hunk in the text; nothing is written until they accept. To change the open proposal, call again with `updates`. Your turn ends when the proposal is recorded.";
 
-const HUNKS_DESCRIPTION: &str = "The hunks, in the order they should be read. Each names `path`, relative to the change folder. In each, `before` is the exact existing text of that file you change, copied character for character, and `after` is what stands in its place. For an insertion give `after` and the exact text it follows in `after_text`; for a deletion give `before` alone. Where the text appears more than once in the file, add `lead` or `trail`, the exact text just before or after it, up to 200 characters each. For a new file give the path and `after` alone, which is the whole text of the file.";
+const HUNKS_DESCRIPTION: &str = "The hunks, in the order they should be read. Each names `path`, relative to the OpenSpec change folder. In each, `before` is the exact existing text of that file you change, copied character for character, and `after` is what stands in its place. For an insertion give `after` and the exact text it follows in `after_text`; for a deletion give `before` alone. Where the text appears more than once in the file, add `lead` or `trail`, the exact text just before or after it, up to 200 characters each. For a new file give the path and `after` alone, which is the whole text of the file.";
 
 const UPDATES_DESCRIPTION: &str = "Changes to your open proposal, in place of `hunks`. Each update gives `action`: `change` with the `id` of a hunk and its new fields, `add` with `path` and the fields of a new hunk, or `withdraw` with the `id` of a hunk you no longer offer. An accepted or withdrawn hunk can not be updated.";
 
 const PATH_DESCRIPTION: &str =
-    "The path of the file, relative to the change folder, for example `tasks.md` or `specs/auth/spec.md`.";
+    "The path of the file, relative to the OpenSpec change folder, for example `tasks.md` or `specs/auth/spec.md`.";
 
 const RATIONALE_DESCRIPTION: &str = "Why the edits are worth making, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud.";
 
@@ -57,22 +57,22 @@ const RATIONALE_DESCRIPTION: &str = "Why the edits are worth making, in a senten
 pub const PROPOSAL_NOT_ONE_FORM: &str =
     "Pass exactly one of `hunks`, the hunks of a new proposal, or `updates`, the updates of your open proposal.";
 /// PCE-FR-FEAK: a path that leaves the change folder.
-pub const PATH_OUTSIDE_CHANGE: &str = "The `path` you gave is not inside the change folder. Give a path relative to the change folder, with no `..` segment, for example `specs/auth/spec.md`.";
+pub const PATH_OUTSIDE_CHANGE: &str = "The `path` you gave is not inside the OpenSpec change folder. Give a path relative to the OpenSpec change folder, with no `..` segment, for example `specs/auth/spec.md`.";
 /// PCE-FR-FEAK: an `add` update with no path.
 pub const UPDATE_PATH_MISSING: &str =
-    "An `add` update names the `path` of its file, relative to the change folder.";
+    "An `add` update names the `path` of its file, relative to the OpenSpec change folder.";
 /// PCE-FR-FEAK (as PPC-FR-09): the change's one slot is taken.
-pub const CHANGE_PROPOSAL_PENDING: &str = "A proposal of yours on this change is still waiting on the author. Wait for their decision, or change the open proposal with `updates`. Say so plainly in your reply, and do not describe these edits as proposed, because they were not.";
+pub const CHANGE_PROPOSAL_PENDING: &str = "A proposal of yours on this OpenSpec change is still waiting on the author. Wait for their decision, or change the open proposal with `updates`. Say so plainly in your reply, and do not describe these edits as proposed, because they were not.";
 /// PCE-FR-MVKT: a rework run of the change is not terminal.
-pub const CHANGE_REWORK_RUNNING: &str = "A rework run of this change is running, and its result comes to the author as a proposal. Nothing was recorded. Answer with what you have.";
+pub const CHANGE_REWORK_RUNNING: &str = "A rework run of this OpenSpec change is running, and its result comes to the author as a proposal. Nothing was recorded. Answer with what you have.";
 /// PCE-FR-ITEV: the refusal of a new proposal while an apply run of the change
 /// is not terminal.
 pub const CHANGE_APPLY_RUNNING: &str =
-    "An apply run of this change is running. Nothing was recorded. Answer with what you have.";
+    "An apply run of this OpenSpec change is running. Nothing was recorded. Answer with what you have.";
 /// PCE-FR-FEAK: no proposal is open, so there is nothing to update.
-pub const CHANGE_NO_OPEN: &str = "No proposal is open on this change, so there is nothing to update. Send your edits as a new proposal in `hunks`.";
+pub const CHANGE_NO_OPEN: &str = "No proposal is open on this OpenSpec change, so there is nothing to update. Send your edits as a new proposal in `hunks`.";
 /// PCE-FR-FVPF: the conversation is not about a change.
-pub const NOT_A_CHANGE_CONVERSATION: &str = "This conversation is not about an OpenSpec change, so there is no change to propose edits to. Asking again will not succeed.";
+pub const NOT_A_CHANGE_CONVERSATION: &str = "This conversation is not about an OpenSpec change, so there is no OpenSpec change to propose edits to. Asking again will not succeed.";
 /// CEP-FR-LYSS: the stream or the change folder is gone.
 pub const CHANGE_GONE: &str = "The OpenSpec change of this conversation is no longer in its work stream, so no edit can be proposed. Tell the author.";
 
@@ -281,7 +281,7 @@ fn update_refusal_for(refusal: UpdateRefusal) -> ToolRefusal {
     }
 }
 
-/// PCE-FR-QYDD: `propose_change_edits` as a `rig` portable tool.
+/// PCE-FR-QYDD: `propose_openspec_change_edits` as a `rig` portable tool.
 pub struct ProposeChangeEditsTool<R: tauri::Runtime> {
     app: tauri::AppHandle<R>,
     roots: OwnedRoots,

@@ -326,7 +326,7 @@ describe("where the change's own block sits (DCR-FR-09, DCR-FR-12)", () => {
     expect(surface?.getAttribute("contenteditable")).toBe("false");
     expect(surface?.getAttribute("aria-readonly")).toBe("true");
     expect(surface?.getAttribute("aria-label")).toBe(
-      "Proposed text of Change 1 of 1, insertion proposed by Helga",
+      "Proposed text of Edit 1 of 1, insertion proposed by Helga",
     );
   });
 

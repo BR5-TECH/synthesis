@@ -489,6 +489,7 @@ export function DiscussionSurface(props: DiscussionSurfaceProps) {
               roster={roster}
               threadId={thread.id}
               draftId={discussionDraftId(thread)}
+              targetKind={thread.target.kind}
               visibleFrom={props.visibleFrom ?? 0}
               beforeComment={beforeComment}
               onQuote={quoteOffered ? quoteFrom : undefined}

@@ -120,7 +120,7 @@ fn a_stopped_escalate_correction_is_sent_again_after_continue() {
             // GRD-FR-SWOJ: the stop committed what the refused turns wrote, as
             // for any stopped turn. The gate committed nothing.
             .expect_commits(1)
-            .expect_commit_message_contains(0, "Abandoned graduation turn")
+            .expect_commit_message_contains(0, "Abandoned implementation turn")
             .expect_records(
                 "work turn started",
                 "work_turn",

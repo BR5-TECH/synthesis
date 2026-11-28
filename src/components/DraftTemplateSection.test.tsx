@@ -114,7 +114,7 @@ describe("Draft template section (SET-FR-16 … SET-FR-20)", () => {
         onSelectLineEndings={vi.fn()}
       />,
     );
-    await userEvent.click(screen.getByText("Draft template"));
+    await userEvent.click(screen.getByText("Change template"));
     await screen.findByRole("button", { name: "Edit as Markdown source" });
     // SET-FR-16: the section holds exactly one thing. The tab's placeholder for
     // its not-yet-built sections must not be painted under the real editor.
@@ -158,7 +158,7 @@ describe("Draft template section (SET-FR-16 … SET-FR-20)", () => {
         onSelectLineEndings={vi.fn()}
       />,
     );
-    await userEvent.click(screen.getByText("Draft template"));
+    await userEvent.click(screen.getByText("Change template"));
     const area = await source();
     await typeInto(area, "# Context");
 
@@ -176,7 +176,7 @@ describe("Draft template section (SET-FR-16 … SET-FR-20)", () => {
     expect(screen.queryByText(/unsaved/i)).toBeNull();
 
     // And coming back shows what was persisted, read afresh.
-    await userEvent.click(screen.getByText("Draft template"));
+    await userEvent.click(screen.getByText("Change template"));
     expect((await source()).value).toBe("# Context");
   });
 

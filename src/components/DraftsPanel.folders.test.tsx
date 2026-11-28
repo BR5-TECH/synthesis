@@ -87,7 +87,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel();
     await screen.findByText("scratch");
 
-    await userEvent.click(screen.getByRole("button", { name: "Drafts actions" }));
+    await userEvent.click(screen.getByRole("button", { name: "Changes actions" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "New Folder" }));
     await userEvent.type(screen.getByLabelText("New folder name"), "research{Enter}");
 
@@ -201,7 +201,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     const dialog = screen.getByRole("dialog", { name: "Delete folder" });
     expect(dialog).toHaveTextContent("Delete “UI”?");
     // One draft filed directly in `UI`, one folder (`Components`).
-    expect(dialog).toHaveTextContent("The 1 draft and 1 folder it holds move to Drafts");
+    expect(dialog).toHaveTextContent("The 1 change and 1 folder it holds move to Changes");
     expect(dialog).toHaveTextContent("Nothing is deleted.");
     expect(calls("delete_drafts_folder")).toHaveLength(0);
 
@@ -244,7 +244,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     await act(async () => void openFolderMenu("Components"));
     await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     expect(screen.getByRole("dialog", { name: "Delete folder" })).toHaveTextContent(
-      "The 1 draft it holds moves to UI",
+      "The 1 change it holds moves to UI",
     );
   });
 
@@ -261,7 +261,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
 
     expect(folderRow("backend")).toHaveAttribute("aria-expanded", "false");
     await act(async () => void openFolderMenu("backend"));
-    await userEvent.click(screen.getByRole("menuitem", { name: "New Draft" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "New change" }));
 
     expect(onCreateDraft).toHaveBeenCalledWith("backend");
     expect(folderRow("backend")).toHaveAttribute("aria-expanded", "true");
@@ -274,7 +274,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     const { onCreateDraft } = renderPanel();
     await screen.findByText("scratch");
 
-    const pinned = screen.getByRole("button", { name: /Draft$/ });
+    const pinned = screen.getByRole("button", { name: /Change$/ });
     // The one child of the footer that the stylesheet centres (DRP-FR-06).
     const footer = pinned.closest(".drafts__footer");
     expect(footer).not.toBeNull();
@@ -284,8 +284,8 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     // passing no folder (DRP-FR-06).
     expect(onCreateDraft).toHaveBeenLastCalledWith(undefined);
 
-    await userEvent.click(screen.getByRole("button", { name: "Drafts actions" }));
-    await userEvent.click(screen.getByRole("menuitem", { name: "New Draft" }));
+    await userEvent.click(screen.getByRole("button", { name: "Changes actions" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "New change" }));
     expect(onCreateDraft).toHaveBeenLastCalledWith(undefined);
   });
 
@@ -326,12 +326,12 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel({ onCreateDraft });
     await screen.findByText("scratch");
 
-    await userEvent.click(screen.getByRole("button", { name: /Draft$/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Change$/ }));
 
     // The row appears at the tree's root, selected, with the inline name field
     // open, seeded with the created name, its text selected, and focused.
     const field = (await screen.findByLabelText(
-      "Draft name",
+      "Change name",
     )) as HTMLInputElement;
     expect(field).toHaveValue("Untitled");
     expect(field).toHaveFocus();
@@ -359,16 +359,16 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
 
     expect(folderRow("backend")).toHaveAttribute("aria-expanded", "false");
     await act(async () => void openFolderMenu("backend"));
-    await userEvent.click(screen.getByRole("menuitem", { name: "New Draft" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "New change" }));
 
     expect(onCreateDraft).toHaveBeenCalledWith("backend");
     await waitFor(() =>
       expect(folderRow("backend")).toHaveAttribute("aria-expanded", "true"),
     );
-    const field = await screen.findByLabelText("Draft name");
+    const field = await screen.findByLabelText("Change name");
     expect(field).toHaveFocus();
     // DRP-FR-26, DRP-FR-06, DRP-FR-36, DRS-FR-39, NAW-FR-03: nothing was written into the project artifact tree, and the
-    // panel neither read the project's draft template nor passed one — the copy
+    // panel neither read the project's change template nor passed one — the copy
     // is the creation operation's (DRS-FR-39). Asserted over the panel's whole
     // backend traffic, which is `list_drafts` and nothing else.
     expect([...new Set(invokeMock.mock.calls.map((c) => c[0]))]).toEqual([
@@ -384,10 +384,10 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
 
     // Opening one of the panel's floating surfaces closes the field without
     // committing it; the draft keeps the name it was created under.
-    await userEvent.click(screen.getByRole("button", { name: /Draft$/ }));
-    await screen.findByLabelText("Draft name");
-    await userEvent.click(screen.getByRole("button", { name: "Drafts actions" }));
-    await waitFor(() => expect(screen.queryByLabelText("Draft name")).toBeNull());
+    await userEvent.click(screen.getByRole("button", { name: /Change$/ }));
+    await screen.findByLabelText("Change name");
+    await userEvent.click(screen.getByRole("button", { name: "Changes actions" }));
+    await waitFor(() => expect(screen.queryByLabelText("Change name")).toBeNull());
     expect(invokeMock.mock.calls.some((c) => c[0] === "rename_draft")).toBe(
       false,
     );
@@ -397,10 +397,10 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     // draft is still called.
     await act(async () => void openDraftMenu("Untitled"));
     await userEvent.click(screen.getByRole("menuitem", { name: "Rename…" }));
-    expect(await screen.findByLabelText("Draft name")).toHaveValue("Untitled");
+    expect(await screen.findByLabelText("Change name")).toHaveValue("Untitled");
 
     // A commit of an empty name invokes nothing and leaves the name standing.
-    await userEvent.clear(screen.getByLabelText("Draft name"));
+    await userEvent.clear(screen.getByLabelText("Change name"));
     await userEvent.keyboard("{Enter}");
     expect(invokeMock.mock.calls.some((c) => c[0] === "rename_draft")).toBe(
       false,
@@ -410,7 +410,7 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     ).toBeInTheDocument();
   });
 
-  it("DRP-FR-06, DRP-FR-26, DRS-FR-39, SET-FR-17: the panel neither reads nor passes the project's draft template", async () => {
+  it("DRP-FR-06, DRP-FR-26, DRS-FR-39, SET-FR-17: the panel neither reads nor passes the project's change template", async () => {
     // DRP-FR-06 / DRP-FR-26: the copy is the creation operation's (DRS-FR-39),
     // which is what makes both routes produce the same starting content. The
     // panel's whole part in it is to name a folder, or not.
@@ -418,11 +418,11 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel({ onCreateDraft });
     await screen.findByText("scratch");
 
-    await userEvent.click(screen.getByRole("button", { name: /Draft$/ }));
-    await screen.findByLabelText("Draft name");
+    await userEvent.click(screen.getByRole("button", { name: /Change$/ }));
+    await screen.findByLabelText("Change name");
     await userEvent.keyboard("{Escape}");
     await act(async () => void openFolderMenu("backend"));
-    await userEvent.click(screen.getByRole("menuitem", { name: "New Draft" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "New change" }));
 
     // The two routes differ in the folder each names and in nothing else, and
     // neither carries a template — nor did the panel read one.
@@ -441,9 +441,9 @@ describe("Drafts panel (DRP-drafts-panel.md)", () => {
     renderPanel({ onCreateDraft });
     await screen.findByText("scratch");
 
-    await userEvent.click(screen.getByRole("button", { name: /Draft$/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Change$/ }));
     await waitFor(() => expect(onCreateDraft).toHaveBeenCalled());
-    expect(screen.queryByLabelText("Draft name")).toBeNull();
+    expect(screen.queryByLabelText("Change name")).toBeNull();
   });
 
 });

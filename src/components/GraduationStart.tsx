@@ -532,7 +532,7 @@ export function GraduationStart({
         <div className="modal__head">
           <Icon.Graduate size={14} />
           <h2 className="modal__title" id="graduation-start-title">
-            Graduate “{draftName}”
+            Implement “{draftName}”
           </h2>
           <button
             type="button"
@@ -785,14 +785,14 @@ export function GraduationStart({
             {busy
               ? "Starting…"
               : proposing
-                ? "Propose change"
+                ? "Propose OpenSpec change"
                 : destination === "new"
-                ? "Create stream and graduate"
+                ? "Create stream and implement"
                 : destination === "temporary"
-                  ? "Create temporary stream and graduate"
+                  ? "Create temporary stream and implement"
                   : destination === "direct"
-                  ? "Graduate here"
-                  : "Graduate"}
+                  ? "Implement here"
+                  : "Implement"}
           </button>
         </div>
       </div>

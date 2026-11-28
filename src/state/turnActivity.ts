@@ -7,7 +7,8 @@
  * in the discussion session store (CTA-FR-MNPS), which calls these functions.
  * Nothing here logs a tool list or a key input.
  */
-import type { AgentTurn, Comment, TurnToolCall } from "../types";
+import type { AgentTurn, Comment, DiscussionTarget, TurnToolCall } from "../types";
+import { currentToolName } from "./legacyToolNames";
 
 /** CTA-FR-ZBIB: the tool list of one ended turn, at the discussion foot. */
 export interface ActivityRow {
@@ -104,8 +105,15 @@ export function isQuietGroupTurn(turn: AgentTurn): boolean {
  * from nothing else, or `null` where the comment carries no saved tool list.
  * The ids and the sequence are positions in the saved list: a saved call holds
  * neither (CMS-FR-HRDN).
+ *
+ * PVC-FR-LGYT, PVC-FR-PXOE: a saved call with a legacy name shows the tool's
+ * current name, as the target kind of the conversation gives it. Its status
+ * follows that name (PVC-FR-JBPC).
  */
-export function savedActivityRowOf(comment: Comment): ActivityRow | null {
+export function savedActivityRowOf(
+  comment: Comment,
+  targetKind?: DiscussionTarget["kind"],
+): ActivityRow | null {
   const saved = comment.toolCalls ?? [];
   if (saved.length === 0 || comment.author.kind !== "agent") return null;
   return {
@@ -114,7 +122,7 @@ export function savedActivityRowOf(comment: Comment): ActivityRow | null {
     nickname: comment.author.handle,
     calls: saved.map((call, at) => ({
       id: `${comment.id}:${at}`,
-      tool: call.tool,
+      tool: currentToolName(call.tool, targetKind),
       activationSeq: at,
       state: call.state,
       keyInput: call.keyInput,

@@ -146,7 +146,7 @@ function InspectorBody({
             className="btn btn--primary btn--sm"
             onClick={() => actions.onOpenChange(model.chip)}
           >
-            Open change
+            Open OpenSpec change
           </button>
         </div>
       </>

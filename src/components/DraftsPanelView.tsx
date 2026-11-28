@@ -129,7 +129,7 @@ export function DraftsPanelView(props: DraftsPanelViewProps) {
       style={{ display: "flex", flexDirection: "column", height: "100%" }}
     >
       <div className="panel-header">
-        <span className="panel-header__title">Drafts</span>
+        <span className="panel-header__title">Changes</span>
         {/* DRP-FR-22: the implicit root offers New Draft and New Folder alone,
             having nothing to rename, move, or delete. It is reached through the
             panel's own chrome rather than through a row of its own — the root is
@@ -138,7 +138,7 @@ export function DraftsPanelView(props: DraftsPanelViewProps) {
           <span className="drafts-tree__root-actions">
             <button
               className="icon-btn icon-btn--xs drafts-tree__menu-btn"
-              aria-label="Drafts actions"
+              aria-label="Changes actions"
               aria-haspopup="menu"
               aria-expanded={overlay?.kind === "root-menu"}
               onClick={(e) => {
@@ -152,8 +152,8 @@ export function DraftsPanelView(props: DraftsPanelViewProps) {
               ⋯
             </button>
             {overlay?.kind === "root-menu" && (
-              <AnchoredMenu anchor={anchor} label="Drafts actions">
-                {menuEntry("New Draft", <Icon.Diamond size={12} />, () =>
+              <AnchoredMenu anchor={anchor} label="Changes actions">
+                {menuEntry("New change", <Icon.Diamond size={12} />, () =>
                   void doNewDraft(ROOT),
                 )}
                 {menuEntry("New Folder", <Icon.Folder size={12} />, () => {
@@ -177,13 +177,13 @@ export function DraftsPanelView(props: DraftsPanelViewProps) {
             <Icon.Search size={12} />
             <input
               placeholder="Filter name or contents…"
-              aria-label="Filter drafts"
+              aria-label="Filter changes"
               value={panel.text}
               onChange={(e) => panel.setText(e.target.value)}
             />
           </div>
           <SelectorRow
-            label="Draft status"
+            label="Change status"
             positions={STATUS_POSITIONS}
             value={panel.filter}
             onChange={panel.setFilter}
@@ -235,14 +235,14 @@ export function DraftsPanelView(props: DraftsPanelViewProps) {
             button. The pinned affordance is not rendered alongside it. */}
         {nothingAtAll && (
           <PanelEmptyState
-            line="No drafts yet."
+            line="No changes yet."
             action={{
-              label: "New draft",
+              label: "New change",
               icon: <Icon.Plus size={12} />,
               onClick: () => void doNewDraft(ROOT),
             }}
           >
-            A draft is where a new artifact is developed — with AI, by hand, or
+            A change is where a new artifact is developed — with AI, by hand, or
             both — before it enters the project.
           </PanelEmptyState>
         )}
@@ -251,11 +251,11 @@ export function DraftsPanelView(props: DraftsPanelViewProps) {
             own region with both controls above still present, because the
             author's next move is to change them rather than to make a draft. */}
         {filteredToNothing && (
-          <PanelFilteredState>No draft matches this filter.</PanelFilteredState>
+          <PanelFilteredState>No change matches this filter.</PanelFilteredState>
         )}
 
         {!nothingAtAll && hierarchy !== null && (
-          <div className="drafts-tree" role="tree" aria-label="Drafts">
+          <div className="drafts-tree" role="tree" aria-label="Changes">
             {/* DRP-FR-23: a folder created at the root gets its field here. */}
             {inline?.kind === "new-folder" && inline.parent === ROOT && (
               // Explicitly zero, like every other depth-0 row: the stylesheet's
@@ -283,7 +283,7 @@ export function DraftsPanelView(props: DraftsPanelViewProps) {
       {!nothingAtAll && (
         <div className="drafts__footer">
           <button className="btn btn--sm" onClick={() => void doNewDraft(ROOT)}>
-            <Icon.Plus size={12} /> Draft
+            <Icon.Plus size={12} /> Change
           </button>
         </div>
       )}
@@ -292,13 +292,13 @@ export function DraftsPanelView(props: DraftsPanelViewProps) {
           with it. */}
       {draftDeleteTarget && (
         <Modal
-          label="Delete draft"
+          label="Delete change"
           returnFocus={menuOpener.current}
           onClose={() => setOverlay(null)}
         >
           <>
             <div className="modal__head">
-              <div className="modal__title">Delete draft</div>
+              <div className="modal__title">Delete change</div>
             </div>
             <div className="modal__body">
               <p className="t-ui-sm">
@@ -355,7 +355,7 @@ export function DraftsPanelView(props: DraftsPanelViewProps) {
                     "0 drafts", which reads as a mistake. */}
                 {countPhrase(deleteTarget.drafts, deleteTarget.folders)} to{" "}
                 {deleteTarget.parent === ROOT
-                  ? "Drafts"
+                  ? "Changes"
                   : folderName(deleteTarget.parent)}
                 , not to the wastebasket. Nothing is deleted.
               </p>

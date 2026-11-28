@@ -57,14 +57,14 @@ const ERROR_TEXT: Record<string, string> = {
     "GitHub did not move the issue to the In Progress status, so nothing was claimed.",
   pending_claim_write_failed: "The claim could not be recorded on this machine.",
   shadow_draft_create_failed:
-    "The issue is in the In Progress status, but its draft could not be created. Use Retry.",
+    "The issue is in the In Progress status, but its change could not be created. Use Retry.",
   issue_not_listed: "This issue is not in the current list of ready tasks.",
   invalid_publication_settings:
     "Keep at least one parent issue Type, and name a sub-issue Type.",
   parent_issues_unreadable: "The open issues of this repository could not be read.",
   issue_types_unreadable: "The issue Types of this repository could not be read.",
   draft_github_shadow:
-    "This draft mirrors a GitHub issue, so it cannot be changed.",
+    "This change mirrors a GitHub issue, so it cannot be edited.",
 };
 
 /** The typed code a refusal carries, read off the raw rejection. */

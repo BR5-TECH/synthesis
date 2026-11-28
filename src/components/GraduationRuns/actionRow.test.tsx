@@ -206,7 +206,7 @@ describe("the selected run's action row", () => {
     expect(confirm).toHaveTextContent("Run r2");
     expect(confirm).toHaveTextContent("Run r3");
     expect(confirm).not.toHaveTextContent("Run r0");
-    expect(confirm).toHaveTextContent("Their drafts return to the active drafts, not graduated.");
+    expect(confirm).toHaveTextContent("Their changes return to the active changes, not implemented.");
     expect(commands()).not.toContain("discard_graduation_run");
 
     await userEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
@@ -354,7 +354,7 @@ describe("the selected run's action row", () => {
     );
     expect(within(region).getByRole("button", { name: /^(Continue|Resume)$/ })).toBeDisabled();
     expect(within(region).getByRole("button", { name: "Discard run" })).toBeDisabled();
-    expect(within(region).getByRole("button", { name: "Open draft" })).toBeEnabled();
+    expect(within(region).getByRole("button", { name: "Open change" })).toBeEnabled();
     dropFocusAsABrowserDoes();
     expect(document.activeElement).toBe(document.body);
     await act(async () => {
@@ -447,7 +447,7 @@ describe("the selected run's action row", () => {
     );
     await waitFor(() =>
       expect(document.activeElement).toBe(
-        within(region).getByRole("button", { name: "Open draft" }),
+        within(region).getByRole("button", { name: "Open change" }),
       ),
     );
   });

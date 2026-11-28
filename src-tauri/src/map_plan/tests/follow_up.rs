@@ -71,7 +71,7 @@ fn the_last_decision_starts_one_follow_up_turn() {
     let number = row_of(&decided, "a").result.as_ref().unwrap().issue_number.unwrap();
     let body = &synthesis[0].body;
     assert!(body.contains(&format!("Accepted: #{number} \"Card capture\"")), "{body}");
-    assert!(body.contains("the new draft \"Relay\""), "{body}");
+    assert!(body.contains("the new change \"Relay\""), "{body}");
     assert!(body.contains("Rejected: the new issue \"Refunds\"."), "{body}");
     assert!(body.contains("You do not have to propose."), "{body}");
     assert!(body.contains(&format!("@{}", asked[0].nickname)), "{body}");

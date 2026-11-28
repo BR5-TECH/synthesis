@@ -356,7 +356,7 @@ describe("the settings buttons moved out of the activity bar (SNV-FR-03 / STB-FR
     ).not.toBeInTheDocument();
     // SNV-FR-44: the panel toggles are all that remain — the vertical-panel
     // cluster and the bottom-panel one.
-    for (const name of ["Project", "Notes", "Changes", "Runs", "Git"]) {
+    for (const name of ["Project", "Notes", "Commits", "Runs", "Git"]) {
       expect(
         within(activityBar).getByRole("button", { name }),
       ).toBeInTheDocument();
@@ -780,7 +780,7 @@ describe("the diff summary is always the uncommitted one (STB-FR-26)", () => {
     await enterIde();
 
     // Open the Changes panel so its branch-mode load actually runs.
-    await userEvent.click(screen.getByRole("button", { name: "Changes" }));
+    await userEvent.click(screen.getByRole("button", { name: "Commits" }));
     await waitFor(() => expect(invoked()).toContain("list_branch_changes"));
 
     const diffstat = await screen.findByTestId("status-bar-diffstat");

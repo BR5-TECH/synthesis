@@ -9,19 +9,23 @@ pub(super) const KEY_INPUT_MAX_CHARS: usize = 200;
 
 /// CVL-FR-DUUO: the arguments that identify a call of each tool, in the order
 /// they are tried. A tool that this table does not name has no key input.
+///
+/// The tools carry their current names (PVC-FR-RWDM). `draft_id`, `changeId`,
+/// and `draftId` are the aliases of `change_id` that `read_change` and
+/// `measure_document` still accept (PVC-FR-SQAF).
 fn key_arguments(tool: &str) -> &'static [&'static str] {
     match tool {
         "search_specifications"
-        | "search_drafts"
+        | "search_changes"
         | "search_notes"
         | "search_documents"
         | "search_skills" => &["query"],
         "read_file" => &["path"],
-        "measure_document" => &["path", "draft_id"],
-        "read_draft" => &["draft_id"],
+        "measure_document" => &["path", "change_id", "draft_id", "changeId", "draftId"],
+        "read_change" => &["change_id", "draft_id", "changeId", "draftId"],
         "get_document" => &["id"],
-        "load_skill" | "propose_new_draft" => &["name"],
-        "propose_draft_changes" | "propose_prompt_changes" | "propose_diagram_changes" => &["path"],
+        "load_skill" | "propose_new_change" => &["name"],
+        "propose_change_edits" | "propose_prompt_changes" | "propose_diagram_changes" => &["path"],
         crate::tools::web_search::ENTRY_TYPE => &["query"],
         crate::tools::web_fetch::ENTRY_TYPE => &["url"],
         _ => &[],
@@ -72,17 +76,22 @@ mod tests {
     fn each_tool_gives_the_argument_that_identifies_its_call() {
         let cases = [
             ("search_specifications", serde_json::json!({ "query": "tabs", "limit": 3 }), "tabs"),
-            ("search_drafts", serde_json::json!({ "query": "drafts" }), "drafts"),
+            ("search_changes", serde_json::json!({ "query": "changes" }), "changes"),
             ("search_notes", serde_json::json!({ "query": "notes" }), "notes"),
             ("search_documents", serde_json::json!({ "query": "docs" }), "docs"),
             ("search_skills", serde_json::json!({ "query": "skills" }), "skills"),
             ("read_file", serde_json::json!({ "path": "src/a.rs" }), "src/a.rs"),
             ("measure_document", serde_json::json!({ "path": "doc.md" }), "doc.md"),
-            ("measure_document", serde_json::json!({ "draft_id": "d-1" }), "d-1"),
-            ("read_draft", serde_json::json!({ "draft_id": "d-2" }), "d-2"),
+            ("measure_document", serde_json::json!({ "change_id": "d-1" }), "d-1"),
+            ("measure_document", serde_json::json!({ "draft_id": "d-3" }), "d-3"),
+            ("read_change", serde_json::json!({ "change_id": "d-2" }), "d-2"),
+            ("read_change", serde_json::json!({ "draft_id": "d-4" }), "d-4"),
+            ("read_change", serde_json::json!({ "changeId": "d-5" }), "d-5"),
+            ("measure_document", serde_json::json!({ "draftId": "d-6" }), "d-6"),
             ("get_document", serde_json::json!({ "id": "doc-9" }), "doc-9"),
             ("load_skill", serde_json::json!({ "name": "engineer" }), "engineer"),
-            ("propose_draft_changes", serde_json::json!({ "path": "p.md" }), "p.md"),
+            ("propose_change_edits", serde_json::json!({ "path": "p.md" }), "p.md"),
+            ("propose_new_change", serde_json::json!({ "name": "split" }), "split"),
             ("propose_prompt_changes", serde_json::json!({ "path": "q.md" }), "q.md"),
         ];
         for (tool, arguments, expected) in cases {

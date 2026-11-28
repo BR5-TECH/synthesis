@@ -206,7 +206,7 @@ describe("the card (DBR-FR-GFGG, DBR-FR-AGIN, DBR-FR-WKNI)", () => {
   it("DBR-FR-GFGG, DBR-FR-AGIN: the proposal mark stands after pending and before the draft marker", () => {
     card({ id: "issue-18", kind: "task", name: "T", draftId: "d1" }, { ...base, pending: true, proposal: "proposed" });
     const marks = [...screen.getByTestId("flow-item-issue-18").querySelectorAll(".dm-card__markers > *")];
-    expect(marks.map((m) => m.textContent)).toEqual(["pending", "proposed", "draft"]);
+    expect(marks.map((m) => m.textContent)).toEqual(["pending", "proposed", "change"]);
     expect(screen.getByTestId("flow-marker-proposal")).toHaveClass("badge--accent");
   });
 

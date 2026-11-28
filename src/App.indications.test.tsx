@@ -427,7 +427,7 @@ describe("in-app tab indications (NTF-FR-26 / NTF-FR-32 / NTF-FR-33)", () => {
    */
   async function openDraftThenLeave() {
     await createDraftFromPanel();
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
     await userEvent.click(within(strip()).getByText("Dashboard"));
     await waitFor(() =>
       expect(
@@ -584,7 +584,7 @@ describe("in-app tab indications (NTF-FR-26 / NTF-FR-32 / NTF-FR-33)", () => {
     // (SNV-FR-64) and closing a tab does not move it back — so no toggle is
     // clicked here; clicking one would *hide* the panel (SNV-FR-45).
     await userEvent.click(
-      await screen.findByRole("treeitem", { name: /^Draft Untitled/ }),
+      await screen.findByRole("treeitem", { name: /^Change Untitled/ }),
     );
     await waitFor(() =>
       expect(within(strip()).queryByText("Untitled")).toBeInTheDocument(),
@@ -607,7 +607,7 @@ describe("in-app tab indications (NTF-FR-26 / NTF-FR-32 / NTF-FR-33)", () => {
     render(<App />);
     await enterIde();
     await createDraftFromPanel();
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
 
     proposalArrived();
     await waitFor(() =>
@@ -645,7 +645,7 @@ describe("in-app tab indications (NTF-FR-26 / NTF-FR-32 / NTF-FR-33)", () => {
     render(<App />);
     await enterIde();
     await createDraftFromPanel();
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
 
     setWindowFocused(false);
     proposalArrived();

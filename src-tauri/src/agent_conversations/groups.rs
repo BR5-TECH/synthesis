@@ -571,7 +571,7 @@ fn synthesis_sections(state: &GroupState, origin: &ConversationOrigin) -> Vec<In
         // turn has `propose_prompt_changes`. The turn is told the one it has.
         // AGC-FR-WPAP: a change turn has `propose_change_edits`.
         let tool = proposal_tool_of(&origin.target);
-        let body = format!("Propose the merged change with `{tool}`.\n\n{offers}");
+        let body = format!("Propose the merged edits with `{tool}`.\n\n{offers}");
         sections.push(group_section("group_proposals", body));
     }
     sections

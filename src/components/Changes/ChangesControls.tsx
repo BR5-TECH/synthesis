@@ -53,8 +53,8 @@ export function ChangesControls({
         <div className="search-input" style={{ height: 24 }}>
           <Icon.Search size={12} />
           <input
-            placeholder="Filter changes…"
-            aria-label="Filter changes"
+            placeholder="Filter files…"
+            aria-label="Filter files"
             value={text}
             onChange={(e) => onText(e.target.value)}
           />

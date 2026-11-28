@@ -127,7 +127,7 @@ export function ArtifactNav({
             <span
               className="openspec-change__item-hunks"
               data-testid="openspec-artifact-hunks"
-              aria-label={`${item.undecided} undecided ${item.undecided === 1 ? "change" : "changes"}`}
+              aria-label={`${item.undecided} undecided ${item.undecided === 1 ? "edit" : "edits"}`}
             >
               {item.undecided}
             </span>
@@ -144,7 +144,7 @@ export function ArtifactNav({
 function menuText(item: NavItem): string {
   const hunks =
     item.undecided !== undefined && item.undecided > 0
-      ? ` · ${item.undecided} undecided ${item.undecided === 1 ? "change" : "changes"}`
+      ? ` · ${item.undecided} undecided ${item.undecided === 1 ? "edit" : "edits"}`
       : "";
   return `${item.id} · ${item.detail}${hunks}`;
 }

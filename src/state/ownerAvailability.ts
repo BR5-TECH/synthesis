@@ -86,7 +86,7 @@ export function ownerLabelOf(target: DiscussionTarget): string {
     case "artifact":
       return target.artifactId;
     case "draft":
-      return draftNames.get(target.draftId) ?? "Draft";
+      return draftNames.get(target.draftId) ?? "Change";
     case "note":
       return noteLabels.get(target.noteId) ?? "Note";
     // CVP-FR-57: a change is called by its change name.

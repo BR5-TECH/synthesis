@@ -598,7 +598,7 @@ describe("New Folder modal wiring (NFW-FR-09 / NFW-FR-11 / NFW-FR-01)", () => {
     // over a modal closes that modal only because the workspace takes the
     // viewport — the tab itself is no overlay and dismisses nothing.
     await createDraftFromPanel();
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
   });
 
   it("NTA-FR-01, NFW-FR-01: opening the search overlay closes the New Folder modal, and opening it closes the overlay", async () => {

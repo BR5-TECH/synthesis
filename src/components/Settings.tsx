@@ -39,8 +39,8 @@ export const PROJECT_SECTIONS: [ProjectSectionKey, string, string][] = [
   // else — the starting content every draft here is born holding (DRS-FR-39).
   [
     "template",
-    "Draft template",
-    "The text every new draft in this project starts with.",
+    "Change template",
+    "The text every new change in this project starts with.",
   ],
   // SET-FR-03 / SET-FR-FZKL: the OpenSpec section, after the Draft template.
   // Its checkbox persists at once, outside the section dirty state
@@ -61,7 +61,7 @@ export const PROJECT_SECTIONS: [ProjectSectionKey, string, string][] = [
   [
     "github-polling",
     "GitHub Project settings",
-    "Which GitHub Project the Git panel reads ready tasks from, how often, and how drafts are published as issues.",
+    "Which GitHub Project the Git panel reads ready tasks from, how often, and how changes are published as issues.",
   ],
   // SET-FR-03 / SET-FR-WDYJ: the Delivery section, after GitHub Project
   // settings. Each change persists at once, outside the section dirty state
@@ -95,8 +95,8 @@ export const PROJECT_SECTIONS: [ProjectSectionKey, string, string][] = [
   // (SET-FR-HQKK).
   [
     "graduation",
-    "Graduation",
-    "How many graduation runs this project works at the same time, and how many passes and how much time each run can use.",
+    "Implementation",
+    "How many implementation runs this project works at the same time, and how many passes and how much time each run can use.",
   ],
   // SET-FR-03 / SET-FR-QCUJ: the Indexing section, last. Its switch is this
   // user's own choice for the project and persists at once (SET-FR-DHIZ).

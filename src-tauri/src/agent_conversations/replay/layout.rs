@@ -9,6 +9,7 @@ use super::super::*;
 use super::memory::{ReplayEntry, ReplayKey, ReplayMemory};
 use super::rounds::{call_ids, omit_results, replace_result, rounds_for_turn, Identity};
 use super::sources::outdated_line;
+use crate::tools::legacy_names::CallTarget;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 /// ERP-FR-RVYX: the most stamps a turn reads again.
@@ -268,6 +269,9 @@ pub(in crate::agent_conversations) fn plan_replay(
             *seen.entry(id).or_default() += 1;
         }
     }
+    // PVC-FR-PXOE: the target kind tells which tool a stored call of a legacy
+    // name used.
+    let target = CallTarget::of_discussion(&thread.target);
     let head = rig_messages::stable_head_of(input);
     let material: Vec<InputSection> = input[..head].to_vec();
     let mut from = start;
@@ -303,7 +307,7 @@ pub(in crate::agent_conversations) fn plan_replay(
         };
         plan.blocks.push(ReplayBlock {
             opening,
-            rounds: rounds_for_turn(&entry.rounds, &inputs.offered, identity, entry.seq),
+            rounds: rounds_for_turn(&entry.rounds, &inputs.offered, identity, entry.seq, target),
             answer,
         });
         from = trigger + 1;

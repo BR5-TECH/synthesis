@@ -162,7 +162,7 @@ describe("the rail's two controls", () => {
   it("SNV-FR-60: a project that has graduated nothing renders the empty state", () => {
     draw({ runs: [], listed: [] });
     expect(screen.getByTestId("graduation-empty")).toHaveTextContent(
-      /Nothing graduating/,
+      /Nothing implementing/,
     );
   });
 

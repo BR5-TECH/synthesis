@@ -306,7 +306,7 @@ describe("the stage row of an OpenSpec change run", () => {
     expect(JSON.stringify(records)).not.toContain("private stderr");
   });
 
-  it("GRU-FR-LBPR, OFN-FR-RLSO, OFN-FR-IHSQ: a gate blocker of the class content offers Open change on the run's stream and the CLI messages", async () => {
+  it("GRU-FR-LBPR, OFN-FR-RLSO, OFN-FR-IHSQ: a gate blocker of the class content offers Open OpenSpec change on the run's stream and the CLI messages", async () => {
     region(
       changeRun("apply", "blocked", {
         blocker: {
@@ -320,8 +320,8 @@ describe("the stage row of an OpenSpec change run", () => {
       }),
     );
     const blocker = screen.getByTestId("graduation-blocker");
-    expect(blocker).toHaveTextContent("OpenSpec reported a problem in the OpenSpec files of this change.");
-    await userEvent.click(within(blocker).getByRole("button", { name: "Open change" }));
+    expect(blocker).toHaveTextContent("OpenSpec reported a problem in the files of this OpenSpec change.");
+    await userEvent.click(within(blocker).getByRole("button", { name: "Open OpenSpec change" }));
     expect(open).toHaveBeenCalledWith({ kind: "stream", streamId: "s-7" }, CHANGE, {
       thread: null,
       streamName: "auth-work",
@@ -367,14 +367,23 @@ describe("the stage row of an OpenSpec change run", () => {
 
 describe("the region of an OpenSpec change run", () => {
   it.each(ALL_STATES)(
-    "GRU-FR-YHFQ, GRU-FR-HABG: the region of an apply run in %s names its change in the place of a draft, and no draft",
+    "GRU-FR-YHFQ, GRU-FR-HABG, PVC-FR-NEXL: the region of an apply run in %s names its change in the place of a draft, and no draft",
     (state) => {
       region(changeRun("apply", state));
       expect(screen.getAllByText(`Apply ${CHANGE}`).length).toBeGreaterThan(0);
       expect(screen.getByTestId("graduation-openspec-change")).toHaveTextContent(`Change ${CHANGE}`);
-      expect(screen.queryByRole("button", { name: "Open draft" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Open change" })).toBeNull();
       expect(document.body).not.toHaveTextContent(/draft/i);
-      expect(screen.queryByText(/graduated/i)).toBeNull();
+      expect(screen.queryByText(/graduated|implemented/i)).toBeNull();
+      // In the new words (PVC-FR-HMJD), a change of the Changes panel is a
+      // bare "change". Apart from the OpenSpec change and its own label, no
+      // text names a change.
+      const rest = (document.body.textContent ?? "")
+        .replace(/OpenSpec change/gi, "")
+        .replace(`Change ${CHANGE}`, "")
+        .split(CHANGE)
+        .join("");
+      expect(rest).not.toMatch(/\bchanges?\b/i);
     },
   );
 
@@ -386,14 +395,14 @@ describe("the region of an OpenSpec change run", () => {
     expect(screen.getAllByText(`Rework ${CHANGE}`).length).toBeGreaterThan(0);
   });
 
-  it("GRU-FR-IKEQ: a completed rework run with a proposal says its result is a proposal in the discussion of the change", () => {
+  it("GRU-FR-IKEQ, PVC-FR-NEXL: a completed rework run with a proposal says its result is a proposal in the discussion of the OpenSpec change", () => {
     const run = changeRun("rework", "completed", {
       observability: makeObservability({ currentStage: "done", stageCondition: "complete" }),
     });
     run.openspec = { ...run.openspec!, proposalId: "p-1" };
     region(run);
     expect(screen.getByTestId("run-progress")).toHaveTextContent(
-      "The result is a proposal in the discussion of the change.",
+      "The result is a proposal in the discussion of the OpenSpec change.",
     );
     expect(screen.queryByTestId("graduation-commits")).toBeNull();
   });
@@ -408,7 +417,7 @@ describe("the region of an OpenSpec change run", () => {
   });
 
   it.each([
-    ["proposal_pending", "The change holds a pending edit proposal"],
+    ["proposal_pending", "The OpenSpec change holds a pending edit proposal"],
     ["discussion_resolved", "The request thread of the rework is resolved"],
     ["write_failed", "The proposal could not be written."],
   ])(
@@ -429,16 +438,16 @@ describe("the region of an OpenSpec change run", () => {
     region(changeRun("apply", "completed"));
     expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Rework/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Graduate/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Graduate|Implement/ })).toBeNull();
   });
 });
 
-describe("Open change of an OpenSpec change run", () => {
+describe("Open OpenSpec change of an OpenSpec change run", () => {
   it.each(ALL_STATES)(
-    "GRU-FR-LTWN: an apply run in %s offers Open change, which opens its change on its stream",
+    "GRU-FR-LTWN: an apply run in %s offers Open OpenSpec change, which opens its change on its stream",
     async (state) => {
       row(changeRun("apply", state));
-      await userEvent.click(screen.getByRole("button", { name: "Open change" }));
+      await userEvent.click(screen.getByRole("button", { name: "Open OpenSpec change" }));
       expect(open).toHaveBeenCalledWith({ kind: "stream", streamId: "s-7" }, CHANGE, {
         streamName: "auth-work",
       });
@@ -446,10 +455,10 @@ describe("Open change of an OpenSpec change run", () => {
   );
 
   it.each(ALL_STATES)(
-    "GRU-FR-LTWN, GRU-FR-IKEQ: a rework run in %s offers Open change, which selects its request thread",
+    "GRU-FR-LTWN, GRU-FR-IKEQ: a rework run in %s offers Open OpenSpec change, which selects its request thread",
     async (state) => {
       row(changeRun("rework", state));
-      await userEvent.click(screen.getByRole("button", { name: "Open change" }));
+      await userEvent.click(screen.getByRole("button", { name: "Open OpenSpec change" }));
       expect(open).toHaveBeenCalledWith({ kind: "stream", streamId: "s-7" }, CHANGE, {
         streamName: "auth-work",
         thread: "t-req",
@@ -457,10 +466,10 @@ describe("Open change of an OpenSpec change run", () => {
     },
   );
 
-  it("GRU-FR-HABG: an apply run offers no Open draft in any state", () => {
+  it("GRU-FR-HABG: an apply run offers no Open change in any state", () => {
     for (const state of ALL_STATES) {
       row(changeRun("apply", state));
-      expect(screen.queryByRole("button", { name: "Open draft" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Open change" })).toBeNull();
       cleanup();
     }
   });
@@ -510,13 +519,13 @@ describe("restarting a discarded OpenSpec change run", () => {
     return onRestarted;
   }
 
-  it("GRT-FR-GLLN: the confirmation of an apply run names its title and stream, and asks no stream and no standing-work choice", async () => {
+  it("GRT-FR-GLLN, PVC-FR-NEXL: the confirmation of an apply run names its title and stream, and asks no stream and no standing-work choice", async () => {
     confirmOf(changeRun("apply", "discarded"));
     await userEvent.click(screen.getByTestId("graduation-restart"));
     const confirm = await screen.findByTestId("graduation-restart-confirm");
     expect(confirm).toHaveTextContent(`Apply ${CHANGE}`);
     expect(confirm).toHaveTextContent("auth-work");
-    expect(confirm).toHaveTextContent("It works on the same change there.");
+    expect(confirm).toHaveTextContent("It works on the same OpenSpec change there.");
     expect(within(confirm).queryByRole("combobox")).toBeNull();
     expect(within(confirm).queryByRole("radio")).toBeNull();
     expect(calls("list_work_streams")).toHaveLength(0);

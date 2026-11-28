@@ -299,7 +299,7 @@ fn the_request_names_each_failed_row() {
     assert_eq!(
         request_body(&proposal, "planner"),
         "#18 and #11 changed on GitHub after the proposal, so nothing was written. \
-         The new issue \"Docs\", the new draft \"Relay\", and #5 could not be applied. \
+         The new issue \"Docs\", the new change \"Relay\", and #5 could not be applied. \
          @planner, read these issues again and propose the changes again."
     );
 }
@@ -423,7 +423,7 @@ fn the_request_comment_names_new_issues_and_drafts_by_title() {
     assert_eq!(asked.id, turns(&plan)[0].trigger_comment_id);
     assert_eq!(
         asked.body,
-        "The new issue \"Docs\", the new draft \"Relay\", and #2 could not be applied. \
+        "The new issue \"Docs\", the new change \"Relay\", and #2 could not be applied. \
          @planner, read these issues again and propose the changes again."
     );
 }

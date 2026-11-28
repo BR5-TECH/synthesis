@@ -22,8 +22,8 @@ The issue view is the large view of one item of the Delivery lens (`MDL-map-deli
 14. **MIV-FR-THGX** The body of the issue view is a main column and a sidebar 280px wide at its trailing edge. Where the view is narrower than 720px, the sidebar goes below the main column.
 15. **MIV-FR-XMMS** The main column shows, in this order: the name of the item as the title, with **Rename**; the error text of the item (per `DBR-delivery-board.md` DBR-FR-CJSG); the **Description** section; the **Sub-issues** section (MIV-FR-ZQAX); and **Add existing issue** for a container (per MDL-FR-PUKL).
 16. **MIV-FR-LENY** The **Description** section renders the description as rich text (MIV-FR-RNVP). Its **Edit** control shows the source in a plain field on the terms of `FLO-flow.md` FLO-FR-13, and **Done** returns to the rich text.
-17. **MIV-FR-VHDP** The sidebar shows these fields, in this order, each under an uppercase label: **Status**, **Assignees**, **Labels**, **Milestone**, **Kind**, **Due**, **Blocked by**, **Draft**, **Footprint**, **References**, and **Specs** (per `SDL-specification-delivery-links.md` SDL-FR-KNOP). A field that does not apply to the item or to the source is absent. **Remove** is at the end, on the danger tone.
-18. **MIV-FR-NBHF** **Assignees**, **Labels**, and **Milestone** apply to an issue of a `github` source. **Due** applies to a milestone. **Draft** and **Footprint** apply where `FLO-flow.md` offers them for the kind. **Blocked by** applies where the item has a blocker.
+17. **MIV-FR-VHDP** The sidebar shows these fields, in this order, each under an uppercase label: **Status**, **Assignees**, **Labels**, **Milestone**, **Kind**, **Due**, **Blocked by**, **Change**, **Footprint**, **References**, and **Specs** (per `SDL-specification-delivery-links.md` SDL-FR-KNOP). A field that does not apply to the item or to the source is absent. **Remove** is at the end, on the danger tone.
+18. **MIV-FR-NBHF** **Assignees**, **Labels**, and **Milestone** apply to an issue of a `github` source. **Due** applies to a milestone. **Change** and **Footprint** apply where `FLO-flow.md` offers them for the kind. **Blocked by** applies where the item has a blocker.
 19. **MIV-FR-PGEC** **Blocked by** lists each item of the plan that blocks the item, with its kind chip, its address, and its name. Activating one selects that item, shows it on the canvas, and opens its issue view. Each external blocker (per MDL-FR-JPYU) is a `#number title` link that invokes `"open tracker link (url)"` with its URL.
 20. **MIV-FR-HHQR** Every edit that `FLO-flow.md` offers on the selected item is available in the issue view, with the same effect: rename, description, kind, due date, draft actions, footprint, references, and remove. The issue view is inert on the terms of the canvas.
 21. **MIV-FR-EDKQ** For an issue of a `github` source, the issue view invokes `"read github plan issue (number)"` once when it opens, and once more each time the `updated_at` of the item changes. A milestone and an item of a `file` source invoke nothing.
@@ -50,7 +50,7 @@ The issue view is the large view of one item of the Delivery lens (`MDL-map-deli
 ## Wireframes
 ```
 ┌ Delivery lens canvas ─────────────────────────────────────────────────────────────────────────┐
-│  ┌ FTR #41 · ● in progress ·                          [Discuss] [Claim and graduate]   ✕ ┐  │
+│  ┌ FTR #41 · ● in progress ·                          [Discuss] [Claim and implement]  ✕ ┐  │
 │  ├──────────────────────────────────────────────────────────────┬────────────────────────┤  │
 │  │ Card capture                                        Rename   │ STATUS                 │  │
 │  │                                                              │ ● in progress          │  │

@@ -60,7 +60,7 @@ describe("Create a PR in the Changes footer", () => {
 
     const footer = container.querySelector(".changes-actions")!;
     const buttons = [...footer.querySelectorAll("button")];
-    expect(buttons[0]).toHaveAttribute("aria-label", "Discard selected changes");
+    expect(buttons[0]).toHaveAttribute("aria-label", "Discard selected files");
     expect(buttons[1]).toBe(button());
     expect(button()).toHaveTextContent("Create a PR");
     expect(buttons[buttons.length - 1]).toHaveAttribute("aria-label", "Choose action");
@@ -73,7 +73,7 @@ describe("Create a PR in the Changes footer", () => {
     await screen.findByText("Library.tsx");
     await pickSelector("Comparison mode", "branch");
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Discard selected changes" })).toBeNull(),
+      expect(screen.queryByRole("button", { name: "Discard selected files" })).toBeNull(),
     );
     const footer = container.querySelector(".changes-actions")!;
     expect([...footer.querySelectorAll("button")][0]).toBe(button());

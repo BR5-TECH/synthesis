@@ -14,6 +14,14 @@ function call(tool: string, activationSeq: number): ActiveToolCall {
   return { id: `call-${activationSeq}`, tool, activationSeq };
 }
 
+/** PVC-FR-JBPC: each legacy name of a conversation tool, and its current name. */
+const LEGACY_NAMES: Array<[string, string]> = [
+  ["search_drafts", "search_changes"],
+  ["read_draft", "read_change"],
+  ["propose_draft_changes", "propose_change_edits"],
+  ["decide_draft_changes", "decide_change_edits"],
+];
+
 describe("CTA-FR-HEYB: the activity vocabulary", () => {
   it("reads Thinking… while the turn waits on a model response", () => {
     // CTA-FR-FBJR, CTA-FR-IHOB's first clause: a turn with no tool call active in it.
@@ -26,8 +34,8 @@ describe("CTA-FR-HEYB: the activity vocabulary", () => {
     const vocabulary: Array<[string, string]> = [
       ["search_specifications", "Searching related specifications…"],
       ["read_file", "Reading a project file…"],
-      ["search_drafts", "Searching drafts…"],
-      ["read_draft", "Reading a draft…"],
+      ["search_changes", "Searching changes…"],
+      ["read_change", "Reading a change…"],
       ["search_notes", "Searching notes…"],
       ["search_skills", "Searching available skills…"],
       ["list_skills", "Listing available skills…"],
@@ -35,10 +43,10 @@ describe("CTA-FR-HEYB: the activity vocabulary", () => {
       ["ask_user_comment", "Asking a clarifying question…"],
       ["ask_advisors", "Asking the advisors…"],
       ["ask_discussion_questions", "Preparing questions for you…"],
-      ["propose_draft_changes", "Preparing draft changes…"],
+      ["propose_change_edits", "Preparing change edits…"],
       ["propose_prompt_changes", "Preparing prompt changes…"],
       ["propose_diagram_changes", "Preparing diagram changes…"],
-      ["decide_draft_changes", "Deciding draft changes…"],
+      ["decide_change_edits", "Deciding change edits…"],
       ["decide_prompt_changes", "Deciding prompt changes…"],
       ["openrouter:web_search", "Searching the web…"],
       ["openrouter:web_fetch", "Fetching from the web…"],
@@ -48,11 +56,42 @@ describe("CTA-FR-HEYB: the activity vocabulary", () => {
       expect(status).not.toBe("");
     }
     // Exactly this and no more: a tool no conversation turn carries has no
-    // status here, the graduation loop's own tools among them.
+    // status here, the graduation loop's own tools among them. The legacy
+    // names of PVC-FR-JBPC are the only other keys.
     expect(Object.keys(TOOL_ACTIVITY_STATUS).sort()).toEqual(
-      vocabulary.map(([tool]) => tool).sort(),
+      [...vocabulary.map(([tool]) => tool), ...LEGACY_NAMES.map(([legacy]) => legacy)].sort(),
     );
-    expect(Object.keys(TOOL_ACTIVITY_STATUS)).toHaveLength(18);
+    expect(Object.keys(TOOL_ACTIVITY_STATUS)).toHaveLength(22);
+  });
+
+  it("PVC-FR-JBPC, CTA-FR-HEYB: a call with a legacy name reads the status of its current name", () => {
+    for (const [legacy, current] of LEGACY_NAMES) {
+      expect(toolActivityStatus(legacy)).toBe(toolActivityStatus(current));
+      expect(toolActivityStatus(legacy)).not.toBe(WORKING);
+      expect(activityStatus({ activeToolCalls: [call(legacy, 1)] })).toBe(
+        activityStatus({ activeToolCalls: [call(current, 1)] }),
+      );
+    }
+    expect(toolActivityStatus("search_drafts")).toBe("Searching changes…");
+    expect(toolActivityStatus("read_draft")).toBe("Reading a change…");
+    expect(toolActivityStatus("propose_draft_changes")).toBe("Preparing change edits…");
+    expect(toolActivityStatus("decide_draft_changes")).toBe("Deciding change edits…");
+  });
+
+  it("PVC-FR-JBPC, CTA-FR-HEYB: an advisor's call with a legacy name names the advisor and the current status", () => {
+    const legacy: ActiveToolCall = { ...call("read_draft", 1), advisor: "sec" };
+    expect(activityStatus({ activeToolCalls: [legacy] })).toBe("@sec: Reading a change…");
+  });
+
+  it("PVC-FR-JBPC, CTA-FR-HEYB: the OpenSpec tools, which no conversation vocabulary names, read Working…", () => {
+    for (const tool of [
+      "propose_openspec_change_edits",
+      "decide_openspec_change_edits",
+      "propose_new_openspec_change",
+      "request_openspec_change_action",
+    ]) {
+      expect(toolActivityStatus(tool)).toBe(WORKING);
+    }
   });
 
   it("CTA-FR-HEYB, CTA-FR-HPXE: the advisors tool waits for the end of an open speech", () => {

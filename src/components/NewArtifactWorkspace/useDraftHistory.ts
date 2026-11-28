@@ -116,7 +116,7 @@ export function useDraftHistory(draftId: string, record: DraftRecord | null) {
       setHistory(null);
       setHistoryError(
         isRefusal(e, ERR_HISTORY_RECOVERY_FAILED)
-          ? "This draft's history could not be recovered, so the prompt cannot be shown as current or stale yet."
+          ? "This change's history could not be recovered, so the prompt cannot be shown as current or stale yet."
           : String(e),
       );
     }

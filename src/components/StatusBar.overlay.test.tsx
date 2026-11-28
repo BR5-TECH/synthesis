@@ -63,7 +63,7 @@ describe("overlay ordering and the five-row viewport (STB-FR-11, STB-FR-HJVM)", 
       <StatusBar
         {...props({
           operations: [
-            operation(4, { kind: "graduation", label: "Graduating Editor scroll fix…" }),
+            operation(4, { kind: "graduation", label: "Implementing Editor scroll fix…" }),
             operation(3, { kind: "agent", label: "@Helga is thinking about Push button…" }),
             operation(2, { kind: "git", label: "Pushing feature/x" }),
             operation(1, { kind: "something-new", label: "Unknown work" }),
@@ -72,7 +72,7 @@ describe("overlay ordering and the five-row viewport (STB-FR-11, STB-FR-HJVM)", 
       />,
     );
     expect(rowsOf().map((row) => row.textContent)).toEqual([
-      "Graduating Editor scroll fix…",
+      "Implementing Editor scroll fix…",
       "@Helga is thinking about Push button…",
       "Pushing feature/x",
       "Unknown work",
@@ -106,7 +106,7 @@ describe("overlay rows that name a destination (STB-FR-RWPD, STB-FR-DNLC, STB-FR
   const withDestinations = [
     operation(5, {
       kind: "graduation",
-      label: "Graduating Editor scroll fix…",
+      label: "Implementing Editor scroll fix…",
       activation: { type: "graduation_run", runId: "g-1" },
     }),
     operation(4, {
@@ -128,7 +128,7 @@ describe("overlay rows that name a destination (STB-FR-RWPD, STB-FR-DNLC, STB-FR
       .getAllByRole("button")
       .map((button) => button.getAttribute("aria-label"));
     expect(names).toEqual([
-      "Graduating Editor scroll fix… — open graduation run",
+      "Implementing Editor scroll fix… — open implementation run",
       "@Helga is thinking about Push button… — open discussion",
       "Pushing feature/x — open branch feature/x in Git",
     ]);
@@ -202,7 +202,7 @@ describe("overlay rows that name a destination (STB-FR-RWPD, STB-FR-DNLC, STB-FR
       <StatusBar
         {...props({
           operations: [
-            operation(3, { kind: "graduation", label: "Graduating run g-1" }),
+            operation(3, { kind: "graduation", label: "Implementing run g-1" }),
             operation(2, { kind: "agent", label: "@Helga is thinking about Push button…" }),
             operation(1, { kind: "git", label: "Pushing feature/x" }),
           ],

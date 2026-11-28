@@ -22,7 +22,7 @@ import type { ArtifactType, SearchGroup, SearchHit } from "./types";
 const GROUP_ORDER: ReadonlyArray<{ group: SearchGroup; title: string }> = [
   { group: "artifact", title: "Artifacts" },
   { group: "document", title: "Documents" },
-  { group: "draft", title: "Drafts" },
+  { group: "draft", title: "Changes" },
   { group: "playbook", title: "Playbooks" },
   { group: "workstream", title: "Workstreams" },
   { group: "role", title: "Roles" },

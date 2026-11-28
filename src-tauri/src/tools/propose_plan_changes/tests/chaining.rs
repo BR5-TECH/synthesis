@@ -38,7 +38,7 @@ fn later_calls_update_the_card_silently() {
         .unwrap();
     assert_eq!(out, json!({ "updated": true, "changed": 0, "added": 1, "withdrawn": 1 }));
     f.call(later_updates(json!([
-        { "action": "change", "key": "a", "row": { "op": "new_draft", "name": "N", "body": "B" } },
+        { "action": "change", "key": "a", "row": { "op": "new_change", "name": "N", "body": "B" } },
     ])))
     .unwrap();
     assert_eq!(f.plan.comments(), comments, "a later call appends no comment");

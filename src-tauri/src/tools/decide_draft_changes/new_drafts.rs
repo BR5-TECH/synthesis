@@ -7,7 +7,7 @@ use crate::new_draft_proposals::{self as nd, NewDraftDecision, NewDraftState};
 use crate::tools::decide_changes::{Outcome, RefusalCode};
 
 /// DDC-FR-YDUQ: the opening comment of a new-draft discussion opened by tool.
-pub const NEW_DRAFT_DISCUSSION_BODY: &str = "The author asked to discuss this proposed draft.";
+pub const NEW_DRAFT_DISCUSSION_BODY: &str = "The author asked to discuss this proposed change.";
 
 /// DCP-FR-TRPW: a new-draft discussion is one whose **opening** comment
 /// carries a `new_draft_subject` that names the proposal.
@@ -93,7 +93,7 @@ where
     };
     // DDC-FR-ZWKS: an earlier entry of this call decided it.
     if record.state != NewDraftState::Pending {
-        let text = "this proposed draft is already decided, so this decision was not made.";
+        let text = "this proposed change is already decided, so this decision was not made.";
         row.refuse(RefusalCode::NoOpenProposal, total, text, None);
         return Some(row);
     }
@@ -145,7 +145,7 @@ where
     let tool = backend.tool;
     let id = row.id.clone();
     if backend.discussions().iter().any(|d| is_new_draft_discussion(d, &id)) {
-        let text = "this proposed draft already has a discussion, so nothing changed.";
+        let text = "this proposed change already has a discussion, so nothing changed.";
         row.refuse(RefusalCode::AlreadyInState, total, text, None);
         return;
     }
@@ -201,7 +201,7 @@ where
     if !names_decomposition {
         // DDC contract surface: the one `unknown_hunk` text.
         let text =
-            "the id you gave is not a change of the open proposal. Use an id from your input.";
+            "the id you gave is not an edit of the open proposal. Use an id from your input.";
         row.refuse(RefusalCode::UnknownHunk, total, text, None);
         return row;
     }

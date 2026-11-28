@@ -14,7 +14,7 @@ pub(super) fn drafts_dir(root: &Path) -> PathBuf {
 /// The typed "not found" every operation on the drafts root answers a path that
 /// no longer names what it named with (DRS-FR-35).
 pub(super) fn no_such_folder(path: &str) -> String {
-    format!("no such drafts folder: {path:?}")
+    format!("no such changes folder: {path:?}")
 }
 
 /// Whether `dir` is a **draft folder** rather than one of the author's: it
@@ -295,10 +295,10 @@ pub(super) fn merge_dir_into(
 /// (DRS-FR-29): the path is the state, and the id says nothing about it.
 pub(super) fn find_draft(root: &fs::RootFs, id: &str) -> Result<DraftAt, String> {
     if !is_valid_draft_id(id) {
-        return Err(format!("invalid draft id: {id:?}"));
+        return Err(format!("invalid change id: {id:?}"));
     }
     let (_, drafts) = scan_drafts_root(root);
-    drafts.into_iter().find(|d| d.id == id).ok_or_else(|| format!("draft not found: {id}"))
+    drafts.into_iter().find(|d| d.id == id).ok_or_else(|| format!("change not found: {id}"))
 }
 
 /// The directory a draft filed in `folder` would sit at, through the escape
@@ -306,7 +306,7 @@ pub(super) fn find_draft(root: &fs::RootFs, id: &str) -> Result<DraftAt, String>
 /// existing draft with [`find_draft`].
 pub(super) fn draft_dir_in(root: &fs::RootFs, folder: &str, id: &str) -> Result<PathBuf, String> {
     if !is_valid_draft_id(id) {
-        return Err(format!("invalid draft id: {id:?}"));
+        return Err(format!("invalid change id: {id:?}"));
     }
     Ok(resolve_folder_path(root, folder)?.join(id))
 }
@@ -388,7 +388,7 @@ pub fn draft_publication_path(root: &fs::RootFs, id: &str) -> Result<PathBuf, St
 /// folder uses.
 pub(super) fn resolve_folder_path(root: &fs::RootFs, folder: &str) -> Result<PathBuf, String> {
     if !is_valid_folder_path(folder) {
-        return Err(format!("invalid drafts folder path: {folder:?}"));
+        return Err(format!("invalid changes folder path: {folder:?}"));
     }
     if folder.is_empty() {
         return Ok(drafts_dir(root));
@@ -506,7 +506,7 @@ pub(super) fn reject_symlinked_components(
         current.push(segment);
         if let Ok(meta) = root.file_info(&current) {
             if meta.kind == fs::EntryKind::Symlink {
-                return Err(format!("refusing to follow a symlink in this draft: {path}"));
+                return Err(format!("refusing to follow a symlink in this change: {path}"));
             }
         }
     }

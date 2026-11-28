@@ -277,7 +277,7 @@ export function publicationActionTitle(
   publication: UseDraftPublicationResult,
 ): string {
   const eligibility = publication.view?.eligibility;
-  const offered = "Publish this draft as a GitHub issue";
+  const offered = "Publish this change as a GitHub issue";
   if (!eligibility || eligibility.publishable) return offered;
   const reason = eligibility.reason ?? "Publication is not available";
   return eligibility.localAssets.length > 0
@@ -369,7 +369,7 @@ export function ClosedIssueDialog({
     <Modal
       label="Update closed issue"
       onClose={onCancel}
-      returnFocus={document.querySelector<HTMLElement>('button[aria-label="Draft actions"]')}
+      returnFocus={document.querySelector<HTMLElement>('button[aria-label="Change actions"]')}
     >
       <>
         <div className="modal__head">
@@ -536,8 +536,8 @@ export function PublicationRecoveryDialog({
         <div className="modal__body">
           <p className="t-ui-sm">
             {prompt.mismatches.length === 0
-              ? `Issue #${prompt.issueNumber} already carries this attempt's marker, and its title or body is not the draft's latest.`
-              : `Issue #${prompt.issueNumber} already carries this attempt's marker, and its ${describeMismatches(prompt.mismatches)} differ from the draft's latest title and body and the saved choice.`}
+              ? `Issue #${prompt.issueNumber} already carries this attempt's marker, and its title or body is not the change's latest.`
+              : `Issue #${prompt.issueNumber} already carries this attempt's marker, and its ${describeMismatches(prompt.mismatches)} differ from the change's latest title and body and the saved choice.`}
           </p>
           {error && (
             <p className="t-ui-sm draft-workspace__publication-error" role="alert">

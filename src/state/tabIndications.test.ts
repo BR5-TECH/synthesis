@@ -859,14 +859,14 @@ describe("the Runs toggle carries a run's attention (NTF-FR-39 / SNV-FR-70)", ()
     await raiseNotification({
       key: "run:artifact-window",
       level: "Warn",
-      title: "Graduation · Waiting on you",
+      title: "Implementation · Waiting on you",
       body: "It has a question.",
       address: runAddress("artifact-window"),
     });
     await raiseNotification({
       key: "run:notes-cleanup",
       level: "Warn",
-      title: "Graduation · Ready to review",
+      title: "Implementation · Ready to review",
       body: "It finished.",
       address: runAddress("notes-cleanup"),
     });

@@ -191,11 +191,11 @@ fn block<R: tauri::Runtime>(
     );
     let (message, clears_by) = match code {
         change_runs::ERR_PROPOSAL_PENDING => (
-            "A change edit proposal of this change waits for the author's decision, so the plan update was not recorded.",
+            "An edit proposal of this OpenSpec change waits for the author's decision, so the plan update was not recorded.",
             "Decide the open proposal, then continue the run.",
         ),
         _ => (
-            "The plan update could not be recorded in the change discussion.",
+            "The plan update could not be recorded in the discussion of the OpenSpec change.",
             "Continue the run to record the plan update again.",
         ),
     };

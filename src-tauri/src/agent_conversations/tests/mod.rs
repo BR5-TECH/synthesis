@@ -749,5 +749,6 @@ mod tool_loop_bounds;
 mod tool_loop_dispatch;
 mod tool_loop_results;
 mod tool_result_call_ids;
+mod tool_vocabulary;
 mod unified_association;
 mod wire_replies;

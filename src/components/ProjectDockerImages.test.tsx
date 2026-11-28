@@ -312,20 +312,20 @@ describe("Project settings → Docker (SET-FR-21..SET-FR-27)", () => {
     // Not this tab.
     await waitFor(() =>
       expect(screen.getByRole("tabpanel")).not.toHaveTextContent(
-        /graduates through this agent/,
+        /implements through this agent/,
       ),
     );
 
     await user.click(tab("Codex"));
     await waitFor(() =>
       expect(screen.getByRole("tabpanel")).toHaveTextContent(
-        /graduation cannot start until an image name is filled in here/,
+        /an implementation cannot start until an image name is filled in here/,
       ),
     );
 
     await user.click(tab("OpenCode"));
     expect(screen.getByRole("tabpanel")).not.toHaveTextContent(
-      /graduates through this agent/,
+      /implements through this agent/,
     );
   });
 
@@ -727,7 +727,7 @@ describe("Project settings → Docker, a vendor that is not implemented (SET-FR-
     const notice = screen.getByTestId("to-be-implemented");
     expect(notice).toHaveTextContent("To Be Implemented...");
     expect(panel.firstElementChild).toBe(notice);
-    expect(panel).toHaveTextContent(/graduates through this agent/);
+    expect(panel).toHaveTextContent(/implements through this agent/);
     // SET-FR-23: the configuration sentence gives way to the statement.
     expect(panel).not.toHaveTextContent(/Configured in this project as/);
 

@@ -49,7 +49,7 @@ fn summary(p: &NewDraftProposal) -> String {
         p.state.as_str()
     );
     if let Some(created) = &p.created_draft_id {
-        text.push_str(&format!(" — created draft {created}"));
+        text.push_str(&format!(" — created change {created}"));
     }
     text
 }
@@ -64,9 +64,11 @@ pub(in crate::agent_conversations) fn new_draft_line(
     match attachment {
         comments::Attachment::NewDraftProposal { proposal_id, update, .. } => {
             let verb = match update {
-                Some(comments::NewDraftUpdateAction::Change) => "changed the proposed new draft",
-                Some(comments::NewDraftUpdateAction::Withdraw) => "withdrew the proposed new draft",
-                None => "proposed a new draft",
+                Some(comments::NewDraftUpdateAction::Change) => "changed the proposed new change",
+                Some(comments::NewDraftUpdateAction::Withdraw) => {
+                    "withdrew the proposed new change"
+                }
+                None => "proposed a new change",
             };
             match reads.get(proposal_id) {
                 Some(p) => format!("[{verb}: {}]", summary(p)),
@@ -74,8 +76,8 @@ pub(in crate::agent_conversations) fn new_draft_line(
             }
         }
         comments::Attachment::NewDraftSubject { proposal_id, .. } => match reads.get(proposal_id) {
-            Some(p) => format!("[about the proposed new draft: {}]", summary(p)),
-            None => format!("[about the proposed new draft {proposal_id}]"),
+            Some(p) => format!("[about the proposed new change: {}]", summary(p)),
+            None => format!("[about the proposed new change {proposal_id}]"),
         },
         _ => String::new(),
     }
@@ -94,7 +96,7 @@ pub(in crate::agent_conversations) fn decomposition_text(
 
 /// AGC-FR-MATQ: the line that ends a pending new-draft body that was cut.
 pub(in crate::agent_conversations) const DRAFT_BODY_PARTIAL_LINE: &str =
-    "[This draft body is partial: it was truncated here.]";
+    "[This change body is partial: it was truncated here.]";
 
 /// The decomposition text, and the characters of the whole pending body in it.
 pub(in crate::agent_conversations) struct DecompositionText {
@@ -123,7 +125,7 @@ pub(in crate::agent_conversations) fn decomposition_text_within(
         .unwrap_or(false);
     let status = if confirmed { "confirmed" } else { "not confirmed" };
     let mut text = format!(
-        "\nThe decomposition {set_id} of this draft, {status}, every proposed new draft oldest first:\n"
+        "\nThe decomposition {set_id} of this change, {status}, every proposed new change oldest first:\n"
     );
     for p in &all {
         text.push_str(&format!("  {}\n", summary(p)));
@@ -139,7 +141,7 @@ pub(in crate::agent_conversations) fn decomposition_text_within(
             body
         };
         text.push_str(&format!(
-            "The proposed new draft {} waits on the author. Its body:\n{shown}\n",
+            "The proposed new change {} waits on the author. Its body:\n{shown}\n",
             open.id
         ));
     }

@@ -323,7 +323,7 @@ pub fn rename_draft_impl(
     if trimmed.is_empty() {
         // DRP-FR-11: committing an empty name leaves the stored name untouched,
         // so this is a refusal rather than a rename to nothing.
-        return Err("a draft name cannot be empty".to_string());
+        return Err("a change name cannot be empty".to_string());
     }
     let dir = draft_dir(root, id)?;
     let mut record = read_record_at(root, &dir, id)?;
@@ -495,7 +495,7 @@ pub fn load_draft_file_impl(
     let dir = draft_dir(root, id)?;
     let prompt = require_prompt_at(root, &dir, id)?;
     if path != prompt {
-        return Err(format!("draft file not found: {path}"));
+        return Err(format!("change file not found: {path}"));
     }
     let abs = draft_file_path_in(root, &dir, path)?;
     let body = root.read_text(&abs).map_err(|e| e.to_string())?;
@@ -532,7 +532,7 @@ pub fn save_draft_file_impl(
     // this the atomic write would *create* whatever path it was given, which is
     // the one way a caller could put a draft into the state DRS-FR-11 forbids.
     if file != prompt {
-        return Err(format!("draft file not found: {file}"));
+        return Err(format!("change file not found: {file}"));
     }
     let path = draft_file_path_in(root, &dir, file)?;
     let normalised = project_settings::line_endings_for(root).normalize(body);
@@ -598,7 +598,7 @@ fn touch_at(root: &crate::fs::RootFs, dir: &Path, id: &str) {
 /// [`draft_file_path`] for a caller that already holds the draft's directory.
 fn draft_file_path_in(root: &fs::RootFs, dir: &Path, path: &str) -> Result<PathBuf, String> {
     if !is_valid_draft_path(path) {
-        return Err(format!("invalid draft path: {path:?}"));
+        return Err(format!("invalid change path: {path:?}"));
     }
     let files = dir.join(FILES_DIR);
     let abs = fs::resolve_under(&files, path).map_err(|e| e.to_string())?;

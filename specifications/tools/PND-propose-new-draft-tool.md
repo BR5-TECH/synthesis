@@ -6,7 +6,7 @@
 The tool an agent uses when the draft under discussion is too big and the author has decided to **decompose** it: to replace it with two or more new drafts that do the same job one after another. Each call **proposes one new draft**: its name, its full prompt, its position N, and the total M of new drafts that the agent expects at that time. The proposal is recorded beside the original draft and posted into the conversation as one comment of the agent, and the author accepts, rejects, or discusses it on the card that the comment carries (`../ui/DCR-draft-change-review.md`). **Nothing is created until the author accepts**, and the agent opens the next proposal only after the author decided the open one, so each new draft can use the author's decisions and comments on the drafts before it. While a proposal is open, the agent changes or withdraws it with an update, on the update rules of `PDC-propose-draft-changes-tool.md` (PDC-FR-DTNJ). Only the author ends the decomposition (`../core/DCP-draft-change-proposals.md` DCP-FR-VLLP); this tool cannot end it. Out of scope: deciding a proposal, which is the author's on the card or the author's instruction to `DDC-decide-draft-changes-tool.md`; creating the draft, which `../core/DCP-draft-change-proposals.md` does on acceptance; and changing the original draft's prompt, which this tool never does.
 
 ## Functional requirements
-1. **PND-FR-UXPK** The tool is a `rig` portable tool named `propose_new_draft` and conforms to `TLC-tool-conventions.md` in full. It is one of the tools of TLC-FR-17 that declare a side effect, and its side effect is the one the contract surface declares and nothing else.
+1. **PND-FR-UXPK** The tool is a `rig` portable tool named `propose_new_change` and conforms to `TLC-tool-conventions.md` in full. It is one of the tools of TLC-FR-17 that declare a side effect, and its side effect is the one the contract surface declares and nothing else.
 2. **PND-FR-XJHL** Its `description()` returns the fixed text of the contract surface, and its `parameters()` returns the JSON Schema of the contract surface with its parameter descriptions (per TLC-FR-05, TLC-FR-06). Neither varies by draft, conversation, agent, or project.
 3. **PND-FR-JNGE** The tool is constructed per turn (per TLC-FR-15). Its constructor binds it to the turn's draft, the origin of the turn's conversation, and the turn's agent participant. It accepts no argument that names a draft, a folder, a conversation, a participant, or a path.
 4. **PND-FR-YFES** The tool is attached to the turns whose origin kind is a draft conversation and to no other turn (per `../ai/CVL-conversation-loop.md` CVL-FR-08). A call on any other turn is the **not a draft conversation** refusal: `PermissionDenied`, not retryable. With no project open the call is the shared **no open project** refusal (per TLC-FR-13).
@@ -38,12 +38,12 @@ The tool an agent uses when the draft under discussion is too big and the author
 One tool, conforming to `TLC-tool-conventions.md` in full. It is attached by `../ai/CVL-conversation-loop.md` (CVL-FR-08), and has no Tauri command, event, or frontend reach of its own.
 
 ### The tool
-`propose_new_draft` — a `rig` portable tool, constructed per turn (per TLC-FR-15). Its constructor takes the draft the turn is about, the origin of the conversation the turn belongs to, and the agent participant the turn answers as.
+`propose_new_change` — a `rig` portable tool, constructed per turn (per TLC-FR-15). Its constructor takes the draft the turn is about, the origin of the conversation the turn belongs to, and the agent participant the turn answers as.
 
 ### The description
 The fixed text the model reads (per TLC-FR-05):
 
-> Propose one new draft that replaces a part of the draft under discussion, when the author has decided to decompose this draft into two or more new drafts that do the same job one after another. Use it only after the author asked for a decomposition and you understand how they want it split; ask them first where you are not sure. Each call proposes **one** draft. Give its `name`, its full prompt in `body`, its `position` counted from 1, and the `total` number of new drafts you expect now. The author accepts, rejects, or discusses it, and nothing is created until they accept. Propose the next draft only after the author decided the one before it, and use what they said about it. You can propose a draft again at the same position after a rejection. To change the draft you proposed while it is still open, pass `update` with `action` `change` and the fields to replace. To take it back, pass `update` with `action` `withdraw`. You can not end the decomposition on your own: the author confirms it on the card, or tells you to confirm it, and then you use `decide_draft_changes`. Say why this draft is the right next part, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. A rationale with no tag is refused. Your turn ends when the proposal is recorded.
+> Propose one new change that replaces a part of the change under discussion, when the author has decided to decompose this change into two or more new changes that do the same job one after another. Use it only after the author asked for a decomposition and you understand how they want it split; ask them first where you are not sure. Each call proposes **one** change. Give its `name`, its full prompt in `body`, its `position` counted from 1, and the `total` number of new changes you expect now. The author accepts, rejects, or discusses it, and nothing is created until they accept. Propose the next change only after the author decided the one before it, and use what they said about it. You can propose a change again at the same position after a rejection. To change the change you proposed while it is still open, pass `update` with `action` `change` and the fields to replace. To take it back, pass `update` with `action` `withdraw`. You can not end the decomposition on your own: the author confirms it on the card, or tells you to confirm it, and then you use `decide_change_edits`. Say why this change is the right next part, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. A rationale with no tag is refused. Your turn ends when the proposal is recorded.
 
 ### Arguments
 ```
@@ -61,11 +61,11 @@ ProposeNewDraftArgs {
 
 Their descriptions in the parameter schema (per TLC-FR-06):
 
-- `rationale` — *"Why this draft is the right next part, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud."*
-- `name` — *"The name of the new draft. With `update` and `change`, give it only to replace the name."*
-- `body` — *"The full prompt of the new draft, in Markdown, as the author will work on it. With `update` and `change`, give it only to replace the whole prompt."*
-- `position` — *"The place of this draft in the sequence, counted from 1."*
-- `total` — *"The number of new drafts you expect the decomposition to have now. It can change in a later call."*
+- `rationale` — *"Why this change is the right next part, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud."*
+- `name` — *"The name of the new change. With `update` and `change`, give it only to replace the name."*
+- `body` — *"The full prompt of the new change, in Markdown, as the author will work on it. With `update` and `change`, give it only to replace the whole prompt."*
+- `position` — *"The place of this change in the sequence, counted from 1."*
+- `total` — *"The number of new changes you expect the decomposition to have now. It can change in a later call."*
 - `update` — *"Changes your proposal that is still open. `change` replaces the fields you give. `withdraw` takes the proposal back and gives no other field."*
 
 ### Output
@@ -76,23 +76,23 @@ The `rationale` as the model wrote it, its spoken part hidden (per `../ui/CMT-co
 
 ### Refusals
 - **no open project** — the shared refusal of `TLC-tool-conventions.md`: kind `NotFound`, not retryable.
-- **not a draft conversation** — kind `PermissionDenied`, not retryable: *"This conversation is not about a draft, so there is no draft here to decompose. Say how you would split it instead; asking again will not succeed."*
-- **draft archived** — kind `PermissionDenied`, not retryable: *"This draft is archived, so it can not be decomposed. Tell the author; asking again will not succeed."*
-- **draft graduated** — kind `PermissionDenied`, not retryable: *"This draft is graduated, so it can not be decomposed. Tell the author; asking again will not succeed."*
-- **draft held by a graduation run** — kind `PermissionDenied`, not retryable: *"A graduation run holds this draft, so it can not be decomposed now. Tell the author; asking again will not succeed."*
-- **GitHub task draft** — kind `PermissionDenied`, not retryable: *"This draft mirrors a GitHub task, so it can not be decomposed. Tell the author; asking again will not succeed."*
-- **decomposition confirmed** — kind `PermissionDenied`, not retryable: *"The author confirmed the decomposition of this draft, so it takes no new proposals. Tell the author; asking again will not succeed."*
-- **a proposal is open** — kind `PermissionDenied`, retryable: *"A new draft you proposed is still waiting on the author. Wait for their decision, or change it with `update`. Nothing was proposed."*
+- **not a change conversation** — kind `PermissionDenied`, not retryable: *"This conversation is not about a change, so there is no change here to decompose. Say how you would split it instead; asking again will not succeed."*
+- **change archived** — kind `PermissionDenied`, not retryable: *"This change is archived, so it can not be decomposed. Tell the author; asking again will not succeed."*
+- **change implemented** — kind `PermissionDenied`, not retryable: *"This change is implemented, so it can not be decomposed. Tell the author; asking again will not succeed."*
+- **change held by an implementation run** — kind `PermissionDenied`, not retryable: *"An implementation run holds this change, so it can not be decomposed now. Tell the author; asking again will not succeed."*
+- **GitHub task change** — kind `PermissionDenied`, not retryable: *"This change mirrors a GitHub task, so it can not be decomposed. Tell the author; asking again will not succeed."*
+- **decomposition confirmed** — kind `PermissionDenied`, not retryable: *"The author confirmed the decomposition of this change, so it takes no new proposals. Tell the author; asking again will not succeed."*
+- **a proposal is open** — kind `PermissionDenied`, retryable: *"A new change you proposed is still waiting on the author. Wait for their decision, or change it with `update`. Nothing was proposed."*
 - **conversation resolved** — kind `PermissionDenied`, not retryable: *"This conversation is resolved and takes no further comments, so nothing was proposed. Answer with what you already have; proposing again will not succeed."*
-- **blank name** — kind `InvalidArgs`, retryable: *"Give the new draft a name."*
-- **blank body** — kind `InvalidArgs`, retryable: *"Give the full prompt of the new draft in `body`."*
+- **blank name** — kind `InvalidArgs`, retryable: *"Give the new change a name."*
+- **blank body** — kind `InvalidArgs`, retryable: *"Give the full prompt of the new change in `body`."*
 - **bad position** — kind `InvalidArgs`, retryable: *"`position` starts at 1 and can not be more than `total`."*
-- **blank rationale** — kind `InvalidArgs`, retryable: *"Say why this draft is the right next part. The author reads this beside the proposal."*
+- **blank rationale** — kind `InvalidArgs`, retryable: *"Say why this change is the right next part. The author reads this beside the proposal."*
 - **no spoken part** — kind `InvalidArgs`, retryable: *"The rationale has no spoken part. Put one or two short sentences in one `<spoken>…</spoken>` tag in `rationale`."*
-- **no open proposal** — kind `InvalidArgs`, retryable: *"No new draft you proposed is open on this draft, so there is nothing to update. Propose a new draft without `update`."*
+- **no open proposal** — kind `InvalidArgs`, retryable: *"No new change you proposed is open on this change, so there is nothing to update. Propose a new change without `update`."*
 - **update malformed** — kind `InvalidArgs`, retryable: *"`update` gives `action`: `change` with at least one of `name`, `body`, `position`, and `total`, or `withdraw` with none of them."*
 - **no change proposed** — kind `InvalidArgs`, retryable: *"The fields you gave are the ones the open proposal already has, so there is nothing to decide."*
-- **could not record** — kind `Other`, retryable: *"The proposed draft could not be recorded."*
+- **could not record** — kind `Other`, retryable: *"The proposed change could not be recorded."*
 
 ### Side effects
 Declared in full (per TLC-FR-17). A successful call without `update` produces **exactly one new-draft proposal** and **exactly one comment**, through `../core/DCP-draft-change-proposals.md`'s recording path (DCP-FR-TGRN). A successful call with `update` produces **no new proposal** and **exactly one comment**, through the update path (DCP-FR-GDTC). No draft is created, the original draft is not changed, no file of the project is touched, and no repository state is changed.

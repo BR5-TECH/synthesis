@@ -446,11 +446,11 @@ describe("Edit menu find wiring (SNV-FR-43)", () => {
    */
   /** DRP-FR-06 / NAW-FR-03: a draft tab, opened from the Drafts panel. */
   async function openDraftTab() {
-    await userEvent.click(screen.getByRole("button", { name: "Drafts" }));
+    await userEvent.click(screen.getByRole("button", { name: "Changes" }));
     // DRP-FR-15: this worktree lists no drafts, so the create affordance is the
     // empty state's single button.
     await userEvent.click(
-      await screen.findByRole("button", { name: "New draft" }),
+      await screen.findByRole("button", { name: "New change" }),
     );
     // The tab is open once the Editor's own surface is mounted on the prompt.
     await screen.findByRole("button", { name: "Edit as Markdown source" });

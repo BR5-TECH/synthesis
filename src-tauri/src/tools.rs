@@ -56,6 +56,7 @@ pub mod draft_read;
 pub mod draft_search;
 pub mod escalate_to_user;
 pub mod file_read;
+pub mod legacy_names;
 pub mod measure_document;
 pub mod note_search;
 pub mod openspec_list_changes;
@@ -155,10 +156,10 @@ const TOOL_DOMAINS: [Domain; 2] = [Domain::Ai, Domain::Backend];
 /// A tool's results are project material and are never loggable; an argument is
 /// loggable only where the tool's own specification names it and takes
 /// responsibility for it — `read_file`'s `path` (RFT-FR-20),
-/// `search_specifications`'s `query` (SPS-FR-19), `propose_draft_changes`'s
+/// `search_specifications`'s `query` (SPS-FR-19), `propose_change_edits`'s
 /// `path` (PDC-FR-18), `propose_prompt_changes`'s `path` (PPC-FR-19),
-/// `search_drafts`'s `query` (DST-FR-21), and `read_draft`'s
-/// `draft_id` (RDT-FR-17) are the arguments named today. Every one of them is a
+/// `search_changes`'s `query` (DST-FR-21), and `read_change`'s
+/// `change_id` (RDT-FR-17) are the arguments named today. Every one of them is a
 /// string a model composed, which is why they are bounded here:
 /// `LGC-logging.md`'s per-record ceiling (LGC-FR-08) replaces a whole record's
 /// fields when one of them makes it oversized, so an unbounded 20 KB argument

@@ -45,12 +45,12 @@ describe("DCR-FR-QPRV: the changes a move visits", () => {
 });
 
 describe("DCR-FR-12: where a decision moves the review", () => {
-  it("DCR-FR-12: moves to the next undecided change after the decided one", () => {
+  it("DCR-FR-12: moves to the next undecided edit after the decided one", () => {
     const p = proposal(["pending", "pending", "pending"]);
     expect(nextUndecidedAfter(p, "h2")).toBe("h3");
   });
 
-  it("DCR-FR-12: rounds to the first undecided change where none follows", () => {
+  it("DCR-FR-12: rounds to the first undecided edit where none follows", () => {
     const p = proposal(["pending", "pending", "pending"]);
     expect(nextUndecidedAfter(p, "h3")).toBe("h1");
   });

@@ -99,13 +99,13 @@ function classesFor(hunk: DecoratedHunk, part: "del" | "add"): string {
  * decoration says nothing.
  */
 export function hunkLabel(hunk: DecoratedHunk): string {
-  // DCR-FR-BYSX: a diagram hunk names its kind as a diagram change.
+  // DCR-FR-BYSX / PVC-FR-VBPY: a diagram hunk names its kind as a diagram edit.
   const kind = hunk.diagram
     ? hunk.kind === "add"
       ? "diagram addition"
       : hunk.kind === "del"
         ? "diagram removal"
-        : "diagram change"
+        : "diagram edit"
     : hunk.kind === "add"
       ? "insertion"
       : hunk.kind === "del"
@@ -114,7 +114,7 @@ export function hunkLabel(hunk: DecoratedHunk): string {
   const lost = hunk.lost ? ", no longer in the prompt" : "";
   // DCR-FR-10: a rejected change says so, because its tone is the held one.
   const rejected = hunk.state === "rejected" ? ", rejected" : "";
-  return `Change ${hunk.position} of ${hunk.total}, ${kind} proposed by ${hunk.agent}${rejected}${lost}`;
+  return `Edit ${hunk.position} of ${hunk.total}, ${kind} proposed by ${hunk.agent}${rejected}${lost}`;
 }
 
 /**

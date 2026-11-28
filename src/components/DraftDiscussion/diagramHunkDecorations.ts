@@ -53,7 +53,7 @@ function kindWords(hunk: DecoratedHunk): string {
     ? "Diagram addition"
     : hunk.kind === "del"
       ? "Diagram removal"
-      : "Diagram change";
+      : "Diagram edit";
 }
 
 /**
@@ -127,7 +127,7 @@ function footWords(hunk: DecoratedHunk): string {
       ? "Diagram removal rejected"
       : hunk.kind === "add"
         ? "Diagram addition rejected"
-        : "Diagram change rejected";
+        : "Diagram edit rejected";
   }
   return "Diagram removed";
 }

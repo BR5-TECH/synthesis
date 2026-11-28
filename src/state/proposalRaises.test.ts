@@ -52,12 +52,12 @@ describe("a draft proposal event (DCR-FR-18, DCR-FR-QXFU)", () => {
     cause,
   });
 
-  it("DCR-FR-18, NTF-FR-24: a recording raises Info with the draft's key and address", () => {
+  it("DCR-FR-18, NTF-FR-24, PVC-FR-VBPY: a recording raises Info with the draft's key and address, and a title of proposed edits", () => {
     const raise = draftProposalRaise(draftEvent("recorded"), ROOT);
     expect(raise).toEqual({
       key: "draft-proposal:d1",
       level: "Info",
-      title: "@arch proposed a change",
+      title: "@arch proposed edits",
       body: "prompt.md",
       address: mintAddress(ROOT.projectKey, ROOT.worktree, { kind: "draft", draftId: "d1" }),
     });

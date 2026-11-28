@@ -182,7 +182,7 @@ describe("Project settings — Graduation loop sliders", () => {
       "It does not apply to merge runs.",
     );
     expect(screen.getByTestId("graduation-stage-time-limit-note")).toHaveTextContent(
-      "How long one graduation turn can run.",
+      "How long one implementation turn can run.",
     );
     expect(screen.getByTestId("graduation-total-time-limit-note")).toHaveTextContent(
       "It counts only working and reviewing time.",

@@ -75,7 +75,7 @@ export const QUERY_MODES: ReadonlyArray<{
     label: "≈",
     title: "Semantic",
     description:
-      "Ranks specifications, documents, and drafts by what the query means.",
+      "Ranks specifications, documents, and changes by what the query means.",
   },
   ...LITERAL_QUERY_MODES,
 ];

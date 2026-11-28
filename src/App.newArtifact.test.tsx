@@ -293,7 +293,7 @@ describe("New Artifact modal wiring (NTA-FR-10 … NTA-FR-14)", () => {
     ])
       expect(invokeMock.mock.calls.some((c) => c[0] === op)).toBe(false);
     expect(
-      screen.queryByRole("button", { name: "Draft actions" }),
+      screen.queryByRole("button", { name: "Change actions" }),
     ).not.toBeInTheDocument();
     expect(invokeMock.mock.calls.some((c) => c[0] === "create_file")).toBe(
       false,
@@ -301,7 +301,7 @@ describe("New Artifact modal wiring (NTA-FR-10 … NTA-FR-14)", () => {
     expect(
       invokeMock.mock.calls.some((c) => c[0] === "assign_artifact_type"),
     ).toBe(false);
-    // The project's draft template was neither read nor copied: the window
+    // The project's change template was neither read nor copied: the window
     // read no project config of its own, before or after confirming.
     expect(
       invokeMock.mock.calls.filter((c) => c[0] === "load_project_config")

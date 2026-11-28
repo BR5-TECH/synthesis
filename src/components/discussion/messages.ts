@@ -124,7 +124,7 @@ export function commentErrorMessage(raw: string): string {
     case COMMENT_ERRORS.artifactNotFound:
       return "This file is no longer in the project, so it cannot be discussed.";
     case COMMENT_ERRORS.draftNotFound:
-      return "This draft is no longer in the project.";
+      return "This change is no longer in the project.";
     case COMMENT_ERRORS.noteNotFound:
       return "This note is no longer in the project, so it cannot be discussed.";
     case COMMENT_ERRORS.unknownStream:

@@ -168,7 +168,7 @@ describe("one surface for every discussion of the draft (DDS-FR-NWRL, DDS-FR-VHZ
 
 describe("the opening composer (DDS-FR-VHZN, DDS-FR-LPSC, NAW-FR-32)", () => {
   async function typeOpening(text: string) {
-    const field = await screen.findByRole("textbox", { name: "Discuss this draft" });
+    const field = await screen.findByRole("textbox", { name: "Discuss this change" });
     fireEvent.change(field, { target: { value: text } });
     return field;
   }
@@ -206,7 +206,7 @@ describe("the opening composer (DDS-FR-VHZN, DDS-FR-LPSC, NAW-FR-32)", () => {
   it("DDS-FR-LPSC: the accelerator does nothing on an empty composer, and a plain Enter adds a line rather than posting", async () => {
     const onOpenDiscussion = vi.fn(async () => discussionSaying("disc-9", ["x"]));
     render(columnElement({ discussions: [], onOpenDiscussion }));
-    const field = await screen.findByRole("textbox", { name: "Discuss this draft" });
+    const field = await screen.findByRole("textbox", { name: "Discuss this change" });
 
     fireEvent.keyDown(field, { key: "Enter", ctrlKey: true });
     fireEvent.change(field, { target: { value: "text" } });
@@ -260,7 +260,7 @@ describe("the opening composer (DDS-FR-VHZN, DDS-FR-LPSC, NAW-FR-32)", () => {
     );
     expect(screen.queryByTestId("comment-thread-disc-1")).toBeNull();
 
-    const field = await screen.findByRole("textbox", { name: "Discuss this draft" });
+    const field = await screen.findByRole("textbox", { name: "Discuss this change" });
     await waitFor(() => expect(field).toHaveFocus());
     fireEvent.change(field, { target: { value: "split this" } });
     fireEvent.keyDown(field, { key: "Enter", ctrlKey: true });

@@ -68,35 +68,35 @@ const menuLabels = () =>
     .map((n) => n.textContent);
 
 describe("the row of a propose run's draft", () => {
-  it("DRP-FR-YGOU: a completed propose run adds Open change below the divider, which opens the change on its stream", async () => {
+  it("DRP-FR-YGOU, PVC-FR-NEXL: a completed propose run adds Open OpenSpec change below the divider, which opens the change on its stream", async () => {
     rows = [row("proposed", "completed", CHANGE)];
     renderPanel();
     await screen.findByText("proposed");
     await act(async () => void openDraftMenu("proposed"));
     const labels = menuLabels();
-    expect(labels.slice(-2)).toEqual(["Go to run", "Open change"]);
+    expect(labels.slice(-2)).toEqual(["Go to run", "Open OpenSpec change"]);
     const sep = screen.getByRole("menu").querySelector(".menu-sep");
     expect(sep?.nextElementSibling).toHaveTextContent("Go to run");
     await act(async () => {
-      within(screen.getByRole("menu")).getByText("Open change").click();
+      within(screen.getByRole("menu")).getByText("Open OpenSpec change").click();
     });
     expect(open).toHaveBeenCalledWith({ kind: "stream", streamId: "s-7" }, "add-logout-3f2a", {});
   });
 
-  it("DRP-FR-YGOU: a propose run that is not completed adds no Open change", async () => {
+  it("DRP-FR-YGOU: a propose run that is not completed adds no Open OpenSpec change", async () => {
     rows = [row("working", "working", CHANGE)];
     renderPanel();
     await screen.findByText("working");
     await act(async () => void openDraftMenu("working"));
-    expect(menuLabels()).not.toContain("Open change");
+    expect(menuLabels()).not.toContain("Open OpenSpec change");
   });
 
-  it("DRP-FR-YGOU: a completed run that is no propose run adds no Open change", async () => {
+  it("DRP-FR-YGOU: a completed run that is no propose run adds no Open OpenSpec change", async () => {
     rows = [row("plain", "completed", null)];
     renderPanel();
     await screen.findByText("plain");
     await act(async () => void openDraftMenu("plain"));
-    expect(menuLabels()).not.toContain("Open change");
+    expect(menuLabels()).not.toContain("Open OpenSpec change");
     expect(menuLabels()).toContain("Go to run");
   });
 });

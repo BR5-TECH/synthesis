@@ -140,7 +140,7 @@ export function OpenSpecSection() {
     <div data-testid="openspec-settings" style={{ maxWidth: 560 }}>
       <p className="t-p" style={{ marginBottom: 20 }}>
         In OpenSpec mode, agents in discussions can read the capabilities and the
-        changes of an OpenSpec project. The setting is committed with the project.
+        OpenSpec changes of the project. The setting is committed with the project.
       </p>
 
       <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>

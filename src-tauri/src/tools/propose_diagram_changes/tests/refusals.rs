@@ -43,7 +43,7 @@ fn a_diagram_that_is_not_found_is_refused_with_its_place() {
         );
         assert_correctable(&refusal);
         let text = refusal.to_string();
-        assert!(text.starts_with("Diagram change 3 of 3: "), "{text}");
+        assert!(text.starts_with("Diagram edit 3 of 3: "), "{text}");
         assert!(text.contains("character for character"), "{text}");
     }
 }
@@ -70,7 +70,7 @@ fn an_addition_anchor_that_is_not_found_is_refused_with_its_place() {
         );
         assert_correctable(&refusal);
         let text = refusal.to_string();
-        assert!(text.starts_with("Diagram change 2 of 3: "), "{text}");
+        assert!(text.starts_with("Diagram edit 2 of 3: "), "{text}");
         assert!(text.contains("`after_text`") && !text.contains("`before`"), "{text}");
 
         let later = refused(
@@ -271,7 +271,7 @@ fn a_source_that_does_not_parse_is_refused_with_the_parse_error() {
             assert!(error.chars().count() <= 501, "the error is cut to 500 characters");
             assert_correctable(&refusal);
             let text = refusal.to_string();
-            assert!(text.starts_with("Diagram change 1 of 1: "), "{text}");
+            assert!(text.starts_with("Diagram edit 1 of 1: "), "{text}");
             assert!(text.contains("not valid Mermaid"), "{text}");
             assert!(text.contains(error.as_str()), "the message carries the parse error");
         }

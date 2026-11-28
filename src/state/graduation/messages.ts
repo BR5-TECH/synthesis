@@ -49,11 +49,11 @@ export function graduationErrorMessage(error: string): string {
     case "no_project_open":
       return "No project is open.";
     case "draft_not_found":
-      return "That draft is not there any more.";
+      return "That change is not there any more.";
     case "draft_not_single_file":
-      return "That draft is not a single prompt file.";
+      return "That change is not a single prompt file.";
     case "draft_locked_by_graduation":
-      return "A run already holds this draft.";
+      return "A run already holds this change.";
     case "unknown_stream":
       return "That work stream is not there any more.";
     case "run_state_not_permitted":
@@ -119,8 +119,8 @@ export function graduationErrorMessage(error: string): string {
       return "The active worktree is on a different branch from the one you confirmed. Nothing was started.";
     case "direct_worktree_dirty":
       return detail
-        ? `The active worktree holds uncommitted work: ${detail}. Commit or discard it, then graduate again.`
-        : "The active worktree holds uncommitted work. Commit or discard it, then graduate again.";
+        ? `The active worktree holds uncommitted work: ${detail}. Commit or discard it, then implement again.`
+        : "The active worktree holds uncommitted work. Commit or discard it, then implement again.";
     case "direct_worktree_missing":
       return "The worktree this run works in is not there.";
     case "direct_target_changed":
@@ -135,11 +135,11 @@ export function graduationErrorMessage(error: string): string {
     // not OpenSpec failures. An OpenSpec failure takes the sentence of its
     // notice (OFN-FR-RNWG), below.
     case "invalid_change_name":
-      return "That is not a valid change name.";
+      return "That is not a valid OpenSpec change name.";
     case "openspec_change_exists":
-      return "A change of that name is already on that stream, or a run is proposing it.";
+      return "An OpenSpec change of that name is already on that stream, or a run is proposing it.";
     case "direct graduation active":
-      return "A graduation run is working in the active worktree. Switching waits until the run ends.";
+      return "An implementation run is working in the active worktree. Switching waits until the run ends.";
     default:
       // OFN-FR-QZEC: an OpenSpec failure in a typed string reads as the
       // short form of its notice.

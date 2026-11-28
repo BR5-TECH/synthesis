@@ -197,7 +197,7 @@ pub(super) fn rename_entry(
     new_name: &str,
 ) -> Result<(), String> {
     rename_entry_named(root, files_dir, path, new_name, &|name| {
-        format!("already exists in this draft: {}", with_basename(path, name))
+        format!("already exists in this change: {}", with_basename(path, name))
     })
 }
 

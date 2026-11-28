@@ -21,41 +21,41 @@ export function decisionMessage(error: string): string {
   // DCP-FR-BMLX: the one refusal an author can do something about without
   // leaving the surface — rejecting still clears the change.
   if (error.includes(PROPOSAL_ERRORS.anchorLost)) {
-    return "The text this change alters is no longer in the prompt. Reject it to clear it, or undo your edit to bring it back.";
+    return "The text this edit alters is no longer in the prompt. Reject it to clear it, or undo your rewrite to bring it back.";
   }
   if (error.includes(PROPOSAL_ERRORS.hunkAlreadyDecided)) {
-    return "This change has already been decided.";
+    return "This edit has already been decided.";
   }
   // DCR-FR-NYDA: a decision made from a stale reading, on a change the agent
   // has since withdrawn.
   if (error.includes(PROPOSAL_ERRORS.hunkWithdrawn)) {
-    return "The agent withdrew this change, so it cannot be decided. Nothing was changed.";
+    return "The agent withdrew this edit, so it cannot be decided. Nothing was changed.";
   }
   if (error.includes(PROPOSAL_ERRORS.hunkNotFound)) {
-    return "This change is no longer part of the proposal.";
+    return "This edit is no longer part of the proposal.";
   }
   if (error.includes(PROPOSAL_ERRORS.alreadyDecided)) {
-    return "This change has already been decided.";
+    return "This edit has already been decided.";
   }
   if (error.includes(PROPOSAL_ERRORS.pathMissing)) {
-    return "That file is no longer in the draft, so this change cannot be applied.";
+    return "That file is no longer in the change, so this edit cannot be applied.";
   }
   // DCP-FR-11: the proposal's conversation is resolved, and a decision there
   // would append into it. Reopening it is what lets the decision through.
   if (error.includes(PROPOSAL_ERRORS.discussionResolved)) {
-    return "The discussion this proposal was posted in is resolved. Reopen it to decide this change. Nothing was changed.";
+    return "The discussion this proposal was posted in is resolved. Reopen it to decide this edit. Nothing was changed.";
   }
   if (error.includes(PROPOSAL_ERRORS.writeFailed)) {
-    return "The draft file could not be written. Nothing was changed.";
+    return "The prompt file could not be written. Nothing was changed.";
   }
   if (error.includes(PROPOSAL_ERRORS.acceptanceInProgress)) {
-    return "Another change to this draft is still being applied. Try again in a moment.";
+    return "Another edit to this change is still being applied. Try again in a moment.";
   }
   if (error.includes(PROPOSAL_ERRORS.historyRecoveryFailed)) {
-    return "This draft's History could not be reconciled, so nothing about it can be decided until it is.";
+    return "This change's History could not be reconciled, so nothing about it can be decided until it is.";
   }
   if (error.includes(PROPOSAL_ERRORS.notFound)) {
-    return "This proposed change is no longer available.";
+    return "This proposed edit is no longer available.";
   }
   return error;
 }
@@ -67,38 +67,38 @@ export function decisionMessage(error: string): string {
 export function fileDecisionMessage(error: string): string {
   const E = PROMPT_PROPOSAL_ERRORS;
   if (error.includes(E.anchorLost)) {
-    return "The text this change alters is no longer in the file. Reject it to clear it, or undo your edit to bring it back.";
+    return "The text this edit alters is no longer in the file. Reject it to clear it, or undo your rewrite to bring it back.";
   }
   if (error.includes(E.hunkAlreadyDecided) || error.includes(E.alreadyDecided)) {
-    return "This change has already been decided.";
+    return "This edit has already been decided.";
   }
   // PCR-FR-QHZN / DCR-FR-NYDA: the change was withdrawn after it was read.
   if (error.includes(E.hunkWithdrawn)) {
-    return "The agent withdrew this change, so it cannot be decided. Nothing was changed.";
+    return "The agent withdrew this edit, so it cannot be decided. Nothing was changed.";
   }
   if (error.includes(E.hunkNotFound)) {
-    return "This change is no longer part of the proposal.";
+    return "This edit is no longer part of the proposal.";
   }
   if (error.includes(E.artifactNotFound)) {
-    return "That file is no longer in the project, so this change cannot be applied.";
+    return "That file is no longer in the project, so this edit cannot be applied.";
   }
   if (error.includes(E.notAPrompt)) {
-    return "That file is no longer a prompt or a document, so this change cannot be applied.";
+    return "That file is no longer a prompt or a document, so this edit cannot be applied.";
   }
   if (error.includes(E.discussionResolved)) {
-    return "The discussion this proposal was posted in is resolved. Reopen it to decide this change. Nothing was changed.";
+    return "The discussion this proposal was posted in is resolved. Reopen it to decide this edit. Nothing was changed.";
   }
   if (error.includes(E.writeFailed)) {
     return "The file could not be written. Nothing was changed.";
   }
   if (error.includes(E.acceptanceInProgress)) {
-    return "Another change to this file is still being applied. Try again in a moment.";
+    return "Another edit to this file is still being applied. Try again in a moment.";
   }
   if (error.includes(E.candidateStale)) {
-    return "This change has been rewritten elsewhere since you edited it.";
+    return "This edit has been rewritten elsewhere since you changed it.";
   }
   if (error.includes(E.notFound)) {
-    return "This proposed change is no longer available.";
+    return "This proposed edit is no longer available.";
   }
   return error;
 }

@@ -148,7 +148,8 @@ fn invalid() -> Result<ProcessOutput, crate::openspec::ProcessError> {
 }
 
 /// The three causes of the apply gate, as its finding names them.
-const OPEN_TASKS: &str = "task(s) of the change are not done";
+/// PVC-FR-NEXL: the finding calls the change an OpenSpec change.
+const OPEN_TASKS: &str = "task(s) of the OpenSpec change are not done";
 const NOT_VALID: &str = "does not pass `openspec validate --strict`";
 const PLANNING_FILE: &str = "other than tasks.md";
 
@@ -271,7 +272,7 @@ fn a_stopped_apply_turn_commits_an_abandoned_turn() {
     let repo = git2::Repository::open(stream.worktree()).unwrap();
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     let message = head.message().unwrap_or_default().to_string();
-    assert!(message.starts_with("Abandoned graduation turn"), "{message}");
+    assert!(message.starts_with("Abandoned implementation turn"), "{message}");
     assert!(message.contains(&format!("Apply {CHANGE}")), "{message}");
 }
 

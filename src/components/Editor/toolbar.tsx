@@ -102,8 +102,8 @@ export function ActionCluster({
       {proposal && (
         <button
           className="btn btn--ghost btn--icon editor__proposal-indication"
-          aria-label="Review the proposed change to this prompt"
-          title="A change has been proposed to this file. Go to the first change to decide."
+          aria-label="Review the proposed edits to this prompt"
+          title="An edit has been proposed to this file. Go to the first edit to decide."
           data-testid="editor-prompt-proposal-indication"
           data-active
           onClick={proposal.onOpen}

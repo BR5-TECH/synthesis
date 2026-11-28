@@ -200,7 +200,7 @@ async function enterIde() {
 
 /** Open the Changes panel and press its footer's Create a PR. */
 async function openFromChanges() {
-  await userEvent.click(screen.getByRole("button", { name: "Changes" }));
+  await userEvent.click(screen.getByRole("button", { name: "Commits" }));
   const button = await screen.findByTestId("changes-create-pr");
   await waitFor(() => expect(button).toHaveAttribute("data-state", "available"));
   await userEvent.click(button);

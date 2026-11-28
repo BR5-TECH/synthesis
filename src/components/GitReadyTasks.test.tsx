@@ -148,10 +148,10 @@ describe("rows (GIT-FR-LUSE, GIT-FR-OZYT, GIT-FR-OLNA)", () => {
     show(polling);
     const row = screen.getByTestId("shadow-draft-gh-1");
     expect(row).toHaveTextContent("Cache invalidation");
-    expect(row).toHaveTextContent("GitHub task, ready to graduate");
+    expect(row).toHaveTextContent("GitHub task, ready to implement");
     expect(row).toHaveTextContent("acme/platform · #9");
     // Apart from the unclaimed rows.
-    expect(screen.getByRole("list", { name: "GitHub drafts" })).toContainElement(row);
+    expect(screen.getByRole("list", { name: "GitHub changes" })).toContainElement(row);
     await userEvent.click(within(row).getByRole("button", { name: /Open issue #9/ }));
     expect(polling.openShadowIssue).toHaveBeenCalledWith(
       "gh-1",
@@ -159,7 +159,7 @@ describe("rows (GIT-FR-LUSE, GIT-FR-OZYT, GIT-FR-OLNA)", () => {
       9,
     );
     await userEvent.click(
-      within(row).getByRole("button", { name: "Open draft Cache invalidation" }),
+      within(row).getByRole("button", { name: "Open change Cache invalidation" }),
     );
     expect(onOpenDraft).toHaveBeenCalledWith("gh-1");
   });
@@ -176,19 +176,19 @@ describe("rows (GIT-FR-LUSE, GIT-FR-OZYT, GIT-FR-OLNA)", () => {
     });
     show(polling);
     await userEvent.click(
-      screen.getByRole("button", { name: "Graduate Cache invalidation (#9)" }),
+      screen.getByRole("button", { name: "Implement Cache invalidation (#9)" }),
     );
     expect(polling.graduateShadow).toHaveBeenCalledWith("gh-1", "Cache invalidation");
     expect(
       within(screen.getByTestId("shadow-draft-gh-2")).queryByRole("button", {
-        name: /^Graduate/,
+        name: /^Implement/,
       }),
     ).toBeNull();
-    expect(screen.getByTestId("shadow-draft-gh-2")).toHaveTextContent("Graduating");
-    expect(screen.getByTestId("shadow-draft-gh-3")).toHaveTextContent("Graduated");
+    expect(screen.getByTestId("shadow-draft-gh-2")).toHaveTextContent("Implementing");
+    expect(screen.getByTestId("shadow-draft-gh-3")).toHaveTextContent("Implemented");
     expect(
       within(screen.getByTestId("shadow-draft-gh-3")).queryByRole("button", {
-        name: /^Graduate/,
+        name: /^Implement/,
       }),
     ).toBeNull();
   });
@@ -206,7 +206,7 @@ describe("rows (GIT-FR-LUSE, GIT-FR-OZYT, GIT-FR-OLNA)", () => {
     expect(polling.retry).toHaveBeenCalledWith(17);
   });
 
-  it("GIT-FR-NQTZ: Claim and graduate claims that row's issue, and a refusal renders on that row", async () => {
+  it("GIT-FR-NQTZ: Claim and implement claims that row's issue, and a refusal renders on that row", async () => {
     const polling = controller({
       rowErrors: new Map([[42, "This issue is no longer a ready Task on GitHub, so it was not claimed."]]),
     });
@@ -215,7 +215,7 @@ describe("rows (GIT-FR-LUSE, GIT-FR-OZYT, GIT-FR-OLNA)", () => {
     expect(within(row).getByRole("alert")).toHaveTextContent(/no longer a ready Task/);
     await userEvent.click(
       within(row).getByRole("button", {
-        name: "Claim and graduate #42 Add retry to the sync job",
+        name: "Claim and implement #42 Add retry to the sync job",
       }),
     );
     expect(polling.claim).toHaveBeenCalledWith(42);
@@ -365,7 +365,7 @@ describe("accessibility and concurrency (GIT-FR-RYPO, GIT-FR-TZUI)", () => {
       within(screen.getByTestId("ready-task-42")).getByRole("button", { name: /Open issue #42/ }),
     ).toBeDisabled();
     // Every other control stays usable.
-    expect(screen.getByRole("button", { name: "Claim and graduate #43 Second" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Claim and implement #43 Second" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Retry claim of issue #17" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Refresh ready tasks" })).toBeEnabled();
   });
@@ -386,12 +386,12 @@ describe("accessibility and concurrency (GIT-FR-RYPO, GIT-FR-TZUI)", () => {
     const polling = controller({ view: pollingView({ shadows: [shadowRow()] }) });
     show(polling);
     const claim = screen.getByRole("button", {
-      name: "Claim and graduate #42 Add retry to the sync job",
+      name: "Claim and implement #42 Add retry to the sync job",
     });
     claim.focus();
     await userEvent.keyboard("{Enter}");
     expect(polling.claim).toHaveBeenCalledWith(42);
-    screen.getByRole("button", { name: "Graduate Cache invalidation (#9)" }).focus();
+    screen.getByRole("button", { name: "Implement Cache invalidation (#9)" }).focus();
     await userEvent.keyboard(" ");
     expect(polling.graduateShadow).toHaveBeenCalled();
   });
@@ -410,11 +410,11 @@ describe("polls and actions together (GIT-FR-TZUI, GIT-FR-RYPO)", () => {
       }),
     );
     expect(
-      screen.getByRole("button", { name: "Claim and graduate #42 Add retry to the sync job" }),
+      screen.getByRole("button", { name: "Claim and implement #42 Add retry to the sync job" }),
     ).toBeEnabled();
     expect(screen.getByRole("button", { name: "Retry claim of issue #17" })).toBeEnabled();
     expect(
-      screen.getByRole("button", { name: "Graduate Cache invalidation (#9)" }),
+      screen.getByRole("button", { name: "Implement Cache invalidation (#9)" }),
     ).toBeEnabled();
     expect(screen.getByRole("button", { name: /Open issue #42/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Refreshing ready tasks" })).toBeDisabled();

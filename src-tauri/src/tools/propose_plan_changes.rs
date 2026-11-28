@@ -45,7 +45,7 @@ pub const NAME: &str = "propose_plan_changes";
 pub const MAX_ROWS: usize = 20;
 
 /// PPT-FR-FFML: the fixed description of the contract surface.
-pub const DESCRIPTION: &str = "Propose work on the delivery plan: new issues, changes to plan issues, and new drafts. One call carries a batch of rows. Each row is `create_issue`, `modify_issue`, or `new_draft`. The author accepts or rejects each row on its own, and nothing is written to GitHub and no draft is created until they accept. A new issue can set title, body, Type, milestone, parent, and labels. A change can set title, body, Type, milestone, parent, labels to add and to remove, a close reason, and the Status. Use only labels, Types, milestones, and Status options that exist: read them with `list_plan_issues`. A parent can be a plan issue (`parent_issue`), or the new issue of an earlier `create_issue` row of the same call (`parent_row`), for a new issue and for a change. Where a feature exists but is not fully built, propose a `new_draft` that finishes it, in place of an issue. Keep the discussion on one topic. Propose one complete step in one call: every row that the step needs, up to 20. A step of 5 to 10 related rows is normal. Do not split one step into several calls of a few rows, and do not propose the work of later steps before the author decided this one. While a row of your proposal still waits and the discussion asks for a different change, send `updates` in place of `rows`. Each update gives `action`: `change` with the `key` of a row and the full new row, `add` with a new row and a new `key`, or `withdraw` with the `key` of a row you no longer offer. A rejected row can be changed, and the author decides it again. An accepted or failed row can not be updated. Say what you propose and why, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. A rationale with no tag is refused. Your turn continues after a successful call: you can read issues and send `updates` to the same proposal. Only the first successful call of a turn posts its rationale. End the turn with a short reply. It is posted only where you changed the proposal after its rationale.";
+pub const DESCRIPTION: &str = "Propose work on the delivery plan: new issues, edits to plan issues, and new changes. One call carries a batch of rows. Each row is `create_issue`, `modify_issue`, or `new_change`. The author accepts or rejects each row on its own, and nothing is written to GitHub and no change is created until they accept. A new issue can set title, body, Type, milestone, parent, and labels. A change can set title, body, Type, milestone, parent, labels to add and to remove, a close reason, and the Status. Use only labels, Types, milestones, and Status options that exist: read them with `list_plan_issues`. A parent can be a plan issue (`parent_issue`), or the new issue of an earlier `create_issue` row of the same call (`parent_row`), for a new issue and for a change. Where a feature exists but is not fully built, propose a `new_change` that finishes it, in place of an issue. Keep the discussion on one topic. Propose one complete step in one call: every row that the step needs, up to 20. A step of 5 to 10 related rows is normal. Do not split one step into several calls of a few rows, and do not propose the work of later steps before the author decided this one. While a row of your proposal still waits and the discussion asks for a different change, send `updates` in place of `rows`. Each update gives `action`: `change` with the `key` of a row and the full new row, `add` with a new row and a new `key`, or `withdraw` with the `key` of a row you no longer offer. A rejected row can be changed, and the author decides it again. An accepted or failed row can not be updated. Say what you propose and why, in a sentence or two as you would put it to a colleague. Put one `<spoken>…</spoken>` tag in `rationale`, anywhere in it: one or two short sentences that a voice can read aloud. A rationale with no tag is refused. Your turn continues after a successful call: you can read issues and send `updates` to the same proposal. Only the first successful call of a turn posts its rationale. End the turn with a short reply. It is posted only where you changed the proposal after its rationale.";
 
 const RATIONALE_DESCRIPTION: &str = "What you propose and why, in a sentence or two as you would put it to a colleague. The author reads this as your comment. It holds one `<spoken>…</spoken>` tag with one or two short sentences that a voice can read aloud. Required on the first successful call of a turn; a later call of the turn does not post it.";
 const ROWS_DESCRIPTION: &str = "The rows of a new proposal, 1 to 20. The author decides each row on its own. Leave it out when you pass `updates`.";
@@ -57,9 +57,9 @@ const UPDATE_KEY_DESCRIPTION: &str =
 const UPDATE_ROW_DESCRIPTION: &str = "The full row, with the fields of a row of `rows`. Its `key` is the `key` of the update. For `change` and `add` only.";
 const KEY_DESCRIPTION: &str =
     "A name for the row that no other row of the call has. `parent_row` uses it.";
-const OP_DESCRIPTION: &str = "`create_issue` proposes a new issue, `modify_issue` proposes a change to a plan issue, and `new_draft` proposes a new draft.";
+const OP_DESCRIPTION: &str = "`create_issue` proposes a new issue, `modify_issue` proposes an edit to a plan issue, and `new_change` proposes a new change.";
 const TITLE_DESCRIPTION: &str = "The title of the issue. Required for `create_issue`. On `modify_issue`, give it only to replace the title.";
-const BODY_DESCRIPTION: &str = "The body of the issue in Markdown. For `new_draft`, the full prompt of the draft, which is required. On `modify_issue`, give it only to replace the whole body.";
+const BODY_DESCRIPTION: &str = "The body of the issue in Markdown. For `new_change`, the full prompt of the change, which is required. On `modify_issue`, give it only to replace the whole body.";
 const TYPE_DESCRIPTION: &str =
     "The Type of the issue. It must be a Type that the repository offers.";
 const MILESTONE_DESCRIPTION: &str = "The exact title of a milestone of the plan. `null` removes the milestone of an existing issue.";
@@ -74,7 +74,8 @@ const LABELS_REMOVE_DESCRIPTION: &str =
 const CLOSE_REASON_DESCRIPTION: &str = "Closes the issue with this reason.";
 const STATUS_DESCRIPTION: &str =
     "The Status of the issue on the Project. It must be an option of the Status field.";
-const NAME_DESCRIPTION: &str = "The name of the new draft. `new_draft` only. Its prompt is `body`.";
+const NAME_DESCRIPTION: &str =
+    "The name of the new change. `new_change` only. Its prompt is `body`.";
 
 // PPT contract surface, "Refusals".
 pub const PLAN_UNAVAILABLE: &str = "The project has no valid GitHub Project for its plan. Tell the author; asking again will not succeed.";
@@ -98,12 +99,22 @@ where
     Option::<T>::deserialize(deserializer).map(Some)
 }
 
+/// PVC-FR-SQAF: the `op` of a row, with the alias `new_draft` read as
+/// `new_change`. Every other value stays as the model sent it.
+fn plan_op<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let op = String::deserialize(deserializer)?;
+    Ok(if op == rows::OP_DRAFT_ALIAS { rows::OP_DRAFT.to_string() } else { op })
+}
+
 /// One row, as the model composed it. Unknown fields are ignored (TLC-FR-07).
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct PlanRowArg {
     #[serde(default)]
     pub key: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "plan_op")]
     pub op: String,
     #[serde(default)]
     pub title: Option<String>,

@@ -45,14 +45,14 @@ fn the_answer_is_cut_to_five_words() {
 // language alone. An advisor call names the advisor. No key input goes in.
 #[test]
 fn the_input_is_the_activity_alone() {
-    let activity = [entry("search_specifications", None), entry("search_drafts", Some("sec"))];
+    let activity = [entry("search_specifications", None), entry("search_changes", Some("sec"))];
     let request = progress_request(&activity, "French");
     assert!(request.tools.is_empty());
     assert!(request.native_tools.is_empty());
     let tags: Vec<&str> = request.input.iter().map(|s| s.tag.as_str()).collect();
     assert_eq!(tags, ["language", "activity"]);
     assert_eq!(request.input[0].body, "French");
-    assert_eq!(request.input[1].body, "- search_specifications\n- search_drafts (advisor @sec)");
+    assert_eq!(request.input[1].body, "- search_specifications\n- search_changes (advisor @sec)");
     assert!(request.instructions.contains("at most 5 words"));
     assert!(request.instructions.contains("Do not ask a question"));
 }
@@ -121,7 +121,7 @@ fn the_record_holds_counts_and_no_text() {
 #[test]
 fn a_failure_record_holds_a_code_and_no_text() {
     let (h, _) = harness("");
-    let _ = update(&h, &[entry("search_drafts", Some("hidden-advisor"))]);
+    let _ = update(&h, &[entry("search_changes", Some("hidden-advisor"))]);
     let record = find(&all_records(), "voice progress update failed");
     assert_eq!(require(&record, "code"), "empty_reply");
     assert!(!format!("{:?}", record.fields).contains("hidden-advisor"));

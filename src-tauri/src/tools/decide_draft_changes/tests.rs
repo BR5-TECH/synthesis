@@ -229,13 +229,13 @@ fn log_records(buffer: &LogBuffer) -> Vec<crate::logging::LogRecord> {
 fn it_is_a_portable_tool_with_the_fixed_description_and_schema() {
     let f = Fixture::new();
     let definition = rig::tool::tool_definition(&f.tool_for(f.origin(), &QUIET));
-    assert_eq!(definition.name, "decide_draft_changes");
+    assert_eq!(definition.name, "decide_change_edits");
     assert_eq!(definition.description, DESCRIPTION);
     // DDC-FR-ROLG: an explicit instruction, and no read-back.
     assert!(DESCRIPTION.contains("Call it only when the author's latest comment"));
     assert!(DESCRIPTION.contains("Do not read the decision back and wait for a confirmation"));
     // DDC-FR-MDCX: a place maps to proposal order, withdrawn ones skipped.
-    assert!(DESCRIPTION.contains("count the changes in their order and skip the withdrawn ones"));
+    assert!(DESCRIPTION.contains("count the edits in their order and skip the withdrawn ones"));
     let schema = definition.parameters;
     let decisions = &schema["properties"]["decisions"];
     assert_eq!(decisions["minItems"], 1);

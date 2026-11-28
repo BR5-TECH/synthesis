@@ -147,6 +147,25 @@ const chooseDirectly = async () => {
   await userEvent.click(radio("Work directly"));
 };
 
+describe("the words of the start (PVC-FR-ZQRE)", () => {
+  it("PVC-FR-ZQRE, GSD-FR-BZHW: the dialog is titled Implement and its confirm names an implementation for each destination", async () => {
+    draw();
+    await screen.findByTestId("graduation-destination");
+    expect(screen.getByRole("dialog", { name: "Implement “artifact-window”" })).toBeInTheDocument();
+    expect(graduate().textContent).toBe("Implement");
+    await userEvent.click(radio("New stream"));
+    expect(graduate().textContent).toBe("Create stream and implement");
+    await userEvent.click(radio("Temporary stream"));
+    expect(graduate().textContent).toBe("Create temporary stream and implement");
+    await userEvent.click(radio("Work directly"));
+    // Wait for the direct section, so the absence check reads the dialog
+    // after the choice has rendered.
+    await screen.findByTestId("graduation-direct");
+    expect(graduate().textContent).toBe("Implement here");
+    expect(document.body).not.toHaveTextContent(/graduat/i);
+  });
+});
+
 describe("where the run works", () => {
   it("GSD-FR-BZHW: the destination is one choice of four, resting on an existing stream", async () => {
     draw();
@@ -155,7 +174,7 @@ describe("where the run works", () => {
     expect(radio("New stream")).not.toBeChecked();
     expect(radio("Temporary stream")).not.toBeChecked();
     expect(radio("Work directly")).not.toBeChecked();
-    expect(graduate()).toHaveTextContent("Graduate");
+    expect(graduate()).toHaveTextContent("Implement");
   });
 
   it("GSD-FR-BZHW: each choice shows only its own fields", async () => {
@@ -168,12 +187,12 @@ describe("where the run works", () => {
     await userEvent.click(radio("New stream"));
     expect(screen.getByTestId("graduation-new-stream")).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Work stream" })).toBeNull();
-    expect(graduate()).toHaveTextContent("Create stream and graduate");
+    expect(graduate()).toHaveTextContent("Create stream and implement");
 
     await userEvent.click(radio("Work directly"));
     expect(await screen.findByTestId("graduation-direct")).toBeInTheDocument();
     expect(screen.queryByTestId("graduation-new-stream")).toBeNull();
-    expect(graduate()).toHaveTextContent("Graduate here");
+    expect(graduate()).toHaveTextContent("Implement here");
   });
 
   it("GSD-FR-BZHW, GSD-FR-WMTD: the arrow keys walk all four segments and keep focus in the toggle", async () => {

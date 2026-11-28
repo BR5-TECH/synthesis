@@ -332,7 +332,7 @@ describe("GitHub token picker at the App seam", () => {
 describe("the Changes panel's push at the App seam (GHA-FR-16, GHA-FR-17, CHG-FR-45)", () => {
   /** Route the vertical panel to Changes and push from its footer control. */
   async function pushFromChangesPanel() {
-    await userEvent.click(screen.getByRole("button", { name: "Changes" }));
+    await userEvent.click(screen.getByRole("button", { name: "Commits" }));
     await screen.findByText(/files selected/);
     // CHG-FR-33: pick Push from the footer's attached dropdown, then run it.
     await userEvent.click(screen.getByRole("button", { name: "Choose action" }));
@@ -392,7 +392,7 @@ describe("the Changes panel's push at the App seam (GHA-FR-16, GHA-FR-17, CHG-FR
 describe("the commit message window at the App seam", () => {
   /** Route the vertical panel to Changes and tick the one changed file. */
   async function openChangesAndTick() {
-    await userEvent.click(screen.getByRole("button", { name: "Changes" }));
+    await userEvent.click(screen.getByRole("button", { name: "Commits" }));
     await screen.findByText(/files? selected/);
     await pickSelector("Filter by type", "files");
     await userEvent.click(await screen.findByLabelText("Include src/App.tsx"));

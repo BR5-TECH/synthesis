@@ -28,11 +28,11 @@ pub fn decision_body(
     feedback: Option<&str>,
 ) -> String {
     let (word, tail) = match decision {
-        NewDraftDecision::Accept => ("Accepted", "The new draft is created."),
-        NewDraftDecision::Reject => ("Rejected", "No draft is created."),
+        NewDraftDecision::Accept => ("Accepted", "The new change is created."),
+        NewDraftDecision::Reject => ("Rejected", "No change is created."),
     };
     let mut body = format!(
-        "{word} the proposed draft “{}”, part {} of {}. {tail}",
+        "{word} the proposed change “{}”, part {} of {}. {tail}",
         proposal.name, proposal.position, proposal.total
     );
     if let Some(text) = feedback.map(str::trim).filter(|t| !t.is_empty()) {

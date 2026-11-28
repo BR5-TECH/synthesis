@@ -282,7 +282,7 @@ describe("the insertion points of the delivery links (SDL-FR-VAGU, SDL-FR-CFHH)"
     const tree = store.tree()!;
     const key = [...tree.changes.keys()][0];
     act(() => store.select({ kind: "change", key }));
-    expect(within(inspector()).getByRole("button", { name: "Open change" })).toBeInTheDocument();
+    expect(within(inspector()).getByRole("button", { name: "Open OpenSpec change" })).toBeInTheDocument();
     expect(screen.queryByTestId("delivered-by")).toBeNull();
     expect(screen.queryByTestId("plan-work")).toBeNull();
   });

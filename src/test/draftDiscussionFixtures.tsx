@@ -93,7 +93,7 @@ export function columnElement(over: Partial<ColumnProps> = {}) {
     <DiscussionColumn
       column={draftColumn(DRAFT)}
       target={{ kind: "draft", draftId: DRAFT }}
-      noun="draft"
+      noun="change"
       material="prompt"
       discussions={[discussionSaying("disc-1", ["opening"])]}
       selectedThreadId={null}

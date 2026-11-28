@@ -159,7 +159,7 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     await enterIde();
 
     await createDraftFromPanel();
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     // Open the search overlay over it.
@@ -167,7 +167,7 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
 
     // The workspace is still mounted: a tab is not an overlay.
     expect(
-      screen.getByRole("button", { name: "Draft actions" }),
+      screen.getByRole("button", { name: "Change actions" }),
     ).toBeInTheDocument();
   });
 
@@ -203,13 +203,13 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     render(<App />);
     await enterIde();
 
-    await userEvent.click(screen.getByRole("button", { name: "Drafts" }));
+    await userEvent.click(screen.getByRole("button", { name: "Changes" }));
     await userEvent.click(
-      screen.getByRole("button", { name: "New draft" }),
+      screen.getByRole("button", { name: "New change" }),
     );
 
     // The tab opened and is the active one.
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
     const strip = screen.getByTestId("tabstrip");
     await waitFor(() =>
       expect(
@@ -221,7 +221,7 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     // And the field — in the panel, not the tab — has the keystrokes, seeded
     // with the name the draft was created under and with its text selected.
     const field = (await screen.findByLabelText(
-      "Draft name",
+      "Change name",
     )) as HTMLInputElement;
     expect(field).toHaveValue("Untitled");
     expect(field).toHaveFocus();
@@ -250,13 +250,13 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     await enterIde();
     await createDraftFromPanel();
 
-    await userEvent.click(screen.getByRole("button", { name: /Draft$/ }));
-    const field = await screen.findByLabelText("Draft name");
+    await userEvent.click(screen.getByRole("button", { name: /Change$/ }));
+    const field = await screen.findByLabelText("Change name");
     expect(field).toHaveValue("Untitled 2");
 
     await userEvent.keyboard("{Escape}");
     await waitFor(() =>
-      expect(screen.queryByLabelText("Draft name")).toBeNull(),
+      expect(screen.queryByLabelText("Change name")).toBeNull(),
     );
     // Nothing was renamed, and both drafts are in the tree.
     expect(invokeMock.mock.calls.some((c) => c[0] === "rename_draft")).toBe(
@@ -282,7 +282,7 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     });
     expect(within(dialog).getByLabelText(/^Artifact Type/)).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Draft actions" }),
+      screen.queryByRole("button", { name: "Change actions" }),
     ).not.toBeInTheDocument();
     expect(invokeMock.mock.calls.some((c) => c[0] === "create_draft")).toBe(
       false,
@@ -317,7 +317,7 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     // NTA-FR-08: the type is never seeded from the location.
     expect(within(dialog).getByLabelText(/^Artifact Type/)).toHaveValue("");
     expect(
-      screen.queryByRole("button", { name: "Draft actions" }),
+      screen.queryByRole("button", { name: "Change actions" }),
     ).not.toBeInTheDocument();
     expect(invokeMock.mock.calls.some((c) => c[0] === "create_draft")).toBe(
       false,
@@ -375,7 +375,7 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     await enterIde();
 
     await createDraftFromPanel();
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
     const strip = screen.getByTestId("tabstrip");
     expect(within(strip).getByText("Untitled")).toBeInTheDocument();
 
@@ -387,10 +387,10 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     // DRP-FR-22: a row's menu opens on right-click, the way the Project
     // panel's does — there is no per-row button to press.
     fireEvent.contextMenu(
-      await screen.findByRole("treeitem", { name: /^Draft Untitled/ }),
+      await screen.findByRole("treeitem", { name: /^Change Untitled/ }),
     );
     await userEvent.click(screen.getByRole("menuitem", { name: "Rename…" }));
-    const field = screen.getByLabelText("Draft name");
+    const field = screen.getByLabelText("Change name");
     await userEvent.clear(field);
     await userEvent.type(field, "Agent personas{Enter}");
 
@@ -442,7 +442,7 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     await enterIde();
 
     await createDraftFromPanel();
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
     const strip = screen.getByTestId("tabstrip");
     expect(within(strip).getByText("Untitled")).toBeInTheDocument();
 
@@ -454,13 +454,13 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     // DRP-FR-22: a row's menu opens on right-click, the way the Project
     // panel's does — there is no per-row button to press.
     fireEvent.contextMenu(
-      await screen.findByRole("treeitem", { name: /^Draft Untitled/ }),
+      await screen.findByRole("treeitem", { name: /^Change Untitled/ }),
     );
     await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     // Nothing yet: the confirmation is a step, not a formality.
     expect(invokeMock.mock.calls.some((c) => c[0] === "delete_draft")).toBe(false);
     await userEvent.click(
-      within(screen.getByRole("dialog", { name: "Delete draft" })).getByRole(
+      within(screen.getByRole("dialog", { name: "Delete change" })).getByRole(
         "button",
         { name: "Delete" },
       ),
@@ -477,7 +477,7 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
   // NAW-FR-21 / NAW-FR-20: "the tab closes, and the draft is gone from the
   // Drafts panel". Same argument as above — the workspace reporting the
   // graduation and the shell dropping the tab are wired together only in `App`.
-  /** One graduation run, in the shape `list_graduation_queue` returns. */
+  /** One implementation run, in the shape `list_graduation_queue` returns. */
   function graduationRunFixture(id: string, state: string) {
     return {
       id,
@@ -594,24 +594,24 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     await enterIde();
 
     await createDraftFromPanel();
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
     const strip = screen.getByTestId("tabstrip");
 
     // NAW-FR-27 / NAW-FR-28: Graduate is behind the tab's one action control.
     await userEvent.click(
-      await screen.findByRole("button", { name: "Draft actions" }),
+      await screen.findByRole("button", { name: "Change actions" }),
     );
-    await userEvent.click(screen.getByRole("menuitem", { name: "Graduate" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Implement" }));
     const dialog = await screen.findByRole("dialog", {
-      name: /Graduate .Untitled./,
+      name: /Implement .Untitled./,
     });
     await userEvent.click(
-      within(dialog).getByRole("button", { name: "Graduate" }),
+      within(dialog).getByRole("button", { name: "Implement" }),
     );
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("dialog", { name: /Graduate .Untitled./ }),
+        screen.queryByRole("dialog", { name: /Implement .Untitled./ }),
       ).toBeNull(),
     );
     // NAW-FR-20: the tab is still there, and nothing was published or deleted.
@@ -701,12 +701,12 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     render(<App />);
     await enterIde();
     await createDraftFromPanel();
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
 
     // Open the Runs panel on its graduation section and choose a run to read.
     await userEvent.click(screen.getByRole("button", { name: "Runs" }));
     const rail = await screen.findByRole("list", {
-      name: "Graduation run history",
+      name: "Implementation run history",
     });
     const rowFor = (name: string) =>
       within(rail)
@@ -719,24 +719,24 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     // Move to agent output, and graduate from there.
     await userEvent.click(screen.getByRole("tab", { name: "Agent output" }));
     await userEvent.click(
-      await screen.findByRole("button", { name: "Draft actions" }),
+      await screen.findByRole("button", { name: "Change actions" }),
     );
-    await userEvent.click(screen.getByRole("menuitem", { name: "Graduate" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Implement" }));
     const dialog = await screen.findByRole("dialog", {
-      name: /Graduate .Untitled./,
+      name: /Implement .Untitled./,
     });
     await userEvent.click(
-      within(dialog).getByRole("button", { name: "Graduate" }),
+      within(dialog).getByRole("button", { name: "Implement" }),
     );
     await waitFor(() =>
       expect(
-        screen.queryByRole("dialog", { name: /Graduate .Untitled./ }),
+        screen.queryByRole("dialog", { name: /Implement .Untitled./ }),
       ).toBeNull(),
     );
 
     // GRU-FR-MYFA: the shell still routes to the Runs panel's graduation section.
     const back = await screen.findByRole("list", {
-      name: "Graduation run history",
+      name: "Implementation run history",
     });
     const rowIn = (name: string) =>
       within(back)
@@ -785,11 +785,11 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     await enterIde();
 
     await createDraftFromPanel();
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
     const strip = screen.getByTestId("tabstrip");
     expect(within(strip).getByText("Untitled")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Draft actions" }));
+    await userEvent.click(screen.getByRole("button", { name: "Change actions" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Archive" }));
 
     await waitFor(() =>
@@ -815,7 +815,7 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     await enterIde();
 
     await createDraftFromPanel();
-    await screen.findByRole("button", { name: "Draft actions" });
+    await screen.findByRole("button", { name: "Change actions" });
     const strip = screen.getByTestId("tabstrip");
     const workspace = document.querySelector(
       ".draft-workspace__chrome",
@@ -828,7 +828,7 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     // toggle now would *hide* the panel again (SNV-FR-45). The row query below
     // is what waits for the panel to arrive.
     fireEvent.contextMenu(
-      await screen.findByRole("treeitem", { name: /^Draft Untitled/ }),
+      await screen.findByRole("treeitem", { name: /^Change Untitled/ }),
     );
     await userEvent.click(screen.getByRole("menuitem", { name: "Archive" }));
 
@@ -846,13 +846,13 @@ describe("New Artifact tab wiring (NAW-FR-01 / NAW-FR-03 / NAW-FR-22)", () => {
     // DRP-FR-18: the row left the panel's default position, because that
     // position no longer admits its status. It is one position away, not gone.
     expect(
-      screen.queryByRole("treeitem", { name: /^Draft Untitled/ }),
+      screen.queryByRole("treeitem", { name: /^Change Untitled/ }),
     ).not.toBeInTheDocument();
-    await pickSelector("Draft status", "archived");
+    await pickSelector("Change status", "archived");
 
     // …and Restore from the same menu clears it, still without touching the tab.
     fireEvent.contextMenu(
-      await screen.findByRole("treeitem", { name: /^Draft Untitled/ }),
+      await screen.findByRole("treeitem", { name: /^Change Untitled/ }),
     );
     await userEvent.click(screen.getByRole("menuitem", { name: "Restore" }));
 

@@ -607,8 +607,8 @@ fn a_restart_asks_for_a_commit_under_the_drafts_current_name() {
     assert_eq!(
         messages,
         vec![
-            "draft: graduate \"editor scroll\"".to_string(),
-            "draft: graduate \"editor scrolling\"".to_string(),
+            "change: implement \"editor scroll\"".to_string(),
+            "change: implement \"editor scrolling\"".to_string(),
         ],
     );
 }

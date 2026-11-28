@@ -1,228 +1,88 @@
 # Synthesis
-Synthesis is an IDE for software engineers working with AI in a spec-driven way.
 
-### How to use it
+Synthesis is a desktop IDE for engineers who build software with AI agents.
 
-Engineer writes a draft of a feature/change/requirement as a prompt. AI agent personas read it, ask questions, and propose edits. Engineer brainstorms it with AI agent personas. When the draft is ready, engineer may **graduate** it. Then your coding agent (e.g. Claude Code or Codex) does the work using the skills defined in the repository in a Docker container on a Git branch. A second agent session reviews the result. This loop repeats until reviewer is happy.
+You describe a change in plain words and talk it through with AI agents until it is clear. Then you start its implementation. A coding agent, such as Claude Code or Codex, does the work in a Docker container on a Git branch, and a second agent session reviews it. You read the result, merge it, and open a pull request.
 
-### What it is not
+Synthesis does not make decisions for you, and it does not replace your coding agent or your skills. It gives you one place to plan the work, to watch it, and to review it. You bring your own AI keys and subscriptions.
 
-It’s not a harness. It’s not a framework. It’s not a decision maker. It’s not a replacement for any skills that engineer have defined in his repository.
+> Synthesis is in early development (version 0.1.0). It is for one person on one computer, and you build it from source.
 
-And it’s not a replacement for the IDE where engineer can write everything manually.
+## How you use it
 
-### What is included
+### 1. Write a change
 
-Synthesis is a Tauri 2 application. The user interface uses React 19 and TypeScript. The backend uses Rust.
+Open the **Changes** panel and click **+ Change**. A change is one Markdown prompt that says what you want: a feature, a fix, or a new requirement. Synthesis keeps it in your repository and commits it to Git, so it stays with the project.
 
-You bring your own AI API keys, subscriptions. You bring the intelligence.
-### How it runs
+### 2. Discuss it with agents
 
-The process is split in two phases:
+Mention an agent in a comment, for example `@critic`, or write `@all` to ask every agent of the project. An agent answers in the discussion. It can ask you questions, and it can propose **edits** to the prompt. You accept or reject each edit. The prompt changes only when you accept.
 
-- Work on feature/change requirement as a prompt: AI agent is isolated from the filesystem, and can only access few specific tools and artifact types inside the project. No source code access. No raw files access. No grep. No exec.
-- Agentic harness as a CLI (E.g. Claude Code): runs in a Docker container engineer defines in headlesss mode with all capabilities dropped. 
+An agent in a discussion cannot read or run your code. It sees only the project material that Synthesis gives it.
 
-## Status
+### 3. Implement it
 
-Synthesis is in very early development. The version is 0.1.0.
+When the change is ready, click **Implement**. Synthesis locks the change and starts an **implementation run**:
 
-- The application is for one author on one computer.
-- There are no signed builds and no published releases. You build it from source.
-- The reference agent images are not published. Each project names its own agent image.
-- Some functions are not complete. The list of known gaps is in `docs/README.md`.
+1. A coding agent does the work in a Docker container.
+2. A new agent session reviews the work and answers `ready` or `revise`.
+3. On `revise`, the run does another pass. On `ready`, Synthesis commits the result.
 
-## Development lifecycle
+You follow each run in the **Implementation** tab of the **Runs** panel. If the agent needs an answer from you, the run waits, and you answer it there.
 
-Work in Synthesis moves through five stages. Each stage keeps its data in Git, in the application data directory, or in `~/.synthesis/`. Thus you can stop and continue later.
+A run works in a **work stream**: a branch and a working copy that Synthesis owns. Several runs can share one stream, one after the other.
 
-```mermaid
-flowchart TD
-    draft["1. Draft<br/>a Markdown prompt in .synthesis/drafts/"]
-    discuss["2. Discussion<br/>agent personas ask questions and propose edits"]
-    run["3. Graduation run<br/>work turn, then review turn"]
-    stream["4. Work stream<br/>an application-owned branch and working copy"]
-    merge{"5. Merge into<br/>the base branch"}
-    mergerun["Merge run<br/>an agent resolves the conflicts,<br/>a new session reviews them"]
-    base["Base branch"]
-    pr["Push a branch and open a pull request"]
-    issue["GitHub issue<br/>for an agent outside the application"]
+### 4. Review and merge
 
-    draft --> discuss
-    discuss -- "accept or reject each proposal" --> draft
-    draft -- "Graduate" --> run
-    run -- "review says revise: next pass" --> run
-    run -- "review says ready: commit" --> stream
-    stream --> merge
-    merge -- "Git merges with no conflict" --> base
-    merge -- "conflict" --> mergerun
-    mergerun -- "review says ready: apply" --> base
-    base -. "update the stream from its base" .-> stream
-    base --> pr
-    draft -. "Publish to GitHub" .-> issue
-```
+Open the **Commits** panel to see what a stream changed, file by file, and to commit your own edits. When the work is complete, merge the stream into its base branch. If Git finds a conflict, an agent resolves it, and a second agent reviews the result. Then open a pull request from the **Git** panel.
 
-### 1. Draft
+### Work with GitHub and OpenSpec
 
-A draft is one Markdown prompt. You create it in a **New Artifact** tab. The application keeps the draft in `.synthesis/drafts/` in your repository and commits it to Git. A draft can contain images. When you accept a proposal, the draft history keeps the prompt before and after the change, so you can read and compare earlier versions.
+- **GitHub.** Publish a change as a GitHub issue, so that an agent outside Synthesis can do it. Or claim a "Ready" task of a GitHub Project: Synthesis makes a change from the issue, and you implement it as usual.
+- **OpenSpec.** If your project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec), Synthesis can work in OpenSpec mode. When you implement a change, you can first propose an **OpenSpec change** and then apply it.
 
-### 2. Discussion
+## The window
 
-Type the nickname of an agent persona in a comment, for example `@critic`. Type `@all` to ask all the personas of the project. The persona answers in the discussion of the draft or of a selected passage. A persona can ask a set of multiple-choice questions. It can also propose edits to the prompt. The document shows each proposal as a change. You accept or reject it. The prompt changes only when you accept a proposal.
-
-### 3. Graduation
-
-When the prompt is complete, click **Graduate**. The application locks the draft, keeps a copy of the prompt, and adds a **graduation run** to a queue. The run does one or more **passes**. A pass has two turns:
-
-1. A **work turn**. An execution agent (Claude Code or Codex) does the task in a Docker container. The agent can write only to the working copy of the run. It can read the Git history of the repository, and it can use the network.
-2. A **review turn**. A new agent session examines what the work turn wrote and answers `ready` or `revise`.
-
-After a `ready` review, the application commits the result. A `revise` review with only one or two small findings also counts as `ready`. Another `revise`review starts the next pass. The **pass budget** of the project sets the maximum number of passes. If you set no budget, the maximum is two. If the agent needs an answer from you, the run stops in `awaiting_author` until you answer.
-
-```mermaid
-stateDiagram-v2
-    [*] --> queued
-    queued --> working: the queue starts the run
-    working --> reviewing: the agent reports the work finished
-    reviewing --> completed: ready, the application commits
-    reviewing --> working: revise, next pass
-    working --> awaiting_author: the agent asks a question
-    reviewing --> awaiting_author: the pass budget is spent
-    awaiting_author --> queued: you answer or continue
-    working --> blocked: a condition stops the run
-    blocked --> queued: Continue
-    working --> interrupted: pause, timeout, or shutdown
-    interrupted --> queued: Continue
-    working --> failed: merge run only, a pinned branch moved
-    completed --> [*]
-    failed --> [*]
-    discarded --> [*]
-```
-
-The diagram is simplified. For example, a review turn can also ask a question, stop on a blocker, or stop on a pause. You can discard a run from every state except `completed`. Only a merge run can fail. It fails when its stream branch or its base branch moves. `completed`, `discarded`, and `failed` are final states. The full rules are in `specifications/core/GRD-graduation.md`and `specifications/ai/GRL-graduation-loop.md`.
-
-A run works in one of three places:
-
-- **A work stream.** This is the usual place. The run works in the working copy of the stream and commits on the branch of the stream.
-- **A direct run.** The run works in the worktree that was active when you confirmed it, on the branch that worktree had at that time.
-- **A merge run.** The run works in an isolated worktree that it owns. See stage 5.
-
-### 4. Work stream
-
-A work stream is a named branch and working copy that the application owns. A stream lives longer than one run. The runs of one stream use one queue. Each run starts from the commit of the run before it. Thus all the runs of a stream use one history.
-
-You examine a stream in the **Changes** panel and the diff viewer. When the base branch moves, you can update the stream from its base branch. An update can stop to ask you a question.
-
-### 5. Merge
-
-When the work on a stream is complete, you merge the stream into its base branch. Both sides must have no uncommitted changes. Git tries the merge first. A merge with no conflict completes at once, with no run.
-
-If Git cannot resolve a conflict, the application starts a **merge run** with the name `Merge <stream name>`. An agent resolves the conflicts in an isolated worktree, and a new agent session reviews the result. After a `ready` review, the application applies the result to the base branch. It makes a merge commit, or it puts the changes in the worktree of the base branch with no commit. You select one of the two.
-
-You can then push a branch and open a pull request for it in the **Git** panel.
-
-### Work from GitHub
-
-You can publish a draft as a GitHub issue. Then an agent outside Synthesis can do the work.
-
-The **Git** panel can also show the tasks with the status "Ready" in a GitHub Project. When you claim a task, Synthesis makes a draft from the issue. You graduate this draft as usual.
-
-## Key concepts
-
-| Concept | Meaning |
+| Panel | What it is for |
 | --- | --- |
-| Project | A Git repository. Synthesis keeps its project data in the `.synthesis/` directory of the repository. |
-| Artifact | A file with a type: Skill, Agent, Prompt, Spec, Flow, Instructions, Scenario, or Scratchpad. The path of the file sets the type, and you can override it. |
-| Draft | One Markdown prompt that you develop before the work it describes exists. |
-| Discussion | One conversation about a passage, a file, a draft, or a note. You can lock a discussion and resolve it. |
-| Agent persona | An AI agent that you talk to. It has a nickname, a title, a model, and optional instructions. A Project agent is stored in the project and shared with every contributor. A Personal agent is stored on your machine and works in every project. |
-| Proposal | An edit that an agent proposes. You accept or reject it. |
-| Graduation run | The queued job that turns a draft into committed work. |
-| Work stream | A branch and working copy that the application owns and that many runs share. |
-| Flow | A visual graph of prompts and artifacts. In this version you can edit and validate a flow, but you cannot run it. |
-| Note | A short note (1 KiB maximum) on an artifact, a flow, or the project. |
-| Terminal | An interactive shell or agent CLI session in a worktree or a work stream. See `docs/terminals.md`. |
+| Project | The files and artifacts of the project. |
+| Documents | Reference documents that agents can search. |
+| Notes | Short notes to yourself. |
+| Comments | All open discussions. |
+| Changes | Your changes: write them, discuss them, implement them. |
+| Commits | Changed files, commits, and the completed runs of the branch. |
+| Terminals | Shells and agent CLIs in a worktree or a work stream. |
+| Runs | Implementation runs and their progress. |
+| Logs, History, Git | Application logs, the version history of a file, and branches and pull requests. |
 
-## What you need to use it
+## What you need
 
-- **Docker.** Every graduation turn runs in a container. Synthesis uses the `docker` command or the Docker Engine API. You select one in the global settings.
-- **An agent image for each project.** The project names it in `.synthesis/project.toml`. The reference Dockerfiles are in `docker/agent-images/`.
-- **An AI API for discussions.** Synthesis supports OpenRouter, Anthropic, OpenAI, and a custom gateway. You give a base URL, an API key, and a model.
-- **A coding agent for graduation.** Install its CLI on your computer. Synthesis runs the CLI once to verify it.
-  - Claude Code: an OAuth token for a subscription, or the base URL and token of your own gateway.
-  - Codex: your existing Codex login. Synthesis mounts your Codex home directory into the container.
-- **A GitHub token (optional).** It is necessary for pull requests, issues, GitHub Project tasks, and Git operations over HTTPS. The GitHub functions work only with github.com.
+- **Docker.** Every implementation turn runs in a container.
+- **An agent image** for each project. The project names it in `.synthesis/project.toml`. Reference Dockerfiles are in `docker/agent-images/`.
+- **An AI API for discussions.** OpenRouter, Anthropic, OpenAI, or your own gateway.
+- **A coding agent CLI.** Claude Code (subscription token or your own gateway) or Codex (your existing login).
+- **A GitHub token** (optional), for pull requests, issues, and GitHub Projects on github.com.
 
-Synthesis keeps all secrets in one entry of the operating-system keyring. It does not write secrets to its settings files.
+Synthesis keeps all secrets in the keyring of your operating system.
 
-## Build from source
+## Build and run
 
-You need:
-
-- Node.js and pnpm 10 or later. The CI pipeline uses Node.js 26 and pnpm 11.
-- The Rust toolchain that `src-tauri/rust-toolchain.toml` pins (channel `1.95`).
-- The system packages for Tauri on your operating system. The list for each host is in `docs/development.md`.
-- Optional: the [Task](https://taskfile.dev) runner, Python 3, and Docker.
-
-Run the application in development mode:
+You need Node.js with pnpm 10 or later, the Rust toolchain pinned in `src-tauri/rust-toolchain.toml`, and the Tauri system packages for your operating system (listed in `docs/development.md`).
 
 ```bash
 pnpm install
 pnpm tauri dev
 ```
 
-Build a bundle for your operating system. Then run all the checks of the CI pipeline:
+To build an app bundle, run `task build`. All commands are in `docs/development.md`.
 
-```bash
-task build
-task lint
-task tests
-```
+## More
 
-The full reference for each task is in `docs/development.md`.
-
-## Repository layout
-
-| Path | Contents |
-| --- | --- |
-| `src/` | The user interface: React 19, TypeScript, and Vite. |
-| `src-tauri/` | The desktop backend: the Rust crate `synthesis_lib`. |
-| `server/` | An optional standalone Rust service: an application service and a relay for remote clients. |
-| `docker/agent-images/` | The reference container images for Claude Code and Codex. |
-| `resources/` | Built-in prompts for the agent loops, and the flows of this project. |
-| `specifications/` | The specifications. They are the source of truth for all behavior. |
-| `tools/` | The specification checker and a mock agent CLI for tests. |
-| `api/` | The OpenAPI description of the server. |
-| `fixtures/` | Test fixtures that the frontend and the backend share. |
-| `docs/` | The architecture and development documentation. |
-| `.synthesis/` | The Synthesis data of this repository. The project uses its own application. |
-
-## How we develop this project
-
-In this project, the specification comes before the code.
-
-1. A change starts as a specification in `specifications/`. The folders are `ui/`, `core/`, `ai/`, `tools/`, `server/`, and `infra/`. Each specification has a three-letter code, and each requirement has an identifier such as `TSK-FR-28`.
-2. The code implements the specification. Code comments and test names cite the identifiers of the requirements that they implement or verify.
-3. `task specs` checks that every cited identifier exists in a specification.
-
-The repository contains two Claude Code skills for this process, in `.claude/skills/`: `analyst` writes and changes specifications, and `engineer` implements them. All documentation uses Simplified Technical English (ASD-STE100). The rules for contributors and agents are in `CLAUDE.md`.
-
-## Documentation
-
-- `docs/README.md`: the architecture.
-- `docs/development.md`: the build, test, and check commands.
-- `docs/terminals.md`: the Terminals panel, its targets, and its limits.
-- `server/README.md`: the server.
-- `docker/agent-images/README.md`: the agent images.
-- `tools/agentic-cli-mock/README.md`: the mock agent CLI.
+- `docs/development.md`: build, test, and contribute.
+- `docs/README.md`: the architecture and the known gaps.
+- `docs/terminals.md`: the Terminals panel.
+- `CLAUDE.md`: the rules for contributors and agents.
 
 ## License
 
-Synthesis is licensed under the [Business Source License 1.1](LICENSE).
-
-- You can use Synthesis to develop any software, also commercial software. The software that you make with Synthesis is yours, and the license does not apply to it.
-- You can read, change, and share the source code of Synthesis.
-- You cannot sell Synthesis, or a changed version of it, as a product or as a service.
-- Four years after each version is published, that version becomes available under the Apache License 2.0.
-
-Versions that were published before this change stay available under the Apache License 2.0.
+Synthesis uses the [Business Source License 1.1](LICENSE). You can use it to build any software, also commercial software, and what you build is yours. You can read, change, and share its source. You cannot sell Synthesis, or a changed version of it, as a product or a service. Four years after each version is published, that version becomes available under the Apache License 2.0. Versions published before this license stay under the Apache License 2.0.

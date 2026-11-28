@@ -400,6 +400,32 @@ Read [`CLAUDE.md`](../CLAUDE.md) for the repository's own rules and the definiti
 of done for a change. Read [`README.md`](README.md) in this directory for the
 architecture.
 
+## How we develop this project
+
+In this project, the specification comes before the code.
+
+1. A change starts as a specification in `specifications/`. The folders are `ui/`, `core/`, `ai/`, `tools/`, `server/`, and `infra/`. Each specification has a three-letter code, and each requirement has an identifier such as `TSK-FR-28`.
+2. The code implements the specification. Code comments and test names cite the identifiers of the requirements that they implement or verify.
+3. `task specs` checks that every cited identifier exists in a specification.
+
+The repository contains two Claude Code skills for this process, in `.claude/skills/`: `analyst` writes and changes specifications, and `engineer` implements them. All documentation uses Simplified Technical English (ASD-STE100). The product vocabulary, and the internal names that code and specifications keep, are in `specifications/core/PVC-product-vocabulary.md`.
+
+## Repository layout
+
+| Path | Contents |
+| --- | --- |
+| `src/` | The user interface: React 19, TypeScript, and Vite. |
+| `src-tauri/` | The desktop backend: the Rust crate `synthesis_lib`. |
+| `server/` | An optional standalone Rust service: an application service and a relay for remote clients. |
+| `docker/agent-images/` | The reference container images for Claude Code and Codex. |
+| `resources/` | Built-in prompts for the agent loops, built-in skills, and the flows of this project. |
+| `specifications/` | The specifications. They are the source of truth for all behavior. |
+| `tools/` | The specification checker and a mock agent CLI for tests. |
+| `api/` | The OpenAPI description of the server. |
+| `fixtures/` | Test fixtures that the frontend and the backend share. |
+| `docs/` | The architecture and development documentation. |
+| `.synthesis/` | The Synthesis data of this repository. The project uses its own application. |
+
 ## Recommended IDE setup
 
 [VS Code](https://code.visualstudio.com/) with the

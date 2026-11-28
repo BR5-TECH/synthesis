@@ -202,6 +202,7 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
       editorZoomPercent: 100,
+      editorPageWidthPx: 820,
       },
     });
   });
@@ -224,6 +225,7 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
       editorZoomPercent: 100,
+      editorPageWidthPx: 820,
         // GLS-FR-14, GLS-FR-KWVN, GLS-FR-PBXM, GLS-FR-MRGQ: the Documents
         // section's DOCX page settings ride the same record.
         docxLandscapeDiagrams: true,
@@ -267,6 +269,7 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
       editorZoomPercent: 100,
+      editorPageWidthPx: 820,
         // GLS-FR-14: a theme save carries the DOCX page settings through.
         docxLandscapeDiagrams: true,
         docxLandscapeThresholdPercent: 60,
@@ -301,6 +304,7 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
       editorZoomPercent: 100,
+      editorPageWidthPx: 820,
       },
     });
     render(<GlobalSettings />);
@@ -357,6 +361,7 @@ describe("Appearance section (GLS-FR-04, GLS-FR-05)", () => {
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
       editorZoomPercent: 100,
+      editorPageWidthPx: 820,
         },
       }),
     );

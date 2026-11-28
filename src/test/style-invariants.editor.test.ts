@@ -52,9 +52,18 @@ describe("the editing surface reads as a page set on a field (EDT-FR-63)", () =>
       const m = root.match(new RegExp(`(?:^|[;{])\\s*${name}\\s*:\\s*([^;]+)`));
       return m ? m[1].trim() : null;
     };
+    /** A value with each `var(--x)` replaced by the value of `--x`. */
+    const resolve = (value: string): string =>
+      value.replace(/var\((--[A-Za-z0-9-]+)\)/g, (_whole, ref: string) => {
+        const inner = token(ref);
+        expect(inner, `no ${ref} is defined`).not.toBeNull();
+        return resolve(inner!);
+      });
     const px = (name: string) => {
-      const value = token(name);
-      expect(value, `no ${name} is defined`).not.toBeNull();
+      const raw = token(name);
+      expect(raw, `no ${name} is defined`).not.toBeNull();
+      // EPW-FR-QGUZ: the measure is built on the base width token.
+      const value = resolve(raw!);
       // Summed rather than parsed off the front: `--doc-page-box` is a
       // `calc()` of the measure plus the padding drawn inside it, and reading
       // only its first term makes it compare equal to the measure.

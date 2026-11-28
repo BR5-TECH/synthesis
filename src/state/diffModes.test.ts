@@ -95,6 +95,7 @@ describe("diff modes store (DFV-FR-23 / DFV-FR-24)", () => {
       graduationPathsWidthFraction: 0.3,
       gitFilesWidthFraction: 0.3,
       editorZoomPercent: 100,
+      editorPageWidthPx: 820,
     });
   });
 

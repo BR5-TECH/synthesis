@@ -1,0 +1,106 @@
+/* EPW-FR-ADPJ / EPW-FR-WOZO: the page width ruler at the foot of the document
+   column. It is as tall as the gutter of the action control (`--sp-4`), so the
+   control, which stands that far above the tab's foot, never covers it
+   (ACT-FR-09). */
+.page-ruler {
+  --page-ruler-height: var(--sp-4);
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  height: var(--page-ruler-height);
+  border-top: 1px solid var(--border-1);
+  background: var(--doc-field-bg);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The page as a light band over the recessed field beside it. */
+.page-ruler__page {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--doc-page-bg);
+  border-left: 1px solid var(--border-1);
+  border-right: 1px solid var(--border-1);
+}
+
+/* EPW-FR-WOZO: a minor tick for each 20 pixels of page width and a major tick
+   for each 100, counted from the leading edge of the text. */
+.page-ruler__scale {
+  /* The ruler sets these inline from the page geometry; these are the values
+     at 100% zoom with the text at the leading edge. */
+  --page-ruler-origin: 0px;
+  --page-ruler-minor: 20px;
+  --page-ruler-major: 100px;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* One tile for each step, repeated from the origin, so the ticks keep their
+     phase on both sides of it. */
+  background-image:
+    linear-gradient(to right, var(--fg-3) 0 1px, transparent 1px),
+    linear-gradient(to right, var(--border-3) 0 1px, transparent 1px);
+  background-size: var(--page-ruler-major) 7px, var(--page-ruler-minor) 4px;
+  background-repeat: repeat-x;
+  background-position:
+    var(--page-ruler-origin) 100%,
+    var(--page-ruler-origin) 100%;
+  opacity: 0.7;
+}
+
+/* EPW-FR-AOVQ / EPW-FR-IUHL: a handle is a hit area wider than its marker, so
+   the edge is easy to take with a pointer. */
+.page-ruler__handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  margin-left: -7px;
+  display: flex;
+  justify-content: center;
+  cursor: ew-resize;
+  touch-action: none;
+  outline: none;
+}
+.page-ruler__marker {
+  width: 0;
+  height: 0;
+  margin-top: 2px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 7px solid var(--fg-3);
+  transition: border-top-color var(--dur-fast) var(--ease-out);
+}
+.page-ruler__handle:hover .page-ruler__marker,
+.page-ruler__handle[data-dragging] .page-ruler__marker {
+  border-top-color: var(--accent);
+}
+.page-ruler__handle:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: 2px;
+}
+.page-ruler[data-dragging] { cursor: ew-resize; }
+
+/* EPW-FR-TQFY: the width during a drag, beside the handle that the author
+   holds, on the page side of it. */
+.page-ruler__label {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  white-space: nowrap;
+  color: var(--accent);
+  background: var(--doc-page-bg);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  pointer-events: none;
+}
+.page-ruler__handle[data-side="left"] .page-ruler__label { left: 12px; }
+.page-ruler__handle[data-side="right"] .page-ruler__label { right: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-ruler__marker { transition: none; }
+}

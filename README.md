@@ -1,47 +1,58 @@
 # Synthesis
 
-Synthesis is a desktop IDE for engineers who build software with AI agents.
+**A desktop IDE where you plan a change with AI agents, then let a coding agent build it.**
 
-You describe a change in plain words and talk it through with AI agents until it is clear. Then you start its implementation. A coding agent, such as Claude Code or Codex, does the work in a Docker container on a Git branch, and a second agent session reviews it. You read the result, merge it, and open a pull request.
+```
+Write a change  →  Discuss it with agents  →  Implement it  →  Review and merge
+```
 
-Synthesis does not make decisions for you, and it does not replace your coding agent or your skills. It gives you one place to plan the work, to watch it, and to review it. You bring your own AI keys and subscriptions.
+You describe what you want in plain words. Agents ask questions and propose edits until the change is clear. Then a coding agent, such as Claude Code or Codex, does the work in a Docker container on its own Git branch, and a second agent reviews it. You read the result and merge it.
 
-> Synthesis is in early development (version 0.1.0). It is for one person on one computer, and you build it from source.
+Synthesis does not decide for you, and it does not replace your coding agent or your skills. It is one place to plan the work, watch it, and review it. You bring your own AI keys and subscriptions.
 
-## How you use it
+> **Early development.** Version 0.1.0, for one person on one computer. There are no releases yet: you build it from source.
+
+## Quick start
+
+1. **Install** Docker, Node.js with pnpm 10+, Rust, and the [Tauri system packages](docs/development.md) for your OS.
+2. **Run** Synthesis:
+   ```bash
+   pnpm install
+   pnpm tauri dev
+   ```
+3. **Connect your AI.** In **Settings**, fill in **AI API** (for discussions) and **Agentic AI** (for Claude Code or Codex).
+4. **Open** a Git repository, then click **+ Change** in the **Changes** panel to write your first change.
+
+## How it works
 
 ### 1. Write a change
 
-Open the **Changes** panel and click **+ Change**. A change is one Markdown prompt that says what you want: a feature, a fix, or a new requirement. Synthesis keeps it in your repository and commits it to Git, so it stays with the project.
+A **change** is one Markdown prompt: a feature, a fix, or a new requirement. Synthesis keeps it in your repository and commits it to Git.
 
 ### 2. Discuss it with agents
 
-Mention an agent in a comment, for example `@critic`, or write `@all` to ask every agent of the project. An agent answers in the discussion. It can ask you questions, and it can propose **edits** to the prompt. You accept or reject each edit. The prompt changes only when you accept.
+Mention an agent in a comment, for example `@critic`, or write `@all`. Agents answer, ask questions, and propose **edits** to the prompt. Nothing changes until you accept an edit.
 
-An agent in a discussion cannot read or run your code. It sees only the project material that Synthesis gives it.
+Agents in a discussion cannot read or run your code. They see only what Synthesis gives them.
 
 ### 3. Implement it
 
-When the change is ready, click **Implement**. Synthesis locks the change and starts an **implementation run**:
+Click **Implement**. Synthesis starts an **implementation run**: a coding agent works in a container, then a fresh agent session reviews the work. The run repeats until the review says `ready`, and then Synthesis commits the result.
 
-1. A coding agent does the work in a Docker container.
-2. A new agent session reviews the work and answers `ready` or `revise`.
-3. On `revise`, the run does another pass. On `ready`, Synthesis commits the result.
-
-You follow each run in the **Implementation** tab of the **Runs** panel. If the agent needs an answer from you, the run waits, and you answer it there.
-
-A run works in a **work stream**: a branch and a working copy that Synthesis owns. Several runs can share one stream, one after the other.
+Follow the run in **Runs → Implementation**. If the agent needs you, the run waits for your answer there.
 
 ### 4. Review and merge
 
-Open the **Commits** panel to see what a stream changed, file by file, and to commit your own edits. When the work is complete, merge the stream into its base branch. If Git finds a conflict, an agent resolves it, and a second agent reviews the result. Then open a pull request from the **Git** panel.
+Each run works on a **work stream**, a branch that Synthesis owns. See what it changed in the **Commits** panel, then merge it into your base branch. If Git finds a conflict, an agent resolves it and another agent reviews the fix. Open a pull request from the **Git** panel.
 
-### Work with GitHub and OpenSpec
+## More you can do
 
-- **GitHub.** Publish a change as a GitHub issue, so that an agent outside Synthesis can do it. Or claim a "Ready" task of a GitHub Project: Synthesis makes a change from the issue, and you implement it as usual.
-- **OpenSpec.** If your project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec), Synthesis can work in OpenSpec mode. When you implement a change, you can first propose an **OpenSpec change** and then apply it.
+- **GitHub.** Publish a change as an issue, or claim a "Ready" task from a GitHub Project and implement it as a change.
+- **OpenSpec.** In a project that uses [OpenSpec](https://github.com/Fission-AI/OpenSpec), you can first propose an **OpenSpec change** and then apply it.
+- **Terminals.** Open a shell or an agent CLI in any worktree or work stream. See [docs/terminals.md](docs/terminals.md).
 
-## The window
+<details>
+<summary><b>The panels</b></summary>
 
 | Panel | What it is for |
 | --- | --- |
@@ -51,38 +62,38 @@ Open the **Commits** panel to see what a stream changed, file by file, and to co
 | Comments | All open discussions. |
 | Changes | Your changes: write them, discuss them, implement them. |
 | Commits | Changed files, commits, and the completed runs of the branch. |
-| Terminals | Shells and agent CLIs in a worktree or a work stream. |
+| Terminals | Shells and agent CLIs. |
 | Runs | Implementation runs and their progress. |
-| Logs, History, Git | Application logs, the version history of a file, and branches and pull requests. |
+| Logs, History, Git | Application logs, the history of a file, and branches and pull requests. |
 
-## What you need
+</details>
+
+<details>
+<summary><b>What you need</b></summary>
 
 - **Docker.** Every implementation turn runs in a container.
-- **An agent image** for each project. The project names it in `.synthesis/project.toml`. Reference Dockerfiles are in `docker/agent-images/`.
-- **An AI API for discussions.** OpenRouter, Anthropic, OpenAI, or your own gateway.
-- **A coding agent CLI.** Claude Code (subscription token or your own gateway) or Codex (your existing login).
+- **An agent image** for each project, named in `.synthesis/project.toml`. Reference Dockerfiles are in `docker/agent-images/`.
+- **An AI API for discussions:** OpenRouter, Anthropic, OpenAI, or your own gateway.
+- **A coding agent CLI:** Claude Code (a subscription token or your own gateway) or Codex (your existing login).
 - **A GitHub token** (optional), for pull requests, issues, and GitHub Projects on github.com.
 
 Synthesis keeps all secrets in the keyring of your operating system.
 
-## Build and run
+</details>
 
-You need Node.js with pnpm 10 or later, the Rust toolchain pinned in `src-tauri/rust-toolchain.toml`, and the Tauri system packages for your operating system (listed in `docs/development.md`).
+<details>
+<summary><b>Build an app bundle</b></summary>
 
-```bash
-pnpm install
-pnpm tauri dev
-```
+You need the Rust toolchain pinned in `src-tauri/rust-toolchain.toml` and the [Task](https://taskfile.dev) runner. Then run `task build`. All commands are in [docs/development.md](docs/development.md).
 
-To build an app bundle, run `task build`. All commands are in `docs/development.md`.
+</details>
 
-## More
+## Learn more
 
-- `docs/development.md`: build, test, and contribute.
-- `docs/README.md`: the architecture and the known gaps.
-- `docs/terminals.md`: the Terminals panel.
-- `CLAUDE.md`: the rules for contributors and agents.
+- [docs/development.md](docs/development.md): build, test, and contribute.
+- [docs/README.md](docs/README.md): the architecture and the known gaps.
+- [CLAUDE.md](CLAUDE.md): the rules for contributors and agents.
 
 ## License
 
-Synthesis uses the [Business Source License 1.1](LICENSE). You can use it to build any software, also commercial software, and what you build is yours. You can read, change, and share its source. You cannot sell Synthesis, or a changed version of it, as a product or a service. Four years after each version is published, that version becomes available under the Apache License 2.0. Versions published before this license stay under the Apache License 2.0.
+[Business Source License 1.1](LICENSE). Use Synthesis to build any software, also commercial software: what you build is yours. You can read, change, and share the source, but you cannot sell Synthesis, or a changed version of it, as a product or a service. Each version becomes Apache License 2.0 four years after it is published. Versions published before this license stay under Apache License 2.0.
